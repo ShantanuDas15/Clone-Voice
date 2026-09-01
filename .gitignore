@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# Environment
+.env
+
+# Audio data (user sensitive)
+backend/uploads/
+backend/outputs/
+
+# ML model weights (large binary files)
+backend/weights/
+
+# Database files
+*.db
+clonevoice_test.db
+
+# OS & Editor
+.DS_Store
+.vscode/
+.idea/
