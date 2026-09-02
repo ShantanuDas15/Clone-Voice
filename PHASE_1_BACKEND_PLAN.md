@@ -343,9 +343,14 @@ test_health_endpoint             → 200, { "status": "ok" }
 
 ### Verification Gateway 1.3
 ```bash
+# 1. Run tests from project root
 PYTHONPATH=. pytest backend/tests/test_auth.py -v
 # All 13 tests must PASS
 
+# 2. In a separate terminal, start the server from project root
+# PYTHONPATH=. uvicorn backend.main:app --reload
+
+# 3. Test the endpoints
 curl -X POST http://localhost:8000/api/auth/signup \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"Password123!","name":"Test User"}'
