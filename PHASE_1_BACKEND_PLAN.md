@@ -1,7 +1,8 @@
 # CloneVoice — Phase 1: Backend Development Plan
 
-> **Status**: 🔴 NOT STARTED
-> **Scope**: Backend only. No frontend code until all milestones in this document are ✅ complete, tested, and committed.
+> **Status**: 🟡 IN PROGRESS — Milestone 1.1 Partially Complete
+> **Scope**: Backend only. No frontend code until all milestones here are ✅ complete, tested, and committed.
+> **Last Reviewed**: 2026-09-02
 > **Target**: A fully functional, tested, and hardened FastAPI backend with SV2TTS inference, JWT auth, Google OAuth, PostgreSQL persistence, and file I/O — ready to be consumed by any frontend client.
 
 ---
@@ -10,7 +11,7 @@
 
 | Milestone | Description | Status | Commit Hash |
 |-----------|-------------|--------|-------------|
-| 1.1 | Project scaffolding, virtual env, `.gitignore`, `requirements.txt` | 🔴 Not Started | — |
+| 1.1 | Project scaffolding, virtual env, `.gitignore`, `requirements.txt`, `docker-compose.yml`, `.env.example` | 🟢 Complete | 866ee09 |
 | 1.2 | Core config, database setup, SQLAlchemy models, Alembic migrations | 🔴 Not Started | — |
 | 1.3 | Authentication — email/password signup & login (JWT) | 🔴 Not Started | — |
 | 1.4 | Authentication — Google OAuth 2.0 backend flow | 🔴 Not Started | — |
@@ -25,6 +26,26 @@
 
 ---
 
+## 🗂️ Current Workspace State (Audited: 2026-09-02)
+
+### ✅ Completed
+- `.gitignore` created and committed with all required rules
+- Full backend directory structure established (`api/`, `core/`, `models/`, `schemas/`, `services/`, `tests/`)
+- All placeholder source files created (empty — not yet implemented)
+- `DATABASE_DESIGN.md` — production-grade schema documented
+- `README.md` — GitHub-ready project description committed
+- Initial commit pushed to `https://github.com/ShantanuDas15/Clone-Voice.git` on `main`
+
+### ⚠️ Issues Found (Must Resolve in Milestone 1.1)
+1. **Python Version Mismatch**: `.venv` was created with Python 3.14. The plan and all dependencies require **Python 3.11**. The virtual environment must be recreated.
+2. **Incomplete `requirements.txt`**: Missing all auth, audio, ML, and PostgreSQL dependencies. Contains `firebase-admin` which is not part of this project's stack and must be removed.
+3. **`docker-compose.yml` absent**: PostgreSQL container definition not yet created.
+4. **`.env.example` absent**: Template for environment variables not yet created.
+5. **All source `.py` files are empty**: No implementation has begun.
+6. **`backend/.venv/` directory is not gitignored**: Must be added to `.gitignore` to prevent accidental commit of the venv.
+
+---
+
 ## 🧱 System Architecture Constraints (Free-Tier / Solo Dev)
 
 | Constraint | Decision |
@@ -33,8 +54,9 @@
 | No cloud object storage in v1.0 | Audio files stored on local filesystem under `uploads/` and `outputs/` |
 | PostgreSQL locally via Docker | `docker-compose` runs Postgres 15 on `localhost:5432` |
 | SQLite for tests | All automated tests use in-memory SQLite — never touch the dev DB |
-| No Redis / task queue in v1.0 | Synthesis is synchronous per request. Async queue (Celery + Redis) is Phase 3 |
-| Pre-trained weights only | No per-user fine-tuning. SV2TTS speaker encoder generates embeddings from uploaded clips without training |
+| No Redis / task queue in v1.0 | Synthesis is synchronous per request. Async queue is Phase 3 |
+| Pre-trained weights only | SV2TTS speaker encoder generates embeddings from uploaded clips — no per-user training |
+| Python 3.11 required | PyTorch 2.3, Librosa 0.10, and all ML dependencies are validated against Python 3.11 |
 
 ---
 
@@ -42,60 +64,60 @@
 
 ### Python Version
 ```
-Python 3.11+
+Python 3.11.x  (strict requirement — do NOT use 3.12, 3.13, or 3.14)
 ```
 
-### `requirements.txt` — Full Specification
+### `requirements.txt` — Full Authoritative Specification
 
 ```txt
 # === Web Framework ===
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
-python-multipart==0.0.9        # File upload support
+python-multipart==0.0.9
 
-# === Data Validation ===
+# === Data Validation & Settings ===
 pydantic==2.7.1
-pydantic-settings==2.3.0       # Settings from .env
+pydantic-settings==2.3.0
 
 # === Database ===
 sqlalchemy==2.0.30
 alembic==1.13.1
-psycopg2-binary==2.9.9         # PostgreSQL adapter
-aiosqlite==0.20.0              # Async SQLite for tests
+psycopg2-binary==2.9.9
+aiosqlite==0.20.0
 
 # === Authentication & Security ===
-python-jose[cryptography]==3.3.0   # JWT encode/decode
-passlib[bcrypt]==1.7.4             # Password hashing
-authlib==1.3.1                     # Google OAuth 2.0
-httpx==0.27.0                      # HTTP client for OAuth token exchange
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+authlib==1.3.1
+httpx==0.27.0
 
-# === Audio & ML ===
-torch==2.3.0                   # PyTorch (CPU build — no CUDA in dev)
+# === Audio Processing & ML ===
+torch==2.3.0
 torchaudio==2.3.0
-librosa==0.10.2                # Audio loading, mel-spectrogram, feature extraction
+librosa==0.10.2
 numpy==1.26.4
 scipy==1.13.1
-soundfile==0.12.1              # WAV file I/O
-resemblyzer==0.1.4             # Speaker encoder (GE2E) — part of SV2TTS
+soundfile==0.12.1
+resemblyzer==0.1.4
 
 # === Dev & Testing ===
 pytest==8.2.2
 pytest-asyncio==0.23.7
-httpx==0.27.0                  # AsyncClient for FastAPI TestClient
-black==24.4.2                  # Code formatting
-isort==5.13.2                  # Import ordering
-python-dotenv==1.0.1           # Load .env in dev
+black==24.4.2
+isort==5.13.2
+python-dotenv==1.0.1
 ```
 
-> **Note on SV2TTS weights**: The Real-Time Voice Cloning repo (`CorentinJ/Real-Time-Voice-Cloning`) provides the Tacotron 2 synthesizer and WaveRNN vocoder. Weights are downloaded separately via the project's `download_weights.py` script and stored under `backend/weights/` (gitignored). `resemblyzer` provides the speaker encoder.
+> **Note on SV2TTS weights**: `resemblyzer` provides the GE2E speaker encoder. The Tacotron 2 synthesizer and WaveRNN vocoder weights are from `CorentinJ/Real-Time-Voice-Cloning` and are downloaded once via a `download_weights.py` script into `backend/weights/` (gitignored).
 
 ---
 
-## 📁 Backend Directory Structure (Target)
+## 📁 Backend Directory Structure (Authoritative Target)
 
 ```
 backend/
-├── main.py                        # FastAPI app entry point
+├── main.py                        # FastAPI app entry point, lifespan, CORS, routers
+├── download_weights.py            # One-time script to fetch pre-trained model weights
 ├── api/
 │   ├── __init__.py
 │   ├── auth.py                    # /api/auth/* routes
@@ -104,8 +126,8 @@ backend/
 ├── core/
 │   ├── __init__.py
 │   ├── config.py                  # Pydantic Settings — reads .env
-│   ├── security.py                # JWT creation/verification, bcrypt hashing
-│   └── database.py                # SQLAlchemy engine, session factory, Base
+│   ├── security.py                # JWT creation/verification, bcrypt hashing, get_current_user
+│   └── database.py                # SQLAlchemy engine, session factory, Base, get_db
 ├── models/
 │   ├── __init__.py
 │   ├── user.py                    # User ORM model
@@ -113,79 +135,34 @@ backend/
 │   └── generation.py              # Generation ORM model
 ├── schemas/
 │   ├── __init__.py
-│   ├── auth.py                    # Pydantic schemas: SignupRequest, LoginRequest, TokenResponse
+│   ├── auth.py                    # SignupRequest, LoginRequest, TokenResponse, UserOut
 │   ├── voice.py                   # VoiceProfileCreate, VoiceProfileOut
 │   └── synthesize.py              # SynthesizeRequest, GenerationOut
 ├── services/
 │   ├── __init__.py
 │   ├── audio_processing.py        # Librosa pipeline: load → resample → trim → normalize
-│   └── tts_pipeline.py            # SV2TTS: embed_speaker(), synthesize_speech()
-├── weights/                       # Model weights — GITIGNORED
-│   ├── encoder.pt                 # GE2E speaker encoder weights (resemblyzer)
-│   ├── synthesizer.pt             # Tacotron 2 weights
-│   └── vocoder.pt                 # WaveRNN vocoder weights
+│   └── tts_pipeline.py            # SV2TTS: embed_speaker(), synthesize_speech(), vocode()
+├── weights/                       # Pre-trained model weights — GITIGNORED
+│   ├── encoder.pt
+│   ├── synthesizer.pt
+│   └── vocoder.pt
 ├── uploads/                       # User audio uploads — GITIGNORED
-├── outputs/                       # Generated speech — GITIGNORED
+├── outputs/                       # Generated speech files — GITIGNORED
 ├── tests/
 │   ├── __init__.py
-│   ├── conftest.py                # Fixtures: test DB, mock JWT, mock TTS pipeline
+│   ├── conftest.py                # Fixtures: in-memory SQLite DB, mock JWT, mock TTS
+│   ├── fixtures/
+│   │   └── sample_5sec.wav        # Synthetic WAV for unit tests
 │   ├── test_auth.py
 │   ├── test_voice.py
 │   └── test_synthesize.py
 ├── alembic/
 │   ├── env.py
-│   └── versions/                  # Migration scripts
+│   └── versions/
 ├── alembic.ini
 ├── requirements.txt
-├── .env.example                   # Safe to commit — no real secrets
+├── .env.example                   # Safe to commit — placeholder keys only
 └── .env                           # NEVER COMMITTED
-```
-
----
-
-## 🗄️ Database Schema — Full Specification
-
-> Full DDL to be written in `DATABASE_DESIGN.md`. Summary below for Phase 1 reference.
-
-### `users` table
-```sql
-CREATE TABLE users (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email       VARCHAR(255) UNIQUE NOT NULL,
-    name        VARCHAR(255),
-    avatar_url  TEXT,
-    provider    VARCHAR(50) DEFAULT 'local',   -- 'local' | 'google'
-    hashed_password TEXT,                       -- NULL for OAuth users
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at  TIMESTAMPTZ                     -- soft delete
-);
-```
-
-### `voice_profiles` table
-```sql
-CREATE TABLE voice_profiles (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name                VARCHAR(255) NOT NULL,
-    audio_sample_path   TEXT NOT NULL,          -- path to uploaded WAV
-    embedding_path      TEXT NOT NULL,          -- path to saved .npy embedding
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at          TIMESTAMPTZ             -- soft delete
-);
-```
-
-### `generations` table
-```sql
-CREATE TABLE generations (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    voice_profile_id    UUID NOT NULL REFERENCES voice_profiles(id),
-    input_text          TEXT NOT NULL,
-    output_audio_path   TEXT NOT NULL,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 ```
 
 ---
@@ -193,463 +170,32 @@ CREATE TABLE generations (
 ## 🌐 API Endpoint Specification
 
 ### Health
-| Method | Path | Auth | Request Body | Response |
-|--------|------|------|---|---|
-| `GET` | `/health` | ❌ | — | `{ "status": "ok", "version": "1.0.0" }` |
-
-### Auth
-| Method | Path | Auth | Request Body | Response |
-|--------|------|------|---|---|
-| `POST` | `/api/auth/signup` | ❌ | `{ email, password, name }` | `{ access_token, token_type }` |
-| `POST` | `/api/auth/login` | ❌ | `{ email, password }` | `{ access_token, token_type }` |
-| `POST` | `/api/auth/refresh` | ❌ (refresh cookie) | — | `{ access_token, token_type }` |
-| `GET` | `/api/auth/me` | ✅ | — | `{ id, email, name, avatar_url, provider }` |
-| `GET` | `/api/auth/google` | ❌ | — | Redirect to Google consent screen |
-| `GET` | `/api/auth/google/callback` | ❌ | OAuth code in query params | `{ access_token, token_type }` |
-
-### Voice Profiles
-| Method | Path | Auth | Request Body | Response |
-|--------|------|------|---|---|
-| `POST` | `/api/voice/upload` | ✅ | `multipart/form-data: file, name` | `VoiceProfileOut` |
-| `GET` | `/api/voice/profiles` | ✅ | — | `List[VoiceProfileOut]` |
-| `DELETE` | `/api/voice/profiles/{id}` | ✅ | — | `{ "message": "deleted" }` |
-
-### Synthesis
-| Method | Path | Auth | Request Body | Response |
-|--------|------|------|---|---|
-| `POST` | `/api/synthesize` | ✅ | `{ voice_profile_id, text }` | Audio file (WAV) as `FileResponse` |
-| `GET` | `/api/synthesize/history` | ✅ | — | `List[GenerationOut]` |
-
----
-
-## Milestone 1.1 — Project Scaffolding
-
-### Tasks
-- [ ] Create `backend/` directory with all subdirectories as specified above
-- [ ] Create Python virtual environment: `python3.11 -m venv .venv`
-- [ ] Install dependencies: `pip install -r requirements.txt`
-- [ ] Create `.gitignore` (see rules below)
-- [ ] Create `.env.example` with all required keys (no values)
-- [ ] Create `docker-compose.yml` with PostgreSQL 15 service
-- [ ] Verify Docker Compose starts cleanly
-
-### `.gitignore` — Required Entries
-```gitignore
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.venv/
-*.egg-info/
-
-# Environment
-.env
-
-# Audio data (user sensitive)
-backend/uploads/
-backend/outputs/
-
-# ML model weights (large binary files)
-backend/weights/
-
-# Database files
-*.db
-clonevoice_test.db
-
-# macOS
-.DS_Store
-
-# IDE
-.vscode/
-.idea/
-```
-
-### `docker-compose.yml`
-```yaml
-version: "3.9"
-services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: clonevoice
-      POSTGRES_PASSWORD: clonevoice_dev
-      POSTGRES_DB: clonevoice
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
-```
-
-### `.env.example`
-```env
-# Database
-DATABASE_URL=postgresql://clonevoice:clonevoice_dev@localhost:5432/clonevoice
-
-# JWT
-JWT_SECRET_KEY=
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# Google OAuth
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
-
-# App
-APP_ENV=development
-DEVICE=cpu
-MAX_AUDIO_SIZE_MB=25
-UPLOAD_DIR=uploads
-OUTPUT_DIR=outputs
-```
-
-### Verification Gateway 1.1
-```bash
-# Verify Docker Compose
-docker-compose up -d db
-docker-compose ps   # db service must show "Up"
-
-# Verify Python env
-source backend/.venv/bin/activate
-python --version    # Must be 3.11.x
-pip list | grep fastapi   # Must show fastapi 0.111.x
-
-# Verify gitignore
-git status          # .env and uploads/ must NOT appear as untracked
-```
-
----
-
-## Milestone 1.2 — Core Config, Database & ORM Models
-
-### Tasks
-- [ ] Implement `core/config.py` — Pydantic `Settings` class loading all `.env` variables
-- [ ] Implement `core/database.py` — SQLAlchemy async engine, `SessionLocal`, `Base`, `get_db` dependency
-- [ ] Implement `models/user.py` — `User` ORM model matching schema above
-- [ ] Implement `models/voice_profile.py` — `VoiceProfile` ORM model
-- [ ] Implement `models/generation.py` — `Generation` ORM model
-- [ ] Initialize Alembic: `alembic init alembic`
-- [ ] Configure `alembic/env.py` to use `DATABASE_URL` from settings and import all models
-- [ ] Generate and run first migration: `alembic revision --autogenerate -m "initial schema"`
-- [ ] Apply migration: `alembic upgrade head`
-- [ ] Verify all three tables exist in PostgreSQL
-
-### Verification Gateway 1.2
-```bash
-# Run migration
-alembic upgrade head
-
-# Verify tables
-docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\dt"
-# Expected: users, voice_profiles, generations
-
-# Column check
-docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d users"
-```
-
----
-
-## Milestone 1.3 — Authentication: Email/Password + JWT
-
-### Tasks
-- [ ] Implement `core/security.py`:
-  - `hash_password(plain: str) -> str`
-  - `verify_password(plain: str, hashed: str) -> bool`
-  - `create_access_token(data: dict, expires_delta: timedelta) -> str`
-  - `create_refresh_token(data: dict) -> str`
-  - `decode_token(token: str) -> dict`
-  - `get_current_user(token: str, db: Session) -> User` (FastAPI dependency)
-- [ ] Implement `schemas/auth.py`: `SignupRequest`, `LoginRequest`, `TokenResponse`, `UserOut`
-- [ ] Implement `api/auth.py`:
-  - `POST /api/auth/signup` — create user, return access token
-  - `POST /api/auth/login` — verify credentials, return access token + set refresh cookie
-  - `POST /api/auth/refresh` — read refresh cookie, return new access token
-  - `GET /api/auth/me` — return current user profile
-- [ ] Register auth router in `main.py`
-- [ ] Implement `GET /health` in `main.py`
-
-### Unit Tests — `tests/test_auth.py`
-```python
-# test_signup_success            → 201, returns access_token
-# test_signup_duplicate_email    → 409 Conflict
-# test_signup_invalid_email      → 422 Unprocessable Entity
-# test_signup_short_password     → 422 Unprocessable Entity
-# test_login_success             → 200, returns access_token
-# test_login_wrong_password      → 401 Unauthorized
-# test_login_nonexistent_email   → 401 Unauthorized
-# test_me_authenticated          → 200, returns user profile
-# test_me_unauthenticated        → 401 Unauthorized
-# test_me_expired_token          → 401 Unauthorized
-# test_refresh_valid_cookie      → 200, returns new access_token
-# test_refresh_no_cookie         → 401 Unauthorized
-```
-
-### Verification Gateway 1.3
-```bash
-# Run auth tests
-pytest backend/tests/test_auth.py -v
-
-# Manual curl verification
-curl -X POST http://localhost:8000/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"Password123!","name":"Test User"}'
-# Expected: {"access_token": "...", "token_type": "bearer"}
-
-curl -X GET http://localhost:8000/api/auth/me \
-  -H "Authorization: Bearer <token_from_above>"
-# Expected: {"id":"...","email":"test@example.com","name":"Test User","provider":"local"}
-
-curl -X GET http://localhost:8000/health
-# Expected: {"status":"ok","version":"1.0.0"}
-```
-
----
-
-## Milestone 1.4 — Authentication: Google OAuth 2.0
-
-### Tasks
-- [ ] Register OAuth app in Google Cloud Console, obtain `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
-- [ ] Implement in `api/auth.py`:
-  - `GET /api/auth/google` — redirect to Google consent screen using `authlib`
-  - `GET /api/auth/google/callback` — exchange code for token, fetch user profile, upsert user in DB, return JWT
-- [ ] Upsert logic: if email already exists as `provider=local`, link OAuth (set `provider=google`, store `avatar_url`)
-- [ ] Store Google `avatar_url` and `name` on the user record
-
-### Unit Tests — additions to `tests/test_auth.py`
-```python
-# test_google_callback_new_user       → 200, creates user with provider=google
-# test_google_callback_existing_user  → 200, links OAuth to existing account
-# test_google_callback_invalid_code   → 400 Bad Request (mocked OAuth failure)
-```
-> All OAuth tests mock the `authlib` token exchange — no real Google calls.
-
-### Verification Gateway 1.4
-```bash
-pytest backend/tests/test_auth.py -v -k "google"
-# All Google OAuth tests must pass with mocked responses
-```
-
----
-
-## Milestone 1.5 — Audio Upload & Librosa Preprocessing
-
-### Tasks
-- [ ] Implement `services/audio_processing.py`:
-  - `preprocess_audio(file_path: str) -> np.ndarray` — load WAV/MP3 with librosa, resample to 16kHz, trim silence, peak-normalize
-  - `validate_audio_file(file: UploadFile) -> None` — check MIME type (audio/wav, audio/mpeg, audio/ogg), check file size ≤ `MAX_AUDIO_SIZE_MB`
-  - `save_upload(file: UploadFile, user_id: str) -> str` — save to `uploads/<user_id>/<uuid>.wav`
-- [ ] Implement `schemas/voice.py`: `VoiceProfileOut`
-- [ ] Implement `api/voice.py`:
-  - `POST /api/voice/upload` — validate, save, preprocess, store VoiceProfile row, return `VoiceProfileOut`
-  - `GET /api/voice/profiles` — return all non-deleted profiles for current user
-  - `DELETE /api/voice/profiles/{id}` — soft-delete (set `deleted_at`)
-- [ ] Register voice router in `main.py`
-
-### Unit Tests — `tests/test_voice.py`
-```python
-# test_upload_valid_wav               → 201, returns VoiceProfileOut
-# test_upload_valid_mp3               → 201, returns VoiceProfileOut
-# test_upload_invalid_format_txt      → 422 Unprocessable Entity
-# test_upload_oversized_file          → 413 Payload Too Large
-# test_upload_empty_file              → 422 Unprocessable Entity
-# test_upload_unauthenticated         → 401 Unauthorized
-# test_list_profiles_empty            → 200, returns []
-# test_list_profiles_after_upload     → 200, returns list with 1 item
-# test_delete_profile_success         → 200, sets deleted_at
-# test_delete_profile_not_found       → 404 Not Found
-# test_delete_profile_wrong_user      → 403 Forbidden
-# test_librosa_preprocess_unit        → unit test on preprocess_audio() with a synthetic WAV
-```
-
-### Verification Gateway 1.5
-```bash
-pytest backend/tests/test_voice.py -v
-
-# Manual curl
-curl -X POST http://localhost:8000/api/voice/upload \
-  -H "Authorization: Bearer <token>" \
-  -F "file=@sample_audio.wav" \
-  -F "name=My Voice"
-# Expected: {"id":"...","name":"My Voice","created_at":"..."}
-```
-
----
-
-## Milestone 1.6 — SV2TTS Inference Pipeline
-
-### Tasks
-- [ ] Download pre-trained weights:
-  - Speaker encoder: `resemblyzer` provides this automatically via `VoiceEncoder()`
-  - Synthesizer: `synthesizer.pt` from Real-Time Voice Cloning repo
-  - Vocoder: `vocoder.pt` from Real-Time Voice Cloning repo
-- [ ] Create `backend/download_weights.py` — a one-time script to download and place weights in `backend/weights/`
-- [ ] Implement `services/tts_pipeline.py`:
-  - Model singletons loaded at FastAPI lifespan startup (not per-request)
-  - `embed_speaker(audio: np.ndarray) -> np.ndarray` — returns 256-dim embedding using `resemblyzer.VoiceEncoder`
-  - `synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray` — Tacotron 2 forward pass → mel-spectrogram
-  - `vocode(mel: np.ndarray) -> np.ndarray` — WaveRNN/vocoder forward pass → raw waveform
-  - `save_output(waveform: np.ndarray, user_id: str) -> str` — write WAV to `outputs/<user_id>/<uuid>.wav`
-- [ ] Wire lifespan model loading into `main.py`
-
-### Unit Tests — `tests/test_synthesize.py` (partial — TTS mocked)
-```python
-# test_embed_speaker_shape    → embedding.shape == (256,)  [uses a real 3-sec synthetic WAV]
-# test_save_output_creates_file → output WAV file exists on disk after save_output()
-```
-> Full inference is mocked in integration tests — only the embedding shape and file I/O are tested with real calls.
-
-### Verification Gateway 1.6
-```bash
-# Standalone pipeline smoke test
-python -c "
-from backend.services.audio_processing import preprocess_audio
-from backend.services.tts_pipeline import embed_speaker
-import numpy as np
-audio = preprocess_audio('tests/fixtures/sample_5sec.wav')
-emb = embed_speaker(audio)
-assert emb.shape == (256,), f'Expected (256,), got {emb.shape}'
-print('Speaker encoder OK:', emb.shape)
-"
-```
-
----
-
-## Milestone 1.7 — Synthesis Endpoint
-
-### Tasks
-- [ ] Implement `schemas/synthesize.py`: `SynthesizeRequest`, `GenerationOut`
-- [ ] Implement `api/synthesize.py`:
-  - `POST /api/synthesize` — load embedding from `voice_profile.embedding_path`, run full TTS pipeline, save WAV, create `Generation` row, return `FileResponse`
-  - `GET /api/synthesize/history` — return all `Generation` rows for current user (newest first)
-- [ ] Add input validation: `text` must be 1–500 characters, `voice_profile_id` must exist and belong to current user
-- [ ] Register synthesize router in `main.py`
-
-### Integration Tests — `tests/test_synthesize.py`
-```python
-# test_synthesize_success              → 200, returns audio/wav Content-Type (TTS mocked)
-# test_synthesize_saves_generation_row → DB has 1 row in generations after call
-# test_synthesize_invalid_profile_id   → 404 Not Found
-# test_synthesize_wrong_user_profile   → 403 Forbidden
-# test_synthesize_empty_text           → 422 Unprocessable Entity
-# test_synthesize_text_too_long        → 422 Unprocessable Entity (>500 chars)
-# test_synthesize_unauthenticated      → 401 Unauthorized
-# test_history_empty                   → 200, returns []
-# test_history_after_synthesis         → 200, returns list with 1 GenerationOut
-```
-
-### Verification Gateway 1.7
-```bash
-pytest backend/tests/test_synthesize.py -v
-
-# End-to-end manual test (real inference — takes 10–60s on CPU)
-curl -X POST http://localhost:8000/api/synthesize \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"voice_profile_id":"<profile_uuid>","text":"Hello, this is a voice cloning test."}' \
-  --output test_output.wav
-file test_output.wav   # Must report: RIFF (WAV) audio data
-```
-
----
-
-## Milestone 1.8 — History, Soft-Delete & Remaining Endpoints
-
-### Tasks
-- [ ] Confirm all soft-delete logic is working correctly across voice profiles
-- [ ] Confirm `GET /api/synthesize/history` correctly excludes generations for soft-deleted profiles
-- [ ] Confirm `GET /api/auth/me` returns the correct updated user profile after OAuth link
-- [ ] Add `PATCH /api/auth/me` endpoint to allow name update
-
-### Verification Gateway 1.8
-```bash
-pytest backend/tests/ -v
-# All tests must pass — zero failures
-```
-
----
-
-## Milestone 1.9 — Full Test Suite, Hardening & Security Audit
-
-### Tasks
-- [ ] Run complete test suite — all tests must pass
-- [ ] Verify no `.env`, no audio files, no weights leak into `git status`
-- [ ] Confirm CORS is correctly configured in `main.py` (only `localhost:3000` allowed in dev)
-- [ ] Confirm all endpoints return correct HTTP status codes for all edge cases
-- [ ] Confirm bcrypt work factor is ≥ 12 rounds
-- [ ] Confirm JWT `exp` claim is validated on every protected request
-- [ ] Confirm refresh token is `httpOnly`, `Secure`, `SameSite=Lax`
-- [ ] Confirm audio file MIME type validation cannot be bypassed (check file magic bytes, not just extension)
-- [ ] Run `black backend/` and `isort backend/` — zero diffs
-- [ ] Check all functions have type hints and docstrings
-
-### Hardening Checklist
-```
-[ ] SQL injection: SQLAlchemy ORM used throughout — no raw SQL strings
-[ ] Path traversal: user_id-scoped paths, no user-controlled path components
-[ ] File size limit enforced before writing to disk
-[ ] JWT secret is ≥ 32 random bytes
-[ ] No secrets in logs
-[ ] No stack traces exposed to client (FastAPI exception handlers configured)
-```
-
-### Verification Gateway 1.9
-```bash
-# Full test run
-pytest backend/tests/ -v --tb=short
-
-# Formatting check
-black --check backend/
-isort --check-only backend/
-
-# Security: no .env committed
-git ls-files | grep "\.env$"   # Must return nothing
-```
-
----
-
-## Milestone 1.10 — Cleanup, Git Hygiene & Final Commit
-
-### Tasks
-- [ ] Delete all `__pycache__/`, `*.pyc`, `.pytest_cache/` from tree
-- [ ] Delete any temporary test WAV files from `tests/` (keep `tests/fixtures/` synthetics)
-- [ ] Confirm `.gitignore` catches everything
-- [ ] Run `git status` — only tracked source files should appear
-- [ ] Final commit on `feat/phase-1-backend` branch:
-  ```
-  feat: Implement Milestone 1.10 — Phase 1 backend complete
-  
-  All endpoints implemented and tested. Full pytest suite passes.
-  Auth (email + Google OAuth), voice upload, SV2TTS inference, synthesis,
-  and history endpoints operational. Zero hardening issues.
-  ```
-- [ ] Open PR → merge to `main`
-- [ ] Tag release: `git tag v0.1.0-backend`
-
-### Verification Gateway 1.10
-```bash
-git status          # Clean working tree
-git log --oneline   # All milestone commits visible
-pytest backend/tests/ -v   # ALL PASS — zero failures, zero errors
-```
-
----
-
-## 🧪 Test Fixtures Required
-
-Place in `backend/tests/fixtures/`:
-
-| Fixture File | Description | How to Generate |
-|---|---|---|
-| `sample_5sec.wav` | 5-second synthetic sine-wave WAV at 16kHz | `python -c "import soundfile as sf; import numpy as np; sf.write('sample_5sec.wav', np.sin(2*np.pi*440*np.linspace(0,5,80000)), 16000)"` |
-| `sample_oversized.wav` | 30MB+ WAV file to test size limit | `dd if=/dev/zero bs=1M count=30 > sample_oversized.wav` |
-| `sample_invalid.txt` | Text file with `.txt` extension to test format validation | Any text file |
-
-> All fixtures are committed to `tests/fixtures/` except `sample_oversized.wav` (generate on demand in test setup).
+| Method | Path | Auth | Response |
+|--------|------|------|----------|
+| `GET` | `/health` | ❌ | `{ "status": "ok", "version": "1.0.0" }` |
+
+### Auth (`/api/auth`)
+| Method | Path | Auth | Request | Response |
+|--------|------|------|---------|----------|
+| `POST` | `/signup` | ❌ | `{ email, password, name }` | `{ access_token, token_type }` |
+| `POST` | `/login` | ❌ | `{ email, password }` | `{ access_token, token_type }` + refresh cookie |
+| `POST` | `/refresh` | ❌ (cookie) | — | `{ access_token, token_type }` |
+| `GET` | `/me` | ✅ | — | `UserOut` |
+| `GET` | `/google` | ❌ | — | Redirect to Google |
+| `GET` | `/google/callback` | ❌ | OAuth code | `{ access_token, token_type }` |
+
+### Voice Profiles (`/api/voice`)
+| Method | Path | Auth | Request | Response |
+|--------|------|------|---------|----------|
+| `POST` | `/upload` | ✅ | `multipart: file, name` | `VoiceProfileOut` |
+| `GET` | `/profiles` | ✅ | — | `List[VoiceProfileOut]` |
+| `DELETE` | `/profiles/{id}` | ✅ | — | `{ "message": "deleted" }` |
+
+### Synthesis (`/api/synthesize`)
+| Method | Path | Auth | Request | Response |
+|--------|------|------|---------|----------|
+| `POST` | `/` | ✅ | `{ voice_profile_id, text }` | `FileResponse` (WAV audio) |
+| `GET` | `/history` | ✅ | — | `List[GenerationOut]` |
 
 ---
 
@@ -673,21 +219,398 @@ Place in `backend/tests/fixtures/`:
 
 ---
 
-## 📌 Phase 1 Completion Criteria
+## Milestone 1.1 — Project Scaffolding *(🟡 In Progress)*
 
-Phase 1 is **complete** only when ALL of the following are true:
+### Remaining Tasks
+- [ ] Fix `.gitignore` — add `backend/.venv/` entry
+- [ ] Recreate virtual environment with **Python 3.11**: `python3.11 -m venv backend/.venv`
+- [ ] Replace `requirements.txt` with the authoritative specification above (remove `firebase-admin`, add all missing packages)
+- [ ] Install all dependencies: `pip install -r requirements.txt`
+- [ ] Create `docker-compose.yml` with PostgreSQL 15 service
+- [ ] Create `backend/.env.example` with all keys and empty values
+- [ ] Create `backend/tests/fixtures/` directory with synthetic `sample_5sec.wav`
+- [ ] Verify Docker Compose starts cleanly
+- [ ] Verify all packages installed correctly
 
-- [ ] All 10 milestones are marked ✅ in the progress tracker above
-- [ ] `pytest backend/tests/ -v` shows **0 failed, 0 errors**
-- [ ] `black --check backend/` and `isort --check-only backend/` show **no diffs**
-- [ ] `git ls-files | grep ".env"` returns **nothing**
-- [ ] `GET /health` returns `{ "status": "ok" }`
-- [ ] Full end-to-end curl test: signup → upload audio → synthesize → download WAV ✅
-- [ ] Final commit tagged `v0.1.0-backend` and pushed to GitHub
+### Files to Create
+- `docker-compose.yml` (project root)
+- `backend/.env.example`
+- `backend/tests/fixtures/sample_5sec.wav` (generated via script)
 
-Only after this checklist is complete will Phase 2 (Frontend) planning begin.
+### `docker-compose.yml`
+```yaml
+version: "3.9"
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: clonevoice
+      POSTGRES_PASSWORD: clonevoice_dev
+      POSTGRES_DB: clonevoice
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clonevoice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+```
+
+### Verification Gateway 1.1
+```bash
+# Verify Python version
+python3.11 --version                     # Must be 3.11.x
+
+# Verify all key packages installed
+source backend/.venv/bin/activate
+pip show fastapi sqlalchemy librosa torch passlib python-jose authlib
+# All must show a version — no "not found" errors
+
+# Verify Docker Compose
+docker-compose up -d db
+docker-compose ps                        # "db" service must show "Up (healthy)"
+
+# Verify gitignore — none of these should appear in git status
+git status                               # .env and backend/.venv/ must NOT appear
+```
 
 ---
 
-*Plan Version: 1.0 — September 2026*
-*Last Updated: Milestone 1.1 — Not Started*
+## Milestone 1.2 — Core Config, Database & ORM Models *(🔴 Not Started)*
+
+### Tasks
+- [ ] Implement `core/config.py` — Pydantic `Settings` loading all `.env` variables
+- [ ] Implement `core/database.py` — SQLAlchemy async engine, `SessionLocal`, `Base`, `get_db` dependency
+- [ ] Implement `models/user.py` — `User` ORM model (id UUID, email, name, provider, hashed_password, avatar_url, preferences JSONB, created_at, updated_at, deleted_at)
+- [ ] Implement `models/voice_profile.py` — `VoiceProfile` ORM model (id, user_id FK, name, audio_sample_path, embedding_path, status, created_at, updated_at, deleted_at)
+- [ ] Implement `models/generation.py` — `Generation` ORM model (id, user_id FK, voice_profile_id FK, input_text, output_audio_path, duration_seconds, tts_metadata JSONB, status, created_at)
+- [ ] Initialize Alembic: `alembic init backend/alembic`
+- [ ] Configure `alembic/env.py` to use `DATABASE_URL` from settings and auto-import all models
+- [ ] Generate first migration: `alembic revision --autogenerate -m "initial schema"`
+- [ ] Apply migration: `alembic upgrade head`
+- [ ] Verify all three tables exist in PostgreSQL with correct columns
+
+### Verification Gateway 1.2
+```bash
+# Apply migrations
+alembic upgrade head
+
+# Verify tables in PostgreSQL
+docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\dt"
+# Expected output: users, voice_profiles, generations
+
+# Column verification
+docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d users"
+docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d voice_profiles"
+docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d generations"
+```
+
+---
+
+## Milestone 1.3 — Authentication: Email/Password + JWT *(🔴 Not Started)*
+
+### Tasks
+- [ ] Implement `core/security.py`:
+  - `hash_password(plain: str) -> str`
+  - `verify_password(plain: str, hashed: str) -> bool`
+  - `create_access_token(data: dict, expires_delta: timedelta) -> str`
+  - `create_refresh_token(data: dict) -> str`
+  - `decode_token(token: str) -> dict`
+  - `get_current_user(token: str, db: Session) -> User` (FastAPI Depends)
+- [ ] Implement `schemas/auth.py`: `SignupRequest`, `LoginRequest`, `TokenResponse`, `UserOut`
+- [ ] Implement `api/auth.py`:
+  - `POST /api/auth/signup`
+  - `POST /api/auth/login` — sets `httpOnly` refresh cookie
+  - `POST /api/auth/refresh` — reads refresh cookie, issues new access token
+  - `GET /api/auth/me`
+- [ ] Register auth router in `main.py` with `GET /health`
+
+### Test Specification — `tests/test_auth.py`
+```
+test_signup_success              → 201, returns access_token
+test_signup_duplicate_email      → 409 Conflict
+test_signup_invalid_email        → 422 Unprocessable Entity
+test_signup_missing_password     → 422 Unprocessable Entity
+test_login_success               → 200, returns access_token + sets refresh cookie
+test_login_wrong_password        → 401 Unauthorized
+test_login_nonexistent_email     → 401 Unauthorized
+test_me_authenticated            → 200, returns UserOut shape
+test_me_unauthenticated          → 401 Unauthorized
+test_me_expired_token            → 401 Unauthorized
+test_refresh_valid_cookie        → 200, returns new access_token
+test_refresh_missing_cookie      → 401 Unauthorized
+test_health_endpoint             → 200, { "status": "ok" }
+```
+
+### Verification Gateway 1.3
+```bash
+pytest backend/tests/test_auth.py -v
+# All 13 tests must PASS
+
+curl -X POST http://localhost:8000/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"Password123!","name":"Test User"}'
+# → {"access_token":"...","token_type":"bearer"}
+
+curl http://localhost:8000/health
+# → {"status":"ok","version":"1.0.0"}
+```
+
+---
+
+## Milestone 1.4 — Authentication: Google OAuth 2.0 *(🔴 Not Started)*
+
+### Tasks
+- [ ] Register OAuth app in Google Cloud Console — obtain `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
+- [ ] Add to `api/auth.py`:
+  - `GET /api/auth/google` — redirect to Google consent screen via Authlib
+  - `GET /api/auth/google/callback` — exchange code, fetch profile, upsert user, return JWT
+- [ ] Upsert logic: if email exists as `provider='local'`, link OAuth (update provider, avatar_url)
+- [ ] If email is new, create user with `provider='google'`, `hashed_password=NULL`
+
+### Test Specification — additions to `tests/test_auth.py`
+```
+test_google_callback_new_user        → 200, creates user with provider='google'
+test_google_callback_existing_local  → 200, links OAuth to existing local account
+test_google_callback_invalid_code    → 400 Bad Request
+```
+> All OAuth tests mock `authlib` token exchange — zero real Google calls.
+
+### Verification Gateway 1.4
+```bash
+pytest backend/tests/test_auth.py -v -k "google"
+# All OAuth tests PASS with mocked responses
+```
+
+---
+
+## Milestone 1.5 — Audio Upload & Librosa Preprocessing *(🔴 Not Started)*
+
+### Tasks
+- [ ] Implement `services/audio_processing.py`:
+  - `validate_audio_file(file: UploadFile) -> None` — check MIME + file magic bytes + size ≤ `MAX_AUDIO_SIZE_MB`
+  - `save_upload(file: UploadFile, user_id: str) -> str` — save to `uploads/<user_id>/<uuid>.wav`
+  - `preprocess_audio(file_path: str) -> np.ndarray` — load with librosa, resample to 16kHz, trim silence, peak-normalize
+- [ ] Implement `schemas/voice.py`: `VoiceProfileOut`
+- [ ] Implement `api/voice.py`:
+  - `POST /api/voice/upload` — validate → save → preprocess → store VoiceProfile row → return `VoiceProfileOut`
+  - `GET /api/voice/profiles` — list non-deleted profiles for current user
+  - `DELETE /api/voice/profiles/{id}` — soft-delete (set `deleted_at = NOW()`)
+- [ ] Register voice router in `main.py`
+
+### Test Specification — `tests/test_voice.py`
+```
+test_upload_valid_wav               → 201, VoiceProfileOut shape
+test_upload_valid_mp3               → 201, VoiceProfileOut shape
+test_upload_invalid_format_txt      → 422 Unprocessable Entity
+test_upload_oversized_file          → 413 Payload Too Large
+test_upload_empty_file              → 422 Unprocessable Entity
+test_upload_unauthenticated         → 401 Unauthorized
+test_list_profiles_empty            → 200, []
+test_list_profiles_after_upload     → 200, list with 1 item
+test_delete_profile_success         → 200, deleted_at is set in DB
+test_delete_profile_not_found       → 404 Not Found
+test_delete_profile_wrong_user      → 403 Forbidden
+test_librosa_preprocess_shape       → unit test: output.shape == (n_samples,), dtype float32
+```
+
+### Verification Gateway 1.5
+```bash
+pytest backend/tests/test_voice.py -v
+
+curl -X POST http://localhost:8000/api/voice/upload \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@tests/fixtures/sample_5sec.wav" \
+  -F "name=Test Voice"
+# → {"id":"...","name":"Test Voice","status":"ready","created_at":"..."}
+```
+
+---
+
+## Milestone 1.6 — SV2TTS Inference Pipeline *(🔴 Not Started)*
+
+### Tasks
+- [ ] Create `backend/download_weights.py` — script to download Tacotron 2 + WaveRNN weights into `backend/weights/`
+- [ ] Implement `services/tts_pipeline.py`:
+  - Module-level singletons: `_encoder`, `_synthesizer`, `_vocoder` (loaded once at startup)
+  - `load_models(device: str) -> None` — called at FastAPI lifespan startup
+  - `embed_speaker(audio: np.ndarray) -> np.ndarray` — 256-dim embedding via `resemblyzer.VoiceEncoder`
+  - `synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray` — Tacotron 2 → mel-spectrogram
+  - `vocode(mel: np.ndarray) -> np.ndarray` — WaveRNN → raw waveform
+  - `save_output(waveform: np.ndarray, sample_rate: int, user_id: str) -> tuple[str, float]` — write WAV, return `(path, duration_seconds)`
+- [ ] Wire `load_models()` into `main.py` FastAPI lifespan context manager
+
+### Test Specification — `tests/test_synthesize.py` (pipeline unit tests)
+```
+test_embed_speaker_output_shape    → embedding.shape == (256,)
+test_save_output_creates_file      → WAV file exists on disk after call
+test_save_output_returns_duration  → returned duration > 0.0
+```
+
+### Verification Gateway 1.6
+```bash
+# Standalone smoke test (requires weights downloaded)
+cd backend && source .venv/bin/activate
+python -c "
+from services.audio_processing import preprocess_audio
+from services.tts_pipeline import embed_speaker
+audio = preprocess_audio('tests/fixtures/sample_5sec.wav')
+emb = embed_speaker(audio)
+assert emb.shape == (256,), f'Got {emb.shape}'
+print('Speaker encoder OK:', emb.shape)
+"
+```
+
+---
+
+## Milestone 1.7 — Synthesis Endpoint *(🔴 Not Started)*
+
+### Tasks
+- [ ] Implement `schemas/synthesize.py`: `SynthesizeRequest` (voice_profile_id UUID, text str 1–500 chars), `GenerationOut`
+- [ ] Implement `api/synthesize.py`:
+  - `POST /api/synthesize` — load embedding → run pipeline → save WAV → create Generation row → return `FileResponse`
+  - `GET /api/synthesize/history` — return all Generations for current user, newest first, paginated (limit 50)
+- [ ] Input validation: `voice_profile_id` must exist, belong to current user, not be soft-deleted
+- [ ] Register synthesize router in `main.py`
+
+### Test Specification — `tests/test_synthesize.py` (integration)
+```
+test_synthesize_success              → 200, Content-Type: audio/wav (TTS mocked)
+test_synthesize_creates_db_row       → generations table has 1 new row after call
+test_synthesize_invalid_profile      → 404 Not Found
+test_synthesize_wrong_user_profile   → 403 Forbidden
+test_synthesize_empty_text           → 422 Unprocessable Entity
+test_synthesize_text_too_long        → 422 Unprocessable Entity (>500 chars)
+test_synthesize_unauthenticated      → 401 Unauthorized
+test_history_empty                   → 200, []
+test_history_after_synthesis         → 200, list with 1 GenerationOut
+test_history_pagination              → 200, max 50 results returned
+```
+
+### Verification Gateway 1.7
+```bash
+pytest backend/tests/test_synthesize.py -v
+
+# Real end-to-end (30–90s on CPU — requires weights)
+curl -X POST http://localhost:8000/api/synthesize \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"voice_profile_id":"<uuid>","text":"Hello, this is a voice cloning test."}' \
+  --output test_output.wav
+file test_output.wav    # Must report: RIFF (WAV) audio
+```
+
+---
+
+## Milestone 1.8 — Remaining Endpoints & Data Integrity *(🔴 Not Started)*
+
+### Tasks
+- [ ] Verify `GET /api/synthesize/history` excludes generations from soft-deleted voice profiles
+- [ ] Verify soft-delete on voice profile does not expose audio paths in any list endpoint
+- [ ] Add `PATCH /api/auth/me` — update user name
+- [ ] Confirm all FK constraints are enforced at the DB level
+- [ ] Confirm `status='failed'` is correctly set on voice profile if embedding extraction fails
+
+### Verification Gateway 1.8
+```bash
+pytest backend/tests/ -v
+# ALL tests pass — zero failures
+```
+
+---
+
+## Milestone 1.9 — Full Test Suite, Hardening & Security Audit *(🔴 Not Started)*
+
+### Tasks
+- [ ] Full pytest run — 0 failures, 0 errors
+- [ ] Security audit checklist:
+  - [ ] SQL injection: SQLAlchemy ORM used throughout — no raw SQL strings
+  - [ ] Path traversal: user_id-scoped upload paths, no user-controlled path segments
+  - [ ] File size enforced BEFORE writing to disk (reject early)
+  - [ ] MIME type validated via file magic bytes (not just extension)
+  - [ ] JWT `exp` claim validated on every protected request
+  - [ ] Refresh token is `httpOnly`, `Secure=True`, `SameSite=Lax`
+  - [ ] JWT secret is ≥ 32 random bytes
+  - [ ] bcrypt work factor ≥ 12 rounds
+  - [ ] No secrets or stack traces exposed to client
+  - [ ] CORS restricted to `localhost:3000` in development
+- [ ] Run `black backend/` — zero diffs
+- [ ] Run `isort backend/` — zero diffs
+- [ ] All functions have full type hints and one-line docstrings
+
+### Verification Gateway 1.9
+```bash
+pytest backend/tests/ -v --tb=short
+# Expected: ALL PASSED
+
+black --check backend/
+isort --check-only backend/
+# Expected: zero formatting diffs
+
+git ls-files | grep "\.env$"
+# Expected: no output (no .env committed)
+```
+
+---
+
+## Milestone 1.10 — Cleanup, Git Hygiene & Final Commit *(🔴 Not Started)*
+
+### Tasks
+- [ ] Delete all `__pycache__/` and `*.pyc` from tree
+- [ ] Confirm `.gitignore` is catching everything
+- [ ] `git status` — only tracked source files
+- [ ] Final commit on `main`:
+  ```
+  feat: Implement Milestone 1.10 — Phase 1 backend complete
+  
+  Full test suite passes. Auth (email + Google OAuth), voice upload,
+  SV2TTS inference, synthesis, and history endpoints operational.
+  Security hardened. Zero formatting issues.
+  ```
+- [ ] Tag release: `git tag v0.1.0-backend && git push --tags`
+
+### Verification Gateway 1.10
+```bash
+git status             # Clean working tree — nothing untracked
+pytest backend/tests/ -v     # ALL PASS
+git log --oneline      # All milestone commits visible
+```
+
+---
+
+## 🧪 Test Fixtures
+
+| Fixture | Path | Purpose | How to Generate |
+|---|---|---|---|
+| `sample_5sec.wav` | `tests/fixtures/sample_5sec.wav` | Valid audio for upload and embedding tests | `python -c "import soundfile as sf; import numpy as np; sf.write('...', np.sin(2*np.pi*440*np.linspace(0,5,80000)).astype(np.float32), 16000)"` |
+| `sample_invalid.txt` | `tests/fixtures/sample_invalid.txt` | Format validation test | Any text file |
+
+> `sample_oversized.wav` is generated on-demand inside the pytest fixture using `io.BytesIO` — not stored on disk.
+
+---
+
+## ✅ Phase 1 Completion Criteria
+
+Phase 1 is **complete** only when ALL of the following are true:
+
+- [ ] All 10 milestones marked ✅ in progress tracker above
+- [ ] `pytest backend/tests/ -v` → **0 failed, 0 errors**
+- [ ] `black --check backend/` → **no diffs**
+- [ ] `isort --check-only backend/` → **no diffs**
+- [ ] `git ls-files | grep ".env"` → **no output**
+- [ ] `GET /health` → `{ "status": "ok" }`
+- [ ] Full end-to-end manual test: signup → upload audio → synthesize → download WAV ✅
+- [ ] Tag `v0.1.0-backend` pushed to GitHub
+
+Only after this is complete will Phase 2 (Frontend) planning begin.
+
+---
+
+*Plan Version: 1.1 — Updated 2026-09-02*
+*Milestone 1.1 status: 🟡 In Progress — issues identified, pending resolution*
+
