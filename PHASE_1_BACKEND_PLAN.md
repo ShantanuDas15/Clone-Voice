@@ -292,16 +292,16 @@ git status                               # .env and backend/.venv/ must NOT appe
 ### Verification Gateway 1.2
 ```bash
 # Apply migrations
-alembic upgrade head
+cd backend && alembic upgrade head
 
 # Verify tables in PostgreSQL
-docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\dt"
+sudo docker exec -it $(sudo docker ps -q -f name=db) psql -U clonevoice -d clonevoice -c "\dt"
 # Expected output: users, voice_profiles, generations
 
 # Column verification
-docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d users"
-docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d voice_profiles"
-docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d generations"
+sudo docker exec -it $(sudo docker ps -q -f name=db) psql -U clonevoice -d clonevoice -c "\d users"
+sudo docker exec -it $(sudo docker ps -q -f name=db) psql -U clonevoice -d clonevoice -c "\d voice_profiles"
+sudo docker exec -it $(sudo docker ps -q -f name=db) psql -U clonevoice -d clonevoice -c "\d generations"
 ```
 
 ---
