@@ -343,7 +343,7 @@ test_health_endpoint             → 200, { "status": "ok" }
 
 ### Verification Gateway 1.3
 ```bash
-pytest backend/tests/test_auth.py -v
+PYTHONPATH=. pytest backend/tests/test_auth.py -v
 # All 13 tests must PASS
 
 curl -X POST http://localhost:8000/api/auth/signup \
@@ -377,7 +377,7 @@ test_google_callback_invalid_code    → 400 Bad Request
 
 ### Verification Gateway 1.4
 ```bash
-pytest backend/tests/test_auth.py -v -k "google"
+PYTHONPATH=. pytest backend/tests/test_auth.py -v -k "google"
 # All OAuth tests PASS with mocked responses
 ```
 
