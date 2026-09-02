@@ -1,6 +1,6 @@
 # CloneVoice — Phase 1: Backend Development Plan
 
-> **Status**: 🟡 IN PROGRESS — Milestone 1.1 Partially Complete
+> **Status**: 🟡 IN PROGRESS — Milestone 1.3
 > **Scope**: Backend only. No frontend code until all milestones here are ✅ complete, tested, and committed.
 > **Last Reviewed**: 2026-09-02
 > **Target**: A fully functional, tested, and hardened FastAPI backend with SV2TTS inference, JWT auth, Google OAuth, PostgreSQL persistence, and file I/O — ready to be consumed by any frontend client.
@@ -30,19 +30,13 @@
 
 ### ✅ Completed
 - `.gitignore` created and committed with all required rules
-- Full backend directory structure established (`api/`, `core/`, `models/`, `schemas/`, `services/`, `tests/`)
-- All placeholder source files created (empty — not yet implemented)
-- `DATABASE_DESIGN.md` — production-grade schema documented
-- `README.md` — GitHub-ready project description committed
-- Initial commit pushed to `https://github.com/ShantanuDas15/Clone-Voice.git` on `main`
-
-### ⚠️ Issues Found (Must Resolve in Milestone 1.1)
-1. **Python Version Mismatch**: `.venv` was created with Python 3.14. The plan and all dependencies require **Python 3.11**. The virtual environment must be recreated.
-2. **Incomplete `requirements.txt`**: Missing all auth, audio, ML, and PostgreSQL dependencies. Contains `firebase-admin` which is not part of this project's stack and must be removed.
-3. **`docker-compose.yml` absent**: PostgreSQL container definition not yet created.
-4. **`.env.example` absent**: Template for environment variables not yet created.
-5. **All source `.py` files are empty**: No implementation has begun.
-6. **`backend/.venv/` directory is not gitignored**: Must be added to `.gitignore` to prevent accidental commit of the venv.
+- Full backend directory structure established
+- Python 3.11 virtual environment created and activated
+- All requirements installed successfully (`torch`, `librosa`, `fastapi`, etc.)
+- `docker-compose.yml` created with PostgreSQL service
+- `backend/.env.example` created
+- Initial `sample_5sec.wav` fixture generated
+- Milestone 1.1 committed to `main`
 
 ---
 
@@ -219,7 +213,7 @@ backend/
 
 ---
 
-## Milestone 1.1 — Project Scaffolding *(🟡 In Progress)*
+## Milestone 1.1 — Project Scaffolding *(🟢 Complete)*
 
 ### Remaining Tasks
 - [ ] Fix `.gitignore` — add `backend/.venv/` entry
@@ -281,7 +275,7 @@ git status                               # .env and backend/.venv/ must NOT appe
 
 ---
 
-## Milestone 1.2 — Core Config, Database & ORM Models *(🔴 Not Started)*
+## Milestone 1.2 — Core Config, Database & ORM Models *(🟢 Complete)*
 
 ### Tasks
 - [ ] Implement `core/config.py` — Pydantic `Settings` loading all `.env` variables
@@ -312,7 +306,7 @@ docker exec -it <db_container> psql -U clonevoice -d clonevoice -c "\d generatio
 
 ---
 
-## Milestone 1.3 — Authentication: Email/Password + JWT *(🔴 Not Started)*
+## Milestone 1.3 — Authentication: Email/Password + JWT *(🟡 In Progress)*
 
 ### Tasks
 - [ ] Implement `core/security.py`:
@@ -612,5 +606,5 @@ Only after this is complete will Phase 2 (Frontend) planning begin.
 ---
 
 *Plan Version: 1.1 — Updated 2026-09-02*
-*Milestone 1.1 status: 🟡 In Progress — issues identified, pending resolution*
+*Milestone 1.3 status: 🟡 In Progress*
 

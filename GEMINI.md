@@ -14,7 +14,8 @@
 
 **Key Reference Documents** (read before planning any implementation):
 - `project_description.md` — Full project description, features, and tech stack
-- `DATABASE_DESIGN.md` (to be created) — Production-grade database schema, table definitions, ER diagram, index strategy
+- `DATABASE_DESIGN.md` — Production-grade database schema, table definitions, ER diagram
+- `PHASE_X_PLAN.md` — Active development phase tracking
 
 ---
 
@@ -29,74 +30,63 @@ This is a hard rule. No Next.js component, no frontend route, no UI code is to b
 4. The SV2TTS audio processing and inference pipeline is tested end-to-end.
 5. All backend tests pass cleanly with zero errors.
 
-If asked to implement a frontend feature before the backend is complete and validated — **decline and redirect** to the pending backend milestone.
-
 ---
 
-## 3. Core Implementation Workflow
+## 3. Industry-Grade Implementation Workflow (SOP)
 
-Whenever any feature, milestone, or sub-task from any phase plan is executed, YOU MUST follow this exact sequence without exception:
+Whenever executing a milestone or sub-task, YOU MUST strictly follow this standard operating procedure:
 
-### Step 1 — Implement
-- Write code strictly as specified in the milestone or phase plan documentation.
-- Follow the project's established directory structure (`backend/api/`, `backend/services/`, `backend/models/`, etc.).
-- Do not introduce new dependencies without updating `requirements.txt` or `package.json`.
-- Never hardcode secrets, credentials, or file paths — use `.env`.
+### Phase 3.1 — Initialization & Branching
+- Review the active `PHASE_X_PLAN.md` to understand the exact scope and constraints.
+- Ensure the working tree is clean.
+- Create and checkout a feature branch for the milestone (e.g., `git checkout -b feat/1.2-database-setup`).
 
-### Step 2 — Verify, Validate & Test
-- Execute the **Verification Gateway** or test instructions specified in the phase plan for that milestone.
-- If no test instructions exist in the plan, YOU MUST ask for permission before generating new test cases.
-- Run all tests via the terminal. Do **not** assume tests pass — confirm with actual command output.
-- Tests must cover: happy path, error cases, edge cases, and security boundary conditions (e.g. unauthenticated requests, oversized audio inputs, wrong formats).
+### Phase 3.2 — Implementation & Linting
+- Implement code adhering strictly to `PEP 8`.
+- Format code immediately after writing: run `black backend/` and `isort backend/`.
+- Ensure all functions include Python type hints and one-line docstrings.
+- No hardcoded secrets. Rely solely on Pydantic Settings and `.env`.
 
-### Step 3 — Clean & Isolate
-Before any `git` operation, scrub the repository of:
-- `__pycache__/` directories anywhere in the tree
-- `.pytest_cache/` outside of `backend/`
-- `*.pyc` compiled Python files
-- `.DS_Store` files (macOS artefacts)
-- Temporary test scripts, dummy audio files, or generated test WAVs
-- Any `.env` file (must never be committed)
+### Phase 3.3 — Verification & Testing (Zero-Error Tolerance)
+- Run the relevant `pytest` suite.
+- **CRITICAL**: Do NOT proceed to commit if a single test fails, warns, or errors out. Fix it immediately.
+- Run the manual Verification Gateway (e.g., `curl` commands) specified in the Phase Plan.
 
-Verify `.gitignore` is correctly catching all of the above.
+### Phase 3.4 — Environment Scrubbing
+- Before staging, ensure no `.env` files, `.DS_Store`, `__pycache__`, or `*.pyc` files exist in the git index.
+- Ensure large binary models (`weights/`) and local `uploads/` or `outputs/` are appropriately gitignored.
 
-### Step 4 — Commit & Push
-- **ONLY** commit if all tests pass and the directory is clean.
-- Use the following commit message format:
-  ```
-  feat: Implement Milestone X.X — <short description>
-  
-  <Optional body: key decisions, what was tested, known limitations>
-  ```
-- Push to the GitHub remote after every successful milestone commit.
+### Phase 3.5 — Conventional Commits & Pushing
+- Stage verified files: `git add .`
+- Commit using the **Conventional Commits** format:
+  `feat|fix|chore(scope): [Milestone X.X] <Subject>`
+  *Example:* `feat(db): [Milestone 1.2] Implement SQLAlchemy ORM models and Alembic`
+- Push to the remote repository: `git push -u origin <branch-name>` (or `main` if directly integrating).
 
-### Step 5 — Track Progress
-- After a successful commit, update the relevant phase plan markdown file (e.g. `PHASE_1_BACKEND_PLAN.md`) by:
-  - Checking off completed tasks (`[ ]` → `[x]`)
-  - Appending the exact commit hash to the milestone's status log entry
+### Phase 3.6 — Plan Synchronization
+- Open the relevant Phase Plan markdown file.
+- Mark the completed tasks with `[x]`.
+- Append the exact commit hash (via `git rev-parse --short HEAD`) to the milestone's tracker table.
+- Update the document's top-level Status and Last Reviewed date.
+- Commit the plan update separately: `git commit -am "docs: Update phase plan for Milestone X.X" && git push`.
 
 ---
 
 ## 4. Phase Plan Generation & Test Design Standards
 
-When generating, drafting, or updating any Phase Development Plan or milestone specification, YOU MUST adhere to all of the following:
+When generating, drafting, or updating any Phase Development Plan, YOU MUST adhere to all of the following:
 
 ### 4.1 Structured & Professional Test Design
 Every milestone MUST include explicitly defined test specifications covering:
-- **Unit tests**: Individual functions and service methods in isolation (e.g., Librosa preprocessing).
-- **Integration tests**: API endpoint behaviour with a real (in-memory) database.
-- **Boundary condition checks**: Edge inputs (empty audio files, oversized WAV files, wrong format, expired JWT tokens).
-- **API Verification Gateways**: `curl` or `pytest` commands that confirm the endpoint returns the exact expected status code and response shape.
+- **Unit tests**: Individual functions and service methods in isolation.
+- **Integration tests**: API endpoint behaviour with an in-memory SQLite database.
+- **Boundary condition checks**: Edge inputs (empty audio files, oversized WAV files, expired JWTs).
+- **API Verification Gateways**: Explicit bash/curl commands to confirm status codes and shapes.
 
-### 4.2 Deployment Safety & Zero Error Guarantee
-- Tests MUST NOT call live external services (e.g., real Google OAuth callbacks).
-- Use **mocks and stubs** for: OAuth tokens, SV2TTS model inference on large clips, filesystem I/O.
-- Tests must be deterministic — the same test run must always produce the same result.
-- No test should leave residual state (DB rows, temp `.wav` files) that affects subsequent test runs.
-
-### 4.3 Fixture Scrubbing & Environment Isolation
-- All test fixtures (temp DB, temp uploaded audio, mock generated WAV files) must be torn down automatically in `teardown` / `pytest` fixtures.
-- Use a **separate SQLite test database** (e.g. `clonevoice_test.db` or in-memory `sqlite://`) — never run tests against the development or production database.
+### 4.2 Deployment Safety & Environment Isolation
+- Tests MUST NOT call live external services (e.g., real Google OAuth callbacks). Use mocks.
+- Tests must be deterministic and leave zero residual state (DB rows, temp `.wav` files).
+- Fixtures must be automatically torn down via `pytest` dependencies.
 
 ---
 
@@ -118,36 +108,28 @@ backend/
 │   ├── security.py            # JWT and password hashing
 │   └── config.py              # Environment variable management
 ├── weights/                   # Pre-trained model weights (gitignored if >100MB)
-│   ├── encoder.pt
-│   ├── synthesizer.pt
-│   └── vocoder.pt
 ├── uploads/                   # Audio sample inputs stored by user_id (gitignored)
 ├── outputs/                   # Generated SR output audio stored by user_id (gitignored)
-├── tests/
-│   ├── conftest.py            # Shared fixtures: test DB, mock auth, mock TTS
-│   ├── test_auth.py
-│   ├── test_voice.py
-│   └── test_synthesize.py
-├── requirements.txt
-└── .env                       # Never committed — contains JWT Secret, DB URL, OAuth keys
+└── tests/
+    ├── conftest.py            # Shared fixtures: test DB, mock auth, mock TTS
+    ├── test_auth.py
+    └── test_synthesize.py
 ```
 
 ---
 
-## 6. Database Schema Reference
+## 6. Database Schema Reference (PostgreSQL)
 
-Three core tables for v1.0. Full specification to be detailed in `DATABASE_DESIGN.md`.
-
-| Table | Purpose |
-|-------|---------|
-| `users` | Local projection of user account (Email/Password or OAuth). |
-| `voice_profiles` | One row per extracted speaker embedding. Links to the uploaded source audio. |
-| `generations` | Audit trail and history of all generated text-to-speech outputs. |
+| Table | Purpose | Keys |
+|-------|---------|------|
+| `users` | Auth identity | PK: `UUID` |
+| `voice_profiles` | Extracted speaker embedding | PK: `UUID`, FK: `user_id` |
+| `generations` | Audit trail of synthesized outputs | PK: `UUID`, FKs: `user_id`, `voice_profile_id` |
 
 **Critical schema rules**:
 - All PKs are `UUID` strings — never serial integers.
 - All tables use `created_at` + `updated_at` audit timestamps.
-- Use `deleted_at` for soft deletes — never hard-delete user data or voice profiles.
+- Use `deleted_at` for soft deletes — never hard-delete user data.
 
 ---
 
@@ -160,35 +142,30 @@ Three core tables for v1.0. Full specification to be detailed in `DATABASE_DESIG
 | `GET` | `/api/voice/profiles` | ✅ | List user's voice profiles |
 | `POST` | `/api/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output |
 | `GET` | `/api/synthesize/history`| ✅ | List user's generated audio history |
-| `GET` | `/health` | ❌ | Liveness check — returns `{ "status": "ok" }` |
-
-All protected endpoints must validate the JWT token via dependency injection.
 
 ---
 
 ## 8. Environment & Security Rules
 
-- **Never commit `.env`** — it must be in `.gitignore` before the first commit.
+- **Never commit `.env`** — it must be in `.gitignore` natively.
 - Secrets stored in `.env`: `JWT_SECRET_KEY`, `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
-- The `uploads/` and `outputs/` directories must be gitignored — they contain sensitive user audio data.
-- The `weights/` directory must not be committed to Git if files exceed 100MB (use Git LFS or external download scripts).
+- Directories containing user PII or massive binaries (`uploads/`, `outputs/`, `weights/`) MUST be gitignored.
 
 ---
 
 ## 9. Coding Standards
 
-- **Python style**: PEP 8. Use `black` for formatting, `isort` for import ordering.
-- **Type hints**: All function signatures must use Python type hints.
-- **Docstrings**: All service methods and router handlers must have a one-line docstring.
-- **Error handling**: Never let unhandled exceptions propagate to the client. Use FastAPI `HTTPException` with appropriate status codes.
-- **Logging**: Use Python's `logging` module (not `print`). Log at `INFO` for normal flow, `ERROR` for exceptions.
-- **No global mutable state** except the TTS model singletons (loaded once at lifespan startup).
+- **Python style**: `PEP 8`, enforced via `black` and `isort`.
+- **Type hints**: Mandatory for all function signatures (e.g., `def fn(a: str) -> bool:`).
+- **Error handling**: Never let unhandled exceptions propagate. Use FastAPI `HTTPException`.
+- **Logging**: Use Python's `logging` module. No `print()` statements in production code.
 
 ---
 
-## 10. Git & Repository Hygiene
+## 10. Git & Repository Hygiene (Strict)
 
-- **Branch strategy**: `main` is the stable branch. Feature work on `feat/<milestone-name>` branches. Merge only after tests pass.
-- **`.gitignore` must include**: `__pycache__/`, `*.pyc`, `.pytest_cache/`, `.DS_Store`, `.env`, `uploads/`, `outputs/`, `*.db`, `clonevoice_test.db`, `weights/`.
-- **Commit atomically**: One commit per completed milestone — not per file save.
-- **Never force-push** to `main`.
+- **Branch Naming**: Use `feat/M.M-<name>`, `fix/<name>`, or `chore/<name>` (e.g., `feat/1.2-orm-models`).
+- **Commit Format**: Must adhere to Conventional Commits: `type(scope): Subject`. Max 72 chars for subject.
+- **Atomic Commits**: One commit per logical milestone or sub-task. Do not bundle unrelated changes.
+- **No Force Pushing**: Never run `git push -f` against `main`.
+- **Main Protection**: The `main` branch must always remain deployable. Code only enters `main` when tests pass 100%.
