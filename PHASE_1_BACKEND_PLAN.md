@@ -1,6 +1,6 @@
 # CloneVoice — Phase 1: Backend Development Plan
 
-> **Status**: 🟡 IN PROGRESS — Milestone 1.3
+> **Status**: 🟡 IN PROGRESS — Milestone 1.4
 > **Scope**: Backend only. No frontend code until all milestones here are ✅ complete, tested, and committed.
 > **Last Reviewed**: 2026-09-02
 > **Target**: A fully functional, tested, and hardened FastAPI backend with SV2TTS inference, JWT auth, Google OAuth, PostgreSQL persistence, and file I/O — ready to be consumed by any frontend client.
@@ -306,7 +306,7 @@ sudo docker exec -it $(sudo docker ps -q -f name=db) psql -U clonevoice -d clone
 
 ---
 
-## Milestone 1.3 — Authentication: Email/Password + JWT *(🟡 In Progress)*
+## Milestone 1.3 — Authentication: Email/Password + JWT *(🟢 Complete)*
 
 ### Tasks
 - [ ] Implement `core/security.py`:
@@ -357,7 +357,7 @@ curl http://localhost:8000/health
 
 ---
 
-## Milestone 1.4 — Authentication: Google OAuth 2.0 *(🔴 Not Started)*
+## Milestone 1.4 — Authentication: Google OAuth 2.0 *(🟡 In Progress)*
 
 ### Tasks
 - [ ] Register OAuth app in Google Cloud Console — obtain `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
@@ -606,5 +606,5 @@ Only after this is complete will Phase 2 (Frontend) planning begin.
 ---
 
 *Plan Version: 1.1 — Updated 2026-09-02*
-*Milestone 1.3 status: 🟡 In Progress*
+*Milestone 1.4 status: 🟡 In Progress*
 
