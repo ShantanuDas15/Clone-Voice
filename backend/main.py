@@ -1,9 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from backend.api.auth import router as auth_router
+from backend.core.config import settings
 
 app = FastAPI(title="CloneVoice API")
+
+app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET_KEY)
 
 app.add_middleware(
     CORSMiddleware,
