@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.api.auth import router as auth_router
+from backend.api.voice import router as voice_router
 from backend.core.config import settings
 
 app = FastAPI(title="CloneVoice API")
@@ -18,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(voice_router, prefix="/api/voice", tags=["voice"])
 
 
 @app.get("/health")
