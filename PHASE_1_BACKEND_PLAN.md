@@ -429,7 +429,7 @@ PYTHONPATH=. pytest backend/tests/test_voice.py -v
 # 3. Test the endpoints
 curl -X POST http://localhost:8000/api/voice/upload \
   -H "Authorization: Bearer <token>" \
-  -F "file=@tests/fixtures/sample_5sec.wav" \
+  -F "file=@tests/fixtures/sample_5sec.wav;type=audio/wav" \
   -F "name=Test Voice"
 # → {"id":"...","name":"Test Voice","status":"ready","created_at":"..."}
 ```
