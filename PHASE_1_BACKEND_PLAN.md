@@ -420,8 +420,13 @@ test_librosa_preprocess_shape       → unit test: output.shape == (n_samples,),
 
 ### Verification Gateway 1.5
 ```bash
-pytest backend/tests/test_voice.py -v
+# 1. Run tests from project root
+PYTHONPATH=. pytest backend/tests/test_voice.py -v
 
+# 2. Start server in a separate terminal if testing manually
+# PYTHONPATH=. uvicorn backend.main:app --reload
+
+# 3. Test the endpoints
 curl -X POST http://localhost:8000/api/voice/upload \
   -H "Authorization: Bearer <token>" \
   -F "file=@tests/fixtures/sample_5sec.wav" \
