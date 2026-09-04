@@ -207,3 +207,26 @@ def test_history_pagination(client: TestClient, auth_headers_syn):
     res = client.get("/api/synthesize/history?limit=100", headers=auth_headers_syn)
     assert res.status_code == 200
     assert len(res.json()) <= 50
+
+
+def test_history_excludes_soft_deleted(client: TestClient, auth_headers_syn):
+    profile_id = upload_profile(client, auth_headers_syn)
+    client.post(
+        "/api/synthesize",
+        headers=auth_headers_syn,
+        json={"voice_profile_id": profile_id, "text": "Soft delete test"},
+    )
+
+    # Verify it exists in history
+    res = client.get("/api/synthesize/history", headers=auth_headers_syn)
+    assert len(res.json()) >= 1
+
+    # Soft delete profile
+    res_del = client.delete(
+        f"/api/voice/profiles/{profile_id}", headers=auth_headers_syn
+    )
+    assert res_del.status_code == 200
+
+    # Verify it is removed from history
+    res_after = client.get("/api/synthesize/history", headers=auth_headers_syn)
+    assert all(gen["voice_profile_id"] != profile_id for gen in res_after.json())

@@ -78,7 +78,8 @@ def get_history(
 
     generations = (
         db.query(Generation)
-        .filter(Generation.user_id == current_user.id)
+        .join(VoiceProfile, Generation.voice_profile_id == VoiceProfile.id)
+        .filter(Generation.user_id == current_user.id, VoiceProfile.deleted_at == None)
         .order_by(Generation.created_at.desc())
         .offset(offset)
         .limit(limit)
