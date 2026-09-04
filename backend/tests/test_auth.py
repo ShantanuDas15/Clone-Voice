@@ -258,3 +258,29 @@ def test_google_callback_invalid_code(client: TestClient):
 
         assert response.status_code == 400
         assert "OAuth error" in response.json()["detail"]
+
+
+def test_update_me(client: TestClient):
+    # Setup token
+    client.post(
+        "/api/auth/signup",
+        json={
+            "email": "update@example.com",
+            "password": "Password123!",
+            "name": "Test",
+        },
+    )
+    token = client.post(
+        "/api/auth/login",
+        json={"email": "update@example.com", "password": "Password123!"},
+    ).json()["access_token"]
+    auth_headers = {"Authorization": f"Bearer {token}"}
+
+    # Valid update
+    res = client.patch("/api/auth/me", headers=auth_headers, json={"name": "New Name"})
+    assert res.status_code == 200
+    assert res.json()["name"] == "New Name"
+
+    # Invalid update
+    res = client.patch("/api/auth/me", headers=auth_headers, json={"name": ""})
+    assert res.status_code == 422

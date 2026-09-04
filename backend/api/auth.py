@@ -156,3 +156,19 @@ async def google_callback(
         max_age=7 * 24 * 60 * 60,
     )
     return TokenResponse(access_token=access_token)
+
+
+from backend.schemas.auth import UpdateUserRequest
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    user_update: UpdateUserRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if user_update.name is not None:
+        current_user.name = user_update.name
+        db.commit()
+        db.refresh(current_user)
+    return current_user

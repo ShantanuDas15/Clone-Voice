@@ -30,3 +30,7 @@ class UserOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UpdateUserRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
