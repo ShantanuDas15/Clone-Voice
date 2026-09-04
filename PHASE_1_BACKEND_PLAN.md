@@ -458,12 +458,11 @@ test_save_output_returns_duration  → returned duration > 0.0
 
 ### Verification Gateway 1.6
 ```bash
-# Standalone smoke test (requires weights downloaded)
-cd backend && source .venv/bin/activate
-python -c "
-from services.audio_processing import preprocess_audio
-from services.tts_pipeline import embed_speaker
-audio = preprocess_audio('tests/fixtures/sample_5sec.wav')
+# Standalone smoke test (run from project root)
+PYTHONPATH=. python -c "
+from backend.services.audio_processing import preprocess_audio
+from backend.services.tts_pipeline import embed_speaker
+audio = preprocess_audio('backend/tests/fixtures/sample_5sec.wav')
 emb = embed_speaker(audio)
 assert emb.shape == (256,), f'Got {emb.shape}'
 print('Speaker encoder OK:', emb.shape)
