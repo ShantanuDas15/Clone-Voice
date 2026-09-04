@@ -1,6 +1,6 @@
 # CloneVoice — Phase 1: Backend Development Plan
 
-> **Status**: 🟡 IN PROGRESS — Milestone 1.6
+> **Status**: 🟡 IN PROGRESS — Milestone 1.7
 > **Scope**: Backend only. No frontend code until all milestones here are ✅ complete, tested, and committed.
 > **Last Reviewed**: 2026-09-02
 > **Target**: A fully functional, tested, and hardened FastAPI backend with SV2TTS inference, JWT auth, Google OAuth, PostgreSQL persistence, and file I/O — ready to be consumed by any frontend client.
@@ -616,5 +616,5 @@ Only after this is complete will Phase 2 (Frontend) planning begin.
 ---
 
 *Plan Version: 1.1 — Updated 2026-09-02*
-*Milestone 1.6 status: 🟡 In Progress*
+*Milestone 1.7 status: 🟡 In Progress*
 
