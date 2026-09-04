@@ -1,18 +1,21 @@
 import uuid
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from fastapi import (APIRouter, Cookie, Depends, HTTPException, Request,
-                     Response, status)
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.core.database import get_db
-from backend.core.security import (create_access_token, create_refresh_token,
-                                   decode_token, get_current_user,
-                                   hash_password, verify_password)
+from backend.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 from backend.models.user import User
-from backend.schemas.auth import (LoginRequest, SignupRequest, TokenResponse,
-                                  UserOut)
+from backend.schemas.auth import LoginRequest, SignupRequest, TokenResponse, UserOut
 
 router = APIRouter()
 

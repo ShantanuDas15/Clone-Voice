@@ -24,3 +24,5 @@ clonevoice_test.db
 .DS_Store
 .vscode/
 .idea/
+uploads/
+outputs/
