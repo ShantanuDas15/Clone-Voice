@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -5,8 +7,16 @@ from starlette.middleware.sessions import SessionMiddleware
 from backend.api.auth import router as auth_router
 from backend.api.voice import router as voice_router
 from backend.core.config import settings
+from backend.services.tts_pipeline import load_models
 
-app = FastAPI(title="CloneVoice API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_models(device=settings.DEVICE)
+    yield
+
+
+app = FastAPI(title="CloneVoice API", lifespan=lifespan)
 
 app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET_KEY)
 
