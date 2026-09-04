@@ -1,9 +1,7 @@
-import os
 from typing import List
 
 import numpy as np
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
-                     status)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
@@ -11,8 +9,11 @@ from backend.core.security import get_current_user
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.voice import VoiceProfileOut
-from backend.services.audio_processing import (preprocess_audio, save_upload,
-                                               validate_audio_file)
+from backend.services.audio_processing import (
+    preprocess_audio,
+    save_upload,
+    validate_audio_file,
+)
 
 router = APIRouter()
 
