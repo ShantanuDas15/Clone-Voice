@@ -11,7 +11,8 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import save_output, synthesize_speech, vocode
+from backend.services.tts_pipeline import (save_output, synthesize_speech,
+                                           vocode)
 
 router = APIRouter()
 
