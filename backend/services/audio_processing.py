@@ -35,6 +35,22 @@ def validate_audio_file(file: UploadFile) -> None:
             detail=f"File too large. Max allowed is {settings.MAX_AUDIO_SIZE_MB}MB.",
         )
 
+    magic = file.file.read(4)
+    file.file.seek(0)
+    is_wav = magic.startswith(b"RIFF")
+    is_mp3 = (
+        magic.startswith(b"ID3")
+        or magic.startswith(b"\xff\xfb")
+        or magic.startswith(b"\xff\xfa")
+        or magic.startswith(b"\xff\xf3")
+    )
+    is_webm = magic.startswith(b"\x1a\x45\xdf\xa3")
+
+    if not (is_wav or is_mp3 or is_webm):
+        raise HTTPException(
+            status_code=422, detail="Invalid file signature (magic bytes)."
+        )
+
 
 def save_upload(file: UploadFile, user_id: str) -> str:
     user_dir = os.path.join(settings.UPLOAD_DIR, user_id)

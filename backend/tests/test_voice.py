@@ -56,7 +56,7 @@ def test_upload_valid_mp3(client: TestClient, auth_headers):
 
     with patch("backend.api.voice.preprocess_audio") as mock_pre:
         mock_pre.return_value = None
-        files = {"file": ("test.mp3", b"dummy mp3 data", "audio/mp3")}
+        files = {"file": ("test.mp3", b"ID3 dummy mp3 data", "audio/mp3")}
         data = {"name": "MP3 Voice"}
         response = client.post(
             "/api/voice/upload", headers=auth_headers, data=data, files=files

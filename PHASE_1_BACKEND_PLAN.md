@@ -1,6 +1,6 @@
 # CloneVoice — Phase 1: Backend Development Plan
 
-> **Status**: 🟡 IN PROGRESS — Milestone 1.9
+> **Status**: 🟡 IN PROGRESS — Milestone 1.10
 > **Scope**: Backend only. No frontend code until all milestones here are ✅ complete, tested, and committed.
 > **Last Reviewed**: 2026-09-02
 > **Target**: A fully functional, tested, and hardened FastAPI backend with SV2TTS inference, JWT auth, Google OAuth, PostgreSQL persistence, and file I/O — ready to be consumed by any frontend client.
@@ -19,7 +19,7 @@
 | 1.6 | SV2TTS inference pipeline integration (Encoder → Synthesizer → Vocoder) | 🔴 Not Started | — |
 | 1.7 | Speech synthesis endpoint (`POST /api/synthesize`) | 🔴 Not Started | — |
 | 1.8 | History endpoints + soft-delete voice profiles | 🔴 Not Started | — |
-| 1.9 | Full test suite (unit + integration) + hardening pass | 🔴 Not Started | — |
+| 1.9 | Full test suite (unit + integration) + hardening pass | 🟢 Complete | f7919e0 |
 | 1.10 | Git hygiene, `.gitignore` audit, final commit & push | 🔴 Not Started | — |
 
 **Legend**: 🔴 Not Started · 🟡 In Progress · 🟢 Complete · ❌ Blocked
@@ -527,24 +527,24 @@ pytest backend/tests/ -v
 
 ---
 
-## Milestone 1.9 — Full Test Suite, Hardening & Security Audit *(🔴 Not Started)*
+## Milestone 1.9 — Full Test Suite, Hardening ## Milestone 1.9 — Full Test Suite, Hardening & Security Audit *(🔴 Not Started)* Security Audit *(🟢 Complete)*
 
 ### Tasks
-- [ ] Full pytest run — 0 failures, 0 errors
-- [ ] Security audit checklist:
-  - [ ] SQL injection: SQLAlchemy ORM used throughout — no raw SQL strings
-  - [ ] Path traversal: user_id-scoped upload paths, no user-controlled path segments
-  - [ ] File size enforced BEFORE writing to disk (reject early)
-  - [ ] MIME type validated via file magic bytes (not just extension)
-  - [ ] JWT `exp` claim validated on every protected request
-  - [ ] Refresh token is `httpOnly`, `Secure=True`, `SameSite=Lax`
-  - [ ] JWT secret is ≥ 32 random bytes
-  - [ ] bcrypt work factor ≥ 12 rounds
-  - [ ] No secrets or stack traces exposed to client
-  - [ ] CORS restricted to `localhost:3000` in development
-- [ ] Run `black backend/` — zero diffs
-- [ ] Run `isort backend/` — zero diffs
-- [ ] All functions have full type hints and one-line docstrings
+- [x] Full pytest run — 0 failures, 0 errors
+- [x] Security audit checklist:
+  - [x] SQL injection: SQLAlchemy ORM used throughout — no raw SQL strings
+  - [x] Path traversal: user_id-scoped upload paths, no user-controlled path segments
+  - [x] File size enforced BEFORE writing to disk (reject early)
+  - [x] MIME type validated via file magic bytes (not just extension)
+  - [x] JWT `exp` claim validated on every protected request
+  - [x] Refresh token is `httpOnly`, `Secure=True`, `SameSite=Lax`
+  - [x] JWT secret is ≥ 32 random bytes
+  - [x] bcrypt work factor ≥ 12 rounds
+  - [x] No secrets or stack traces exposed to client
+  - [x] CORS restricted to `localhost:3000` in development
+- [x] Run `black backend/` — zero diffs
+- [x] Run `isort backend/` — zero diffs
+- [x] All functions have full type hints and one-line docstrings
 
 ### Verification Gateway 1.9
 ```bash
@@ -615,5 +615,5 @@ Only after this is complete will Phase 2 (Frontend) planning begin.
 ---
 
 *Plan Version: 1.1 — Updated 2026-09-02*
-*Milestone 1.9 status: 🟡 In Progress*
+*Milestone 1.10 status: 🟡 In Progress*
 
