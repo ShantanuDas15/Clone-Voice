@@ -12,7 +12,7 @@
 
 | Milestone | Description | Status | Commit Hash |
 |-----------|-------------|--------|-------------|
-| B.1 | Security hardening — refresh token rotation, JWT secret validation, passlib migration, CORS fix | 🔴 Not Started | — |
+| B.1 | Security hardening — refresh token rotation, JWT secret validation, passlib migration, CORS fix | 🟢 Complete | 04bc1be |
 | B.2 | Data integrity — `server_default` ORM fix, index on FK, schema path leak fix | 🔴 Not Started | — |
 | B.3 | Real SV2TTS integration — wire `embed_speaker()`, implement Tacotron 2 + WaveRNN inference | 🔴 Not Started | — |
 | B.4 | Structured logging — replace all `print()` with `logging`, configure `dictConfig` in `main.py` | 🔴 Not Started | — |
@@ -112,19 +112,19 @@ production-grade standards. **18 findings** across 7 categories.
 
 ---
 
-## 🏗️ Milestone B.1 — Security Hardening *(🔴 Not Started)*
+## 🏗️ Milestone B.1 — Security Hardening *(🟢 Complete)*
 
 > **Priority**: Execute first — P0 findings block all deployment.
 
 ### Tasks
 
-- [ ] `core/config.py` — Add `@field_validator('JWT_SECRET_KEY')` raising `ValueError` if value is shorter than 32 characters or equals `"secret"`.
-- [ ] `core/config.py` — Add `ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]` setting.
-- [ ] `core/config.py` — Add `VOCODER_SAMPLE_RATE: int = 22050` constant.
-- [ ] `core/security.py` — Replace raw `import bcrypt` with `passlib.context.CryptContext(schemes=["bcrypt"], deprecated="auto")`. Keep `hash_password()` / `verify_password()` signatures unchanged.
-- [ ] `api/auth.py` — Move `UpdateUserRequest` import to the top of the file.
-- [ ] `api/auth.py` — `POST /refresh`: after validating old refresh token, issue a **new refresh token** and set it as the updated `httpOnly` cookie in the response object.
-- [ ] `main.py` — Replace `allow_origins=["http://localhost:3000"]` with `allow_origins=settings.ALLOWED_ORIGINS`.
+- [x] `core/config.py` — Add `@field_validator('JWT_SECRET_KEY')` raising `ValueError` if value is shorter than 32 characters or equals `"secret"`.
+- [x] `core/config.py` — Add `ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]` setting.
+- [x] `core/config.py` — Add `VOCODER_SAMPLE_RATE: int = 22050` constant.
+- [x] `core/security.py` — Replace raw `import bcrypt` with `passlib.context.CryptContext(schemes=["bcrypt"], deprecated="auto")`. Keep `hash_password()` / `verify_password()` signatures unchanged.
+- [x] `api/auth.py` — Move `UpdateUserRequest` import to the top of the file.
+- [x] `api/auth.py` — `POST /refresh`: after validating old refresh token, issue a **new refresh token** and set it as the updated `httpOnly` cookie in the response object.
+- [x] `main.py` — Replace `allow_origins=["http://localhost:3000"]` with `allow_origins=settings.ALLOWED_ORIGINS`.
 
 ### Files Changed
 
