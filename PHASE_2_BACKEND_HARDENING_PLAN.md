@@ -13,7 +13,7 @@
 | Milestone | Description | Status | Commit Hash |
 |-----------|-------------|--------|-------------|
 | B.1 | Security hardening — refresh token rotation, JWT secret validation, passlib migration, CORS fix | 🟢 Complete | 04bc1be |
-| B.2 | Data integrity — `server_default` ORM fix, index on FK, schema path leak fix | 🔴 Not Started | — |
+| B.2 | Data integrity — `server_default` ORM fix, index on FK, schema path leak fix | 🟢 Complete | aa77049 |
 | B.3 | Real SV2TTS integration — wire `embed_speaker()`, implement Tacotron 2 + WaveRNN inference | 🔴 Not Started | — |
 | B.4 | Structured logging — replace all `print()` with `logging`, configure `dictConfig` in `main.py` | 🔴 Not Started | — |
 | B.5 | Test suite completion — add missing tests, fix fixture scopes, add security test file | 🔴 Not Started | — |
@@ -159,16 +159,16 @@ PYTHONPATH=. pytest backend/tests/test_security.py::test_refresh_token_rotated -
 
 ---
 
-## 🏗️ Milestone B.2 — Data Integrity & Schema Fixes *(🔴 Not Started)*
+## 🏗️ Milestone B.2 — Data Integrity & Schema Fixes *(🟢 Complete)*
 
 ### Tasks
 
-- [ ] `models/user.py` — Change `created_at` to `server_default=func.now()`. Change `updated_at` to `server_default=func.now(), onupdate=func.now()`.
-- [ ] `models/voice_profile.py` — Apply same `server_default` fix as above.
-- [ ] `models/generation.py` — Add `index=True` to the `voice_profile_id` FK column.
-- [ ] `schemas/synthesize.py` — Replace `output_audio_path: str` in `GenerationOut` with `output_filename: str`. Compute `os.path.basename(generation.output_audio_path)` in `api/synthesize.py` before returning.
-- [ ] `schemas/synthesize.py` — Make `duration_seconds: Optional[float]` (column is nullable in DB).
-- [ ] Generate and apply new Alembic migration for the `server_default` and index changes.
+- [x] `models/user.py` — Change `created_at` to `server_default=func.now()`. Change `updated_at` to `server_default=func.now(), onupdate=func.now()`.
+- [x] `models/voice_profile.py` — Apply same `server_default` fix as above.
+- [x] `models/generation.py` — Add `index=True` to the `voice_profile_id` FK column.
+- [x] `schemas/synthesize.py` — Replace `output_audio_path: str` in `GenerationOut` with `output_filename: str`. Compute `os.path.basename(generation.output_audio_path)` in `api/synthesize.py` before returning.
+- [x] `schemas/synthesize.py` — Make `duration_seconds: Optional[float]` (column is nullable in DB).
+- [x] Generate and apply new Alembic migration for the `server_default` and index changes.
 
 ### Files Changed
 
