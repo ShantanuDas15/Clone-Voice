@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,8 +14,8 @@ class GenerationOut(BaseModel):
     id: UUID
     voice_profile_id: UUID
     input_text: str
-    output_audio_path: str
-    duration_seconds: float
+    output_filename: str
+    duration_seconds: Optional[float] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
