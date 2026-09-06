@@ -12,7 +12,7 @@ from backend.core.security import (create_access_token, create_refresh_token,
                                    hash_password, verify_password)
 from backend.models.user import User
 from backend.schemas.auth import (LoginRequest, SignupRequest, TokenResponse,
-                                  UserOut)
+                                  UpdateUserRequest, UserOut)
 
 router = APIRouter()
 
@@ -72,7 +72,9 @@ def login(user_in: LoginRequest, response: Response, db: Session = Depends(get_d
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(refresh_token: str = Cookie(None), db: Session = Depends(get_db)):
+def refresh(
+    response: Response, refresh_token: str = Cookie(None), db: Session = Depends(get_db)
+):
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
 
@@ -91,6 +93,17 @@ def refresh(refresh_token: str = Cookie(None), db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="User not found")
 
     access_token = create_access_token(data={"sub": str(user.id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60,
+    )
+
     return TokenResponse(access_token=access_token)
 
 
@@ -156,9 +169,6 @@ async def google_callback(
         max_age=7 * 24 * 60 * 60,
     )
     return TokenResponse(access_token=access_token)
-
-
-from backend.schemas.auth import UpdateUserRequest
 
 
 @router.patch("/me", response_model=UserOut)
