@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 import numpy as np
@@ -86,4 +87,20 @@ def get_history(
         .all()
     )
 
-    return generations
+    results = []
+    for gen in generations:
+        filename = (
+            os.path.basename(gen.output_audio_path) if gen.output_audio_path else ""
+        )
+        results.append(
+            GenerationOut(
+                id=gen.id,
+                voice_profile_id=gen.voice_profile_id,
+                input_text=gen.input_text,
+                output_filename=filename,
+                duration_seconds=gen.duration_seconds,
+                created_at=gen.created_at,
+            )
+        )
+
+    return results

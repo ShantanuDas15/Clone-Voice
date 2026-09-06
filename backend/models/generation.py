@@ -21,7 +21,7 @@ class Generation(Base):
         index=True,
     )
     voice_profile_id = Column(
-        Uuid(as_uuid=True), ForeignKey("voice_profiles.id"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("voice_profiles.id"), nullable=False, index=True
     )
     input_text = Column(Text, nullable=False)
     output_audio_path = Column(Text, nullable=True)
@@ -29,5 +29,5 @@ class Generation(Base):
     tts_metadata = Column(JSON_TYPE, default=dict)
     status = Column(String(50), nullable=False, default="completed")
     created_at = Column(
-        DateTime(timezone=True), default=func.now(), nullable=False, index=True
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

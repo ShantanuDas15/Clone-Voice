@@ -21,8 +21,13 @@ class VoiceProfile(Base):
     audio_sample_path = Column(Text, nullable=False)
     embedding_path = Column(Text, nullable=False)
     status = Column(String(50), nullable=False, default="ready")
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
-        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
