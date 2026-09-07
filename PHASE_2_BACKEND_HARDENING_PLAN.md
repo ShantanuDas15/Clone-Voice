@@ -14,7 +14,7 @@
 |-----------|-------------|--------|-------------|
 | B.1 | Security hardening — refresh token rotation, JWT secret validation, passlib migration, CORS fix | 🟢 Complete | 04bc1be |
 | B.2 | Data integrity — `server_default` ORM fix, index on FK, schema path leak fix | 🟢 Complete | aa77049 |
-| B.3 | Real SV2TTS integration — wire `embed_speaker()`, implement Tacotron 2 + WaveRNN inference | 🔴 Not Started | — |
+| B.3 | Real SV2TTS integration — wire `embed_speaker()`, implement Tacotron 2 + WaveRNN inference | 🟢 Complete | 1b7e5c6 |
 | B.4 | Structured logging — replace all `print()` with `logging`, configure `dictConfig` in `main.py` | 🔴 Not Started | — |
 | B.5 | Test suite completion — add missing tests, fix fixture scopes, add security test file | 🔴 Not Started | — |
 | B.6 | Code quality pass — PEP 8 cleanup, module docstrings, `black` + `isort` zero-diff | 🔴 Not Started | — |
@@ -202,19 +202,19 @@ PYTHONPATH=. pytest backend/tests/test_synthesize.py::test_synthesize_success -v
 
 ---
 
-## 🏗️ Milestone B.3 — Real SV2TTS Integration *(🔴 Not Started)*
+## 🏗️ Milestone B.3 — Real SV2TTS Integration *(🟢 Complete)*
 
 > **Blocked on**: `backend/weights/encoder.pt`, `synthesizer.pt`, `vocoder.pt` must exist.
 > Run `python backend/download_weights.py` before starting this milestone.
 
 ### Tasks
 
-- [ ] `services/tts_pipeline.py` — Replace all `print()` with `logging.getLogger(__name__)`.
-- [ ] `services/tts_pipeline.py` — Implement real `synthesize_speech()` using the Tacotron 2 synthesizer loaded from `weights/synthesizer.pt`.
-- [ ] `services/tts_pipeline.py` — Implement real `vocode()` using WaveRNN loaded from `weights/vocoder.pt`.
-- [ ] `services/tts_pipeline.py` — Update `save_output()` to use `settings.VOCODER_SAMPLE_RATE`.
-- [ ] `api/voice.py` — Replace `np.zeros(256)` mock with `embed_speaker(y_processed)`.
-- [ ] `api/voice.py` — Add `status='failed'` guard: wrap embedding extraction in `try/except`; on failure, persist `VoiceProfile(status='failed', embedding_path=None)` and raise `HTTPException(500, ...)`.
+- [x] `services/tts_pipeline.py` — Replace all `print()` with `logging.getLogger(__name__)`.
+- [x] `services/tts_pipeline.py` — Implement real `synthesize_speech()` using the Tacotron 2 synthesizer loaded from `weights/synthesizer.pt`.
+- [x] `services/tts_pipeline.py` — Implement real `vocode()` using WaveRNN loaded from `weights/vocoder.pt`.
+- [x] `services/tts_pipeline.py` — Update `save_output()` to use `settings.VOCODER_SAMPLE_RATE`.
+- [x] `api/voice.py` — Replace `np.zeros(256)` mock with `embed_speaker(y_processed)`.
+- [x] `api/voice.py` — Add `status='failed'` guard: wrap embedding extraction in `try/except`; on failure, persist `VoiceProfile(status='failed', embedding_path=None)` and raise `HTTPException(500, ...)`.
 - [ ] `api/synthesize.py` — Replace `sample_rate = 16000` with `settings.VOCODER_SAMPLE_RATE`.
 
 ### Files Changed
