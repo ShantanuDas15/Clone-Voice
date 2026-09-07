@@ -1,8 +1,10 @@
+import logging
 import os
 import uuid
 
 import numpy as np
 import soundfile as sf
+import torch
 
 from backend.core.config import settings
 
@@ -11,6 +13,8 @@ try:
 except ImportError:
     VoiceEncoder = None
 
+logger = logging.getLogger(__name__)
+
 _encoder = None
 _synthesizer = None
 _vocoder = None
@@ -18,17 +22,40 @@ _vocoder = None
 
 def load_models(device: str = "cpu") -> None:
     global _encoder, _synthesizer, _vocoder
-    print(f"Loading SV2TTS models on {device}...")
+    logger.info(f"Loading SV2TTS models on {device}...")
 
     if VoiceEncoder is not None:
         _encoder = VoiceEncoder(device=device)
     else:
-        print("Warning: resemblyzer not found.")
+        logger.warning("resemblyzer not found.")
 
-    _synthesizer = "Tacotron2_Mock"
-    _vocoder = "WaveRNN_Mock"
+    weights_dir = os.path.join(os.path.dirname(__file__), "..", "weights")
 
-    print("Models loaded successfully.")
+    synth_path = os.path.join(weights_dir, "synthesizer.pt")
+    if not os.path.exists(synth_path):
+        synth_path = os.path.join(weights_dir, "tacotron.pt")
+
+    try:
+        _synthesizer = torch.jit.load(synth_path, map_location=device)
+        _synthesizer.eval()
+    except Exception as e:
+        logger.warning(
+            f"Could not load real synthesizer from {synth_path}: {e}. Using mock."
+        )
+        _synthesizer = "Tacotron2_Mock"
+
+    voc_path = os.path.join(weights_dir, "vocoder.pt")
+    if not os.path.exists(voc_path):
+        voc_path = os.path.join(weights_dir, "wavernn.pt")
+
+    try:
+        _vocoder = torch.jit.load(voc_path, map_location=device)
+        _vocoder.eval()
+    except Exception as e:
+        logger.warning(f"Could not load real vocoder from {voc_path}: {e}. Using mock.")
+        _vocoder = "WaveRNN_Mock"
+
+    logger.info("Models loaded successfully.")
 
 
 def embed_speaker(audio: np.ndarray) -> np.ndarray:
@@ -39,13 +66,29 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
 
 
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
-    mel_frames = len(text) * 5
-    return np.random.randn(mel_frames, 80).astype(np.float32)
+    if isinstance(_synthesizer, str):
+        mel_frames = len(text) * 5
+        return np.random.randn(mel_frames, 80).astype(np.float32)
+
+    with torch.no_grad():
+        # Minimal conversion; actual models vary.
+        text_tensor = torch.tensor([ord(c) for c in text], dtype=torch.long).unsqueeze(
+            0
+        )
+        emb_tensor = torch.from_numpy(embedding).unsqueeze(0)
+        mel = _synthesizer(text_tensor, emb_tensor)
+        return mel.squeeze(0).cpu().numpy()
 
 
 def vocode(mel: np.ndarray) -> np.ndarray:
-    samples = mel.shape[0] * 200
-    return np.random.randn(samples).astype(np.float32)
+    if isinstance(_vocoder, str):
+        samples = mel.shape[0] * 200
+        return np.random.randn(samples).astype(np.float32)
+
+    with torch.no_grad():
+        mel_tensor = torch.from_numpy(mel).unsqueeze(0)
+        wav = _vocoder(mel_tensor)
+        return wav.squeeze(0).cpu().numpy()
 
 
 def save_output(

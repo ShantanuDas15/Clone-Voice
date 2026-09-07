@@ -1,9 +1,11 @@
+import uuid
 from typing import List
 
 import numpy as np
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
                      status)
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
 from backend.core.database import get_db
 from backend.core.security import get_current_user
@@ -12,6 +14,7 @@ from backend.models.voice_profile import VoiceProfile
 from backend.schemas.voice import VoiceProfileOut
 from backend.services.audio_processing import (preprocess_audio, save_upload,
                                                validate_audio_file)
+from backend.services.tts_pipeline import embed_speaker
 
 router = APIRouter()
 
@@ -31,11 +34,27 @@ async def upload_audio(
     # Preprocess
     y_processed = preprocess_audio(file_path)
 
-    # Mocking the embedding extraction for now (Milestone 1.6)
     embedding_path = file_path.replace(".wav", "_embed.npy").replace(
         ".mp3", "_embed.npy"
     )
-    np.save(embedding_path, np.zeros(256))
+
+    try:
+        embedding = embed_speaker(y_processed)
+        np.save(embedding_path, embedding)
+    except Exception:
+        profile = VoiceProfile(
+            user_id=current_user.id,
+            name=name,
+            audio_sample_path=file_path,
+            embedding_path="",
+            status="failed",
+        )
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+        raise HTTPException(
+            status_code=500, detail="Failed to extract speaker embedding"
+        )
 
     profile = VoiceProfile(
         user_id=current_user.id,
@@ -71,10 +90,6 @@ def delete_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    import uuid
-
-    from sqlalchemy.sql import func
-
     try:
         pid = uuid.UUID(profile_id)
     except ValueError:
