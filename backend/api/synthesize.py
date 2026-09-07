@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.security import get_current_user
 from backend.models.generation import Generation
@@ -46,7 +47,7 @@ def synthesize(
     mel = synthesize_speech(req.text, embedding)
     wav = vocode(mel)
 
-    sample_rate = 16000
+    sample_rate = settings.VOCODER_SAMPLE_RATE
 
     out_path, duration = save_output(wav, sample_rate, str(current_user.id))
 
