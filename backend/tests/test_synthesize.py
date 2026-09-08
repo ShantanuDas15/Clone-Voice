@@ -5,9 +5,13 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.services.tts_pipeline import (embed_speaker, load_models,
-                                           save_output, synthesize_speech,
-                                           vocode)
+from backend.services.tts_pipeline import (
+    embed_speaker,
+    load_models,
+    save_output,
+    synthesize_speech,
+    vocode,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
