@@ -59,7 +59,11 @@ def load_models(device: str = "cpu") -> None:
 
 
 def embed_speaker(audio: np.ndarray) -> np.ndarray:
-    if _encoder is None:
+    """Extract a 256-dim speaker embedding from a preprocessed audio array."""
+    if _encoder is None or audio is None or len(audio) == 0:
+        logger.warning(
+            "embed_speaker: encoder unavailable or empty audio — returning zeros."
+        )
         return np.zeros(256, dtype=np.float32)
 
     return _encoder.embed_utterance(audio)

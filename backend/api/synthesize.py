@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import List
 
@@ -13,8 +14,9 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import (save_output, synthesize_speech,
-                                           vocode)
+from backend.services.tts_pipeline import save_output, synthesize_speech, vocode
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,6 +27,7 @@ def synthesize(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Synthesize speech from text using a given voice profile."""
     profile = (
         db.query(VoiceProfile).filter(VoiceProfile.id == req.voice_profile_id).first()
     )
@@ -39,10 +42,18 @@ def synthesize(
 
     try:
         embedding = np.load(profile.embedding_path)
-    except Exception as e:
+    except Exception:
+        logger.exception("Failed to load embedding for profile_id=%s", profile.id)
         raise HTTPException(
             status_code=500, detail="Failed to load voice profile embedding"
         )
+
+    logger.info(
+        "Synthesis started — user_id=%s, profile_id=%s, text_len=%d",
+        current_user.id,
+        profile.id,
+        len(req.text),
+    )
 
     mel = synthesize_speech(req.text, embedding)
     wav = vocode(mel)
@@ -50,6 +61,12 @@ def synthesize(
     sample_rate = settings.VOCODER_SAMPLE_RATE
 
     out_path, duration = save_output(wav, sample_rate, str(current_user.id))
+    logger.info(
+        "Synthesis complete — user_id=%s, duration=%.2fs, out=%s",
+        current_user.id,
+        duration,
+        out_path,
+    )
 
     generation = Generation(
         user_id=current_user.id,
@@ -75,6 +92,7 @@ def get_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Return paginated synthesis history for the current user."""
     if limit > 50:
         limit = 50
 
@@ -86,6 +104,10 @@ def get_history(
         .offset(offset)
         .limit(limit)
         .all()
+    )
+
+    logger.debug(
+        "History fetched — user_id=%s, count=%d", current_user.id, len(generations)
     )
 
     results = []

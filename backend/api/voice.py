@@ -1,9 +1,9 @@
+import logging
 import uuid
 from typing import List
 
 import numpy as np
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
-                     status)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
@@ -12,9 +12,14 @@ from backend.core.security import get_current_user
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.voice import VoiceProfileOut
-from backend.services.audio_processing import (preprocess_audio, save_upload,
-                                               validate_audio_file)
+from backend.services.audio_processing import (
+    preprocess_audio,
+    save_upload,
+    validate_audio_file,
+)
 from backend.services.tts_pipeline import embed_speaker
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -28,10 +33,11 @@ async def upload_audio(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Validate, process, and embed an uploaded audio sample."""
     validate_audio_file(file)
     file_path = save_upload(file, str(current_user.id))
+    logger.info("Audio uploaded by user_id=%s — file=%s", current_user.id, file_path)
 
-    # Preprocess
     y_processed = preprocess_audio(file_path)
 
     embedding_path = file_path.replace(".wav", "_embed.npy").replace(
@@ -39,9 +45,17 @@ async def upload_audio(
     )
 
     try:
+        logger.debug("Extracting speaker embedding for user_id=%s", current_user.id)
         embedding = embed_speaker(y_processed)
         np.save(embedding_path, embedding)
+        logger.info(
+            "Speaker embedding saved: %s (shape=%s)", embedding_path, embedding.shape
+        )
     except Exception:
+        logger.exception(
+            "Embedding extraction failed for user_id=%s — persisting failed profile",
+            current_user.id,
+        )
         profile = VoiceProfile(
             user_id=current_user.id,
             name=name,
@@ -67,6 +81,12 @@ async def upload_audio(
     db.commit()
     db.refresh(profile)
 
+    logger.info(
+        "Voice profile created: id=%s, name=%s, user_id=%s",
+        profile.id,
+        profile.name,
+        current_user.id,
+    )
     return profile
 
 
@@ -74,12 +94,16 @@ async def upload_audio(
 def get_profiles(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
+    """List all active voice profiles for the current user."""
     profiles = (
         db.query(VoiceProfile)
         .filter(
             VoiceProfile.user_id == current_user.id, VoiceProfile.deleted_at == None
         )
         .all()
+    )
+    logger.debug(
+        "Listed %d voice profiles for user_id=%s", len(profiles), current_user.id
     )
     return profiles
 
@@ -90,6 +114,7 @@ def delete_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Soft-delete a voice profile belonging to the current user."""
     try:
         pid = uuid.UUID(profile_id)
     except ValueError:
@@ -110,4 +135,5 @@ def delete_profile(
 
     profile.deleted_at = func.now()
     db.commit()
+    logger.info("Voice profile soft-deleted: id=%s by user_id=%s", pid, current_user.id)
     return {"status": "deleted"}
