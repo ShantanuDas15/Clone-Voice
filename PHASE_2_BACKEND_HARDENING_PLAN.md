@@ -15,7 +15,7 @@
 | B.1 | Security hardening — refresh token rotation, JWT secret validation, passlib migration, CORS fix | 🟢 Complete | 04bc1be |
 | B.2 | Data integrity — `server_default` ORM fix, index on FK, schema path leak fix | 🟢 Complete | aa77049 |
 | B.3 | Real SV2TTS integration — wire `embed_speaker()`, implement Tacotron 2 + WaveRNN inference | 🟢 Complete | 1b7e5c6 |
-| B.4 | Structured logging — replace all `print()` with `logging`, configure `dictConfig` in `main.py` | 🔴 Not Started | — |
+| B.4 | Structured logging — replace all `print()` with `logging`, configure `dictConfig` in `main.py` | 🟢 Complete | a560311 |
 | B.5 | Test suite completion — add missing tests, fix fixture scopes, add security test file | 🔴 Not Started | — |
 | B.6 | Code quality pass — PEP 8 cleanup, module docstrings, `black` + `isort` zero-diff | 🔴 Not Started | — |
 
@@ -257,15 +257,15 @@ PYTHONPATH=. pytest backend/tests/test_synthesize.py -v
 
 ---
 
-## 🏗️ Milestone B.4 — Structured Logging *(🔴 Not Started)*
+## 🏗️ Milestone B.4 — Structured Logging *(🟢 Complete)*
 
 ### Tasks
 
-- [ ] `main.py` — Add `logging.config.dictConfig` call at module startup.
+- [x] `main.py` — Add `logging.config.dictConfig` call at module startup.
   - Format: `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
   - Level: `DEBUG` when `settings.APP_ENV == "development"`, `INFO` in production.
-- [ ] `services/tts_pipeline.py` — Replace all `print()` with `logger = logging.getLogger(__name__)`.
-- [ ] All `api/`, `services/`, `core/` files — Add `logger = logging.getLogger(__name__)` and emit `INFO`/`DEBUG` log entries at key operations (model load, file save, synthesis start/end).
+- [x] `services/tts_pipeline.py` — Replace all `print()` with `logger = logging.getLogger(__name__)`.
+- [x] All `api/`, `services/`, `core/` files — Add `logger = logging.getLogger(__name__)` and emit `INFO`/`DEBUG` log entries at key operations (model load, file save, synthesis start/end).
 
 ### Files Changed
 
