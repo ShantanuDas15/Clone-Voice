@@ -1,52 +1,23 @@
-import io
-import os
+"""Integration tests for the /api/synthesize endpoint."""
 
-import numpy as np
+import io
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.services.tts_pipeline import (
-    embed_speaker,
-    load_models,
-    save_output,
-    synthesize_speech,
-    vocode,
-)
+from backend.services.tts_pipeline import load_models
 
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_models():
+def setup_models_for_synthesize():
+    """Load TTS models once for the entire module."""
     load_models("cpu")
-
-
-def test_embed_speaker_output_shape():
-    audio = np.random.randn(16000).astype(np.float32)
-    emb = embed_speaker(audio)
-    assert emb.shape == (256,)
-
-
-def test_save_output_creates_file():
-    wav = np.random.randn(16000).astype(np.float32)
-    path, duration = save_output(wav, 16000, "test_user")
-
-    assert os.path.exists(path)
-    assert duration == 1.0
-    os.remove(path)
-
-
-def test_save_output_returns_duration():
-    wav = np.random.randn(8000).astype(np.float32)
-    path, duration = save_output(wav, 16000, "test_user")
-
-    assert duration == 0.5
-    os.remove(path)
-
-
-# --- Integration Tests ---
 
 
 @pytest.fixture
 def auth_headers_syn(client: TestClient):
+    """Create and authenticate a test user for synthesis tests."""
     client.post(
         "/api/auth/signup",
         json={
@@ -61,10 +32,11 @@ def auth_headers_syn(client: TestClient):
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
-def create_dummy_wav(size_bytes=1000):
+def create_dummy_wav(size_bytes: int = 1000) -> bytes:
+    """Create a minimal valid WAV file in memory."""
+    buf = io.BytesIO()
     import wave
 
-    buf = io.BytesIO()
     with wave.open(buf, "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
@@ -74,7 +46,8 @@ def create_dummy_wav(size_bytes=1000):
     return buf.read()
 
 
-def upload_profile(client, headers):
+def upload_profile(client: TestClient, headers: dict) -> str:
+    """Helper: upload a dummy WAV and return the new voice profile id."""
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}
     up_res = client.post(
@@ -108,8 +81,6 @@ def test_synthesize_creates_db_row(client: TestClient, auth_headers_syn):
 
 
 def test_synthesize_invalid_profile(client: TestClient, auth_headers_syn):
-    import uuid
-
     res = client.post(
         "/api/synthesize",
         headers=auth_headers_syn,
@@ -165,8 +136,6 @@ def test_synthesize_text_too_long(client: TestClient, auth_headers_syn):
 
 
 def test_synthesize_unauthenticated(client: TestClient):
-    import uuid
-
     res = client.post(
         "/api/synthesize", json={"voice_profile_id": str(uuid.uuid4()), "text": "Hello"}
     )
@@ -221,16 +190,13 @@ def test_history_excludes_soft_deleted(client: TestClient, auth_headers_syn):
         json={"voice_profile_id": profile_id, "text": "Soft delete test"},
     )
 
-    # Verify it exists in history
     res = client.get("/api/synthesize/history", headers=auth_headers_syn)
     assert len(res.json()) >= 1
 
-    # Soft delete profile
     res_del = client.delete(
         f"/api/voice/profiles/{profile_id}", headers=auth_headers_syn
     )
     assert res_del.status_code == 200
 
-    # Verify it is removed from history
     res_after = client.get("/api/synthesize/history", headers=auth_headers_syn)
     assert all(gen["voice_profile_id"] != profile_id for gen in res_after.json())

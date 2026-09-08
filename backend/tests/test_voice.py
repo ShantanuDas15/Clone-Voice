@@ -165,3 +165,56 @@ def test_delete_profile_not_found(client: TestClient, auth_headers):
 
     del_res = client.delete(f"/api/voice/profiles/{uuid.uuid4()}", headers=auth_headers)
     assert del_res.status_code == 404
+
+
+def test_delete_profile_wrong_user(client: TestClient, auth_headers):
+    """User B must receive 404 when attempting to delete User A's profile."""
+    # User A (auth_headers) creates a profile
+    wav_data = create_dummy_wav()
+    files = {"file": ("owner.wav", wav_data, "audio/wav")}
+    up_res = client.post(
+        "/api/voice/upload",
+        headers=auth_headers,
+        data={"name": "Owner Voice"},
+        files=files,
+    )
+    profile_id = up_res.json()["id"]
+
+    # User B signs up and logs in
+    client.post(
+        "/api/auth/signup",
+        json={
+            "email": "intruder@example.com",
+            "password": "Password123!",
+            "name": "Intruder",
+        },
+    )
+    token_b = client.post(
+        "/api/auth/login",
+        json={"email": "intruder@example.com", "password": "Password123!"},
+    ).json()["access_token"]
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    # User B attempts to delete User A's profile — must be rejected
+    del_res = client.delete(f"/api/voice/profiles/{profile_id}", headers=headers_b)
+    assert del_res.status_code == 404
+
+    # Confirm profile still belongs to User A and is intact
+    list_res = client.get("/api/voice/profiles", headers=auth_headers)
+    ids = [p["id"] for p in list_res.json()]
+    assert profile_id in ids
+
+
+def test_librosa_preprocess_shape():
+    """preprocess_audio must return a 1D float32 array normalized to [-1.0, 1.0]."""
+    from backend.services.audio_processing import preprocess_audio
+
+    audio = preprocess_audio("backend/tests/fixtures/sample_5sec.wav")
+    assert audio is not None, "preprocess_audio returned None for a valid WAV"
+    assert audio.ndim == 1, f"Expected 1D array, got {audio.ndim}D"
+    assert (
+        audio.dtype == pytest.approx or audio.dtype == "float32"
+    ), f"Expected float32, got {audio.dtype}"
+    import numpy as np
+
+    assert np.max(np.abs(audio)) <= 1.0, "Audio samples exceed normalized [-1, 1] range"
