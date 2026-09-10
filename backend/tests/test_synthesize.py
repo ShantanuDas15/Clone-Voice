@@ -2,6 +2,7 @@
 
 import io
 import uuid
+import wave
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,7 +36,6 @@ def auth_headers_syn(client: TestClient):
 def create_dummy_wav(size_bytes: int = 1000) -> bytes:
     """Create a minimal valid WAV file in memory."""
     buf = io.BytesIO()
-    import wave
 
     with wave.open(buf, "wb") as wav:
         wav.setnchannels(1)

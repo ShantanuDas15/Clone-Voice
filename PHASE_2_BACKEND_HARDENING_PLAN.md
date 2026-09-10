@@ -1,6 +1,6 @@
 # CloneVoice — Phase 2: Backend Hardening & Gap-Fill Plan
 
-> **Status**: 🟡 In Progress (83.3% Complete — 5 of 6 Milestones Completed)
+> **Status**: 🟡 In Progress (100% Complete — 6 of 6 Milestones Completed)
 > **Scope**: Backend hardening only. Fills all gaps identified in the post-Phase-1 audit.
 > **Last Reviewed**: 2026-09-10
 > **Prerequisite**: Phase 1 (`PHASE_1_BACKEND_PLAN.md`) marked 🟢 Complete.
@@ -11,7 +11,7 @@
 ## 📋 Progress Tracker
 
 ```
-[█████████████████████████░░░░░] 83.3% (5 of 6 Milestones Completed)
+[██████████████████████████████] 100% (6 of 6 Milestones Completed)
 ```
 
 | Milestone | Description | Status | Commit Hash | Completed Date |
@@ -21,7 +21,7 @@
 | **B.3** | Real SV2TTS integration — wire `embed_speaker()`, implement Tacotron 2 + WaveRNN inference | 🟢 Complete | `1b7e5c6` | 2026-09-07 |
 | **B.4** | Structured logging — replace all `print()` with `logging`, configure `dictConfig` in `main.py` | 🟢 Complete | `a560311` | 2026-09-08 |
 | **B.5** | Test suite completion — add missing tests, fix fixture scopes, add security test file | 🟢 Complete | `cf5d289` | 2026-09-10 |
-| **B.6** | Code quality pass — PEP 8 cleanup, module docstrings, `black` + `isort` zero-diff | 🔴 Not Started | — | Pending |
+| **B.6** | Code quality pass — PEP 8 cleanup, module docstrings, `black` + `isort` zero-diff | 🟢 Complete | `HEAD` | 2026-09-10 |
 
 **Legend**: 🔴 Not Started · 🟡 In Progress · 🟢 Complete · ❌ Blocked
 
@@ -122,8 +122,8 @@ production-grade standards. **18 findings** across 7 categories.
 |----|-----|------|---------|:------:|
 | Q1 | 🟡 P2 | `api/auth.py` | Mid-module import at line 161. | 🟢 Resolved (B.1) |
 | Q2 | 🟡 P2 | `api/voice.py` | In-function imports in `delete_profile()`. | 🟢 Resolved (B.4) |
-| Q3 | 🟡 P2 | Multiple test files | `import uuid` inside test function bodies. | 🔴 Pending (Milestone B.6) |
-| Q4 | 🟡 P2 | All modules | Missing module-level docstrings across modules. | 🔴 Pending (Milestone B.6) |
+| Q3 | 🟡 P2 | Multiple test files | `import uuid` inside test function bodies. | 🟢 Resolved (B.6) |
+| Q4 | 🟡 P2 | All modules | Missing module-level docstrings across modules. | 🟢 Resolved (B.6) |
 
 ---
 
@@ -241,7 +241,7 @@ PYTHONPATH=. pytest backend/tests/test_synthesize.py::test_synthesize_success -v
 - [x] `services/tts_pipeline.py` — Update `save_output()` to use `settings.VOCODER_SAMPLE_RATE`.
 - [x] `api/voice.py` — Replace `np.zeros(256)` mock with `embed_speaker(y_processed)`.
 - [x] `api/voice.py` — Add `status='failed'` guard: wrap embedding extraction in `try/except`; on failure, persist `VoiceProfile(status='failed', embedding_path=None)` and raise `HTTPException(500, ...)`.
-- [ ] `api/synthesize.py` — Replace `sample_rate = 16000` with `settings.VOCODER_SAMPLE_RATE`.
+- [x] `api/synthesize.py` — Replace `sample_rate = 16000` with `settings.VOCODER_SAMPLE_RATE`.
 
 ### Files Changed
 
@@ -356,15 +356,15 @@ PYTHONPATH=. pytest backend/tests/test_voice.py -v -k "wrong_user or preprocess"
 
 ---
 
-## 🏗️ Milestone B.6 — Code Quality & PEP 8 Pass *(🔴 Not Started)*
+## 🏗️ Milestone B.6 — Code Quality & PEP 8 Pass *(🟢 Complete)*
 
 ### Tasks
 
-- [ ] Move all in-function `import` statements to module top level across all `api/` and `tests/` files.
-- [ ] Add one-line module docstrings to all `api/`, `services/`, and `core/` files (required by GEMINI.md §9).
-- [ ] Add one-line docstrings to all route handler and service functions missing them.
-- [ ] Run `black backend/` — commit only if zero diffs.
-- [ ] Run `isort backend/` — commit only if zero diffs.
+- [x] Move all in-function `import` statements to module top level across all `api/` and `tests/` files.
+- [x] Add one-line module docstrings to all `api/`, `services/`, and `core/` files (required by GEMINI.md §9).
+- [x] Add one-line docstrings to all route handler and service functions missing them.
+- [x] Run `black backend/` — commit only if zero diffs.
+- [x] Run `isort backend/` — commit only if zero diffs.
 
 ### Files Changed
 
@@ -400,7 +400,7 @@ PYTHONPATH=. pytest backend/tests/ -v --tb=short
 
 Phase 2 is **complete** only when ALL of the following are true:
 
-- [ ] All 6 milestones marked 🟢 in the progress tracker above (5/6 Complete: B.1, B.2, B.3, B.4, B.5)
+- [x] All 6 milestones marked 🟢 in the progress tracker above (6/6 Complete: B.1, B.2, B.3, B.4, B.5, B.6)
 - [x] `pytest backend/tests/ -v` → **0 failed, 0 errors** (42/42 tests passing)
 - [x] `black --check backend/` → **no diffs**
 - [x] `isort --check-only backend/` → **no diffs** (configured with black profile)
