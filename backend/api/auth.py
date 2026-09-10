@@ -1,3 +1,5 @@
+"""Authentication API routes and handlers."""
+
 import logging
 import uuid
 

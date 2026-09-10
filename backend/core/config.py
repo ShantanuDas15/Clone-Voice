@@ -1,3 +1,5 @@
+"""Application configuration and environment settings."""
+
 from pathlib import Path
 from typing import List
 

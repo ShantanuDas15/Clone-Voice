@@ -1,3 +1,5 @@
+"""Voice profile management API routes."""
+
 import logging
 import uuid
 from typing import List

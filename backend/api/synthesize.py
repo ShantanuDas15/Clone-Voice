@@ -1,3 +1,5 @@
+"""TTS synthesis API routes and history."""
+
 import logging
 import os
 from typing import List

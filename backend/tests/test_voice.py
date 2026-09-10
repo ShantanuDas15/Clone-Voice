@@ -1,8 +1,14 @@
 import io
 import os
+import uuid
+import wave
+from unittest.mock import patch
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+
+from backend.services.audio_processing import preprocess_audio
 
 
 @pytest.fixture
@@ -24,7 +30,6 @@ def auth_headers(client: TestClient):
 
 
 def create_dummy_wav(size_bytes=1000):
-    import wave
 
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wav:
@@ -52,7 +57,6 @@ def test_upload_valid_wav(client: TestClient, auth_headers):
 
 
 def test_upload_valid_mp3(client: TestClient, auth_headers):
-    from unittest.mock import patch
 
     with patch("backend.api.voice.preprocess_audio") as mock_pre:
         mock_pre.return_value = None
@@ -75,7 +79,6 @@ def test_upload_invalid_format_txt(client: TestClient, auth_headers):
 
 
 def test_upload_oversized_file(client: TestClient, auth_headers):
-    from unittest.mock import patch
 
     with patch("backend.core.config.settings.MAX_AUDIO_SIZE_MB", 0.0001):
         wav_data = create_dummy_wav(size_bytes=500)
@@ -161,7 +164,6 @@ def test_delete_profile_success(client: TestClient, auth_headers):
 
 
 def test_delete_profile_not_found(client: TestClient, auth_headers):
-    import uuid
 
     del_res = client.delete(f"/api/voice/profiles/{uuid.uuid4()}", headers=auth_headers)
     assert del_res.status_code == 404
@@ -207,9 +209,6 @@ def test_delete_profile_wrong_user(client: TestClient, auth_headers):
 
 def test_librosa_preprocess_shape():
     """preprocess_audio must return a 1D float32 array normalized to [-1.0, 1.0]."""
-    import numpy as np
-
-    from backend.services.audio_processing import preprocess_audio
 
     audio = preprocess_audio("backend/tests/fixtures/sample_5sec.wav")
     assert audio is not None, "preprocess_audio returned None for a valid WAV"

@@ -1,3 +1,5 @@
+"""Core text-to-speech inference pipeline."""
+
 import logging
 import os
 import uuid
@@ -21,6 +23,7 @@ _vocoder = None
 
 
 def load_models(device: str = "cpu") -> None:
+    """Load all TTS models into memory for inference."""
     global _encoder, _synthesizer, _vocoder
     logger.info(f"Loading SV2TTS models on {device}...")
 
@@ -102,6 +105,7 @@ def vocode(mel: np.ndarray) -> np.ndarray:
 def save_output(
     waveform: np.ndarray, sample_rate: int, user_id: str
 ) -> tuple[str, float]:
+    """Save synthesized waveform to disk and return path and duration."""
     out_dir = os.path.join(settings.OUTPUT_DIR, user_id)
     os.makedirs(out_dir, exist_ok=True)
 

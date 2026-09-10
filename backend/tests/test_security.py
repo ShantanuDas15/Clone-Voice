@@ -2,15 +2,19 @@
 
 import io
 import uuid
+import wave
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy.sql import func
 
+from backend.core.config import Settings
+from backend.core.security import create_access_token, hash_password
+from backend.models.user import User
+
 
 def test_jwt_secret_too_short_raises():
     """Settings must reject JWT_SECRET_KEY values shorter than 32 characters."""
-    from backend.core.config import Settings
 
     try:
         Settings(JWT_SECRET_KEY="short_key", DATABASE_URL="sqlite://")
@@ -48,8 +52,6 @@ def test_refresh_token_rotated(client: TestClient):
 
 def test_deleted_user_token_rejected(client: TestClient, db_session):
     """A token issued before soft-delete must be rejected with 401."""
-    from backend.core.security import create_access_token, hash_password
-    from backend.models.user import User
 
     # Create user and issue a token
     user = User(
@@ -75,7 +77,6 @@ def test_deleted_user_token_rejected(client: TestClient, db_session):
 
 def test_path_not_in_generation_response(client: TestClient):
     """GenerationOut must not expose any OS path separator in its JSON response."""
-    import wave
 
     # Set up user and upload profile
     client.post(

@@ -1,3 +1,5 @@
+"""Audio file validation and preprocessing utilities."""
+
 import os
 import shutil
 import uuid
@@ -10,6 +12,7 @@ from backend.core.config import settings
 
 
 def validate_audio_file(file: UploadFile) -> None:
+    """Validate uploaded audio file MIME type, size, and magic bytes."""
     allowed_mimes = [
         "audio/wav",
         "audio/x-wav",
@@ -53,6 +56,7 @@ def validate_audio_file(file: UploadFile) -> None:
 
 
 def save_upload(file: UploadFile, user_id: str) -> str:
+    """Save an uploaded audio file to the user-specific upload directory."""
     user_dir = os.path.join(settings.UPLOAD_DIR, user_id)
     os.makedirs(user_dir, exist_ok=True)
 
@@ -70,6 +74,7 @@ def save_upload(file: UploadFile, user_id: str) -> str:
 
 
 def preprocess_audio(file_path: str) -> np.ndarray:
+    """Load, trim silence, and normalize an audio file for TTS embedding."""
     try:
         y, sr = librosa.load(file_path, sr=16000)
         y_trimmed, _ = librosa.effects.trim(y, top_db=30)
