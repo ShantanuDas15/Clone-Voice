@@ -70,7 +70,9 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
 
 
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
-    if isinstance(_synthesizer, str):
+    """Generate a mel spectrogram from text and a speaker embedding."""
+    if _synthesizer is None or isinstance(_synthesizer, str):
+        logger.warning("synthesize_speech: model unavailable — returning mock mel.")
         mel_frames = len(text) * 5
         return np.random.randn(mel_frames, 80).astype(np.float32)
 
@@ -85,7 +87,9 @@ def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
 
 
 def vocode(mel: np.ndarray) -> np.ndarray:
-    if isinstance(_vocoder, str):
+    """Convert a mel spectrogram to a raw audio waveform."""
+    if _vocoder is None or isinstance(_vocoder, str):
+        logger.warning("vocode: model unavailable — returning mock waveform.")
         samples = mel.shape[0] * 200
         return np.random.randn(samples).astype(np.float32)
 
