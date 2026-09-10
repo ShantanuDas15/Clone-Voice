@@ -207,14 +207,12 @@ def test_delete_profile_wrong_user(client: TestClient, auth_headers):
 
 def test_librosa_preprocess_shape():
     """preprocess_audio must return a 1D float32 array normalized to [-1.0, 1.0]."""
+    import numpy as np
+
     from backend.services.audio_processing import preprocess_audio
 
     audio = preprocess_audio("backend/tests/fixtures/sample_5sec.wav")
     assert audio is not None, "preprocess_audio returned None for a valid WAV"
     assert audio.ndim == 1, f"Expected 1D array, got {audio.ndim}D"
-    assert (
-        audio.dtype == pytest.approx or audio.dtype == "float32"
-    ), f"Expected float32, got {audio.dtype}"
-    import numpy as np
-
+    assert audio.dtype == np.float32, f"Expected float32, got {audio.dtype}"
     assert np.max(np.abs(audio)) <= 1.0, "Audio samples exceed normalized [-1, 1] range"
