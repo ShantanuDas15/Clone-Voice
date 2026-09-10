@@ -3,18 +3,9 @@
 import io
 import uuid
 
-import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy.sql import func
-
-from backend.services.tts_pipeline import load_models
-
-
-@pytest.fixture(scope="module", autouse=True)
-def setup_models_for_security():
-    """Load TTS models once so synthesis-dependent security tests can run."""
-    load_models("cpu")
 
 
 def test_jwt_secret_too_short_raises():
