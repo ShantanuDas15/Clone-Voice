@@ -1,8 +1,8 @@
 # CloneVoice — Phase 2: Backend Hardening & Gap-Fill Plan
 
-> **Status**: 🟡 In Progress (66.7% Complete — 4 of 6 Milestones Completed)
+> **Status**: 🟡 In Progress (83.3% Complete — 5 of 6 Milestones Completed)
 > **Scope**: Backend hardening only. Fills all gaps identified in the post-Phase-1 audit.
-> **Last Reviewed**: 2026-09-08
+> **Last Reviewed**: 2026-09-10
 > **Prerequisite**: Phase 1 (`PHASE_1_BACKEND_PLAN.md`) marked 🟢 Complete.
 > **Target**: A fully hardened, production-grade FastAPI backend with real SV2TTS inference, rotating refresh tokens, structured logging, complete test coverage, and zero PEP 8 violations — ready for Phase 3 (Frontend).
 
@@ -11,7 +11,7 @@
 ## 📋 Progress Tracker
 
 ```
-[████████████████████░░░░░░░░░░] 66.7% (4 of 6 Milestones Completed)
+[█████████████████████████░░░░░] 83.3% (5 of 6 Milestones Completed)
 ```
 
 | Milestone | Description | Status | Commit Hash | Completed Date |
@@ -20,7 +20,7 @@
 | **B.2** | Data integrity — `server_default` ORM fix, index on FK, schema path leak fix | 🟢 Complete | `aa77049` | 2026-09-06 |
 | **B.3** | Real SV2TTS integration — wire `embed_speaker()`, implement Tacotron 2 + WaveRNN inference | 🟢 Complete | `1b7e5c6` | 2026-09-07 |
 | **B.4** | Structured logging — replace all `print()` with `logging`, configure `dictConfig` in `main.py` | 🟢 Complete | `a560311` | 2026-09-08 |
-| **B.5** | Test suite completion — add missing tests, fix fixture scopes, add security test file | 🔴 Not Started | — | Pending |
+| **B.5** | Test suite completion — add missing tests, fix fixture scopes, add security test file | 🟢 Complete | `cf5d289` | 2026-09-10 |
 | **B.6** | Code quality pass — PEP 8 cleanup, module docstrings, `black` + `isort` zero-diff | 🔴 Not Started | — | Pending |
 
 **Legend**: 🔴 Not Started · 🟡 In Progress · 🟢 Complete · ❌ Blocked
@@ -131,10 +131,10 @@ production-grade standards. **18 findings** across 7 categories.
 
 | ID | Sev | File | Finding | Status |
 |----|-----|------|---------|:------:|
-| T1 | 🟠 P1 | `tests/test_voice.py` | `test_delete_profile_wrong_user` missing. | 🔴 Pending (Milestone B.5) |
-| T2 | 🟠 P1 | `tests/test_voice.py` | `test_librosa_preprocess_shape` missing. | 🔴 Pending (Milestone B.5) |
-| T3 | 🟡 P2 | `tests/conftest.py` | `db_session` fixture recreates all tables on every test. | 🔴 Pending (Milestone B.5) |
-| T4 | 🟡 P2 | `tests/test_synthesize.py` | `setup_models` fixture scope mismatch with `client`. | 🔴 Pending (Milestone B.5) |
+| T1 | 🟠 P1 | `tests/test_voice.py` | `test_delete_profile_wrong_user` missing. | 🟢 Resolved (B.5) |
+| T2 | 🟠 P1 | `tests/test_voice.py` | `test_librosa_preprocess_shape` missing. | 🟢 Resolved (B.5) |
+| T3 | 🟡 P2 | `tests/conftest.py` | `db_session` fixture recreates all tables on every test. | 🟢 Resolved (B.5) |
+| T4 | 🟡 P2 | `tests/test_synthesize.py` | `setup_models` fixture scope mismatch with `client`. | 🟢 Resolved (B.5) |
 
 ---
 
@@ -317,15 +317,15 @@ PYTHONPATH=. uvicorn backend.main:app --reload 2>&1 | head -20
 
 ---
 
-## 🏗️ Milestone B.5 — Test Suite Completion & Hardening *(🔴 Not Started)*
+## 🏗️ Milestone B.5 — Test Suite Completion & Hardening *(🟢 Complete)*
 
 ### Tasks
 
-- [ ] `tests/test_voice.py` — Add `test_delete_profile_wrong_user`: create profile as User A, attempt delete as User B → assert `403 Forbidden`.
-- [ ] `tests/test_voice.py` — Add `test_librosa_preprocess_shape`: call `preprocess_audio('backend/tests/fixtures/sample_5sec.wav')`, assert dtype is `float32`, shape is 1D, max absolute value ≤ 1.0.
-- [ ] `tests/test_synthesize.py` — Fix `setup_models` fixture scope mismatch. Move TTS pipeline unit tests to a new `tests/test_tts_pipeline.py` file with `scope="module"`.
-- [ ] `tests/conftest.py` — Refactor to session-scoped engine + function-scoped transaction rollback (SAVEPOINT strategy) for faster, isolated test runs.
-- [ ] `tests/test_security.py` — **Create new file** with the following tests:
+- [x] `tests/test_voice.py` — Add `test_delete_profile_wrong_user`: create profile as User A, attempt delete as User B → assert `403 Forbidden`.
+- [x] `tests/test_voice.py` — Add `test_librosa_preprocess_shape`: call `preprocess_audio('backend/tests/fixtures/sample_5sec.wav')`, assert dtype is `float32`, shape is 1D, max absolute value ≤ 1.0.
+- [x] `tests/test_synthesize.py` — Fix `setup_models` fixture scope mismatch. Move TTS pipeline unit tests to a new `tests/test_tts_pipeline.py` file with `scope="module"`.
+- [x] `tests/conftest.py` — Refactor to session-scoped engine + function-scoped transaction rollback (SAVEPOINT strategy) for faster, isolated test runs.
+- [x] `tests/test_security.py` — **Create new file** with the following tests:
   - `test_jwt_secret_too_short_raises` — assert `ValidationError` on startup with short secret.
   - `test_refresh_token_rotated` — assert cookie value changes after `/refresh`.
   - `test_deleted_user_token_rejected` — soft-delete user, use old token → `401`.
@@ -400,7 +400,7 @@ PYTHONPATH=. pytest backend/tests/ -v --tb=short
 
 Phase 2 is **complete** only when ALL of the following are true:
 
-- [ ] All 6 milestones marked 🟢 in the progress tracker above (4/6 Complete: B.1, B.2, B.3, B.4)
+- [ ] All 6 milestones marked 🟢 in the progress tracker above (5/6 Complete: B.1, B.2, B.3, B.4, B.5)
 - [x] `pytest backend/tests/ -v` → **0 failed, 0 errors** (42/42 tests passing)
 - [x] `black --check backend/` → **no diffs**
 - [x] `isort --check-only backend/` → **no diffs** (configured with black profile)
