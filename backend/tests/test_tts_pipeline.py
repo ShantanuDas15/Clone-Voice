@@ -5,19 +5,25 @@ database — no fixtures from conftest.py are needed.
 """
 
 import os
+from unittest.mock import patch
 
 import numpy as np
 import pytest
+import torch
 
-from backend.services.tts_pipeline import (embed_speaker, load_models,
-                                           save_output, synthesize_speech,
-                                           vocode)
+from backend.services.tts_pipeline import (embed_speaker, load_mock_models,
+                                           load_models, save_output,
+                                           synthesize_speech, vocode)
 
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_models():
-    """Load TTS models once for the entire module to avoid repeated startup cost."""
-    load_models("cpu")
+    """Inject lightweight mock models once for the entire module.
+
+    Uses load_mock_models() so tests are not gated on valid checkpoint files
+    being present, while still exercising the real VoiceEncoder.
+    """
+    load_mock_models("cpu")
 
 
 def test_embed_speaker_output_shape():
@@ -144,3 +150,84 @@ def test_embed_speaker_async_returns_correct_shape():
 
     assert embedding.shape == (256,), f"Expected (256,), got {embedding.shape}"
     assert embedding.dtype == np.float32
+
+
+# ---------------------------------------------------------------------------
+# Failure-path tests — verify mock fallbacks are fully removed
+# ---------------------------------------------------------------------------
+
+
+def test_load_models_raises_on_bad_synthesizer_weights():
+    """load_models() must raise RuntimeError when synthesizer checkpoint is invalid.
+
+    Mocks torch.jit.load to raise on the first call (synthesizer), verifying
+    that no silent fallback occurs and a descriptive error propagates up.
+    """
+    call_count = {"n": 0}
+    original_jit_load = torch.jit.load
+
+    def mock_jit_load(path: str, map_location=None):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise RuntimeError("mocked bad checkpoint")
+        return original_jit_load(path, map_location=map_location)
+
+    with patch(
+        "backend.services.tts_pipeline.torch.jit.load", side_effect=mock_jit_load
+    ):
+        with pytest.raises(RuntimeError, match="Failed to load synthesizer"):
+            load_models("cpu")
+
+
+def test_load_models_raises_on_bad_vocoder_weights():
+    """load_models() must raise RuntimeError when vocoder checkpoint is invalid.
+
+    Mocks torch.jit.load to raise only on the second call (vocoder), ensuring
+    the synthesizer path is irrelevant and the vocoder path is still guarded.
+    """
+    call_count = {"n": 0}
+
+    def mock_jit_load(path: str, map_location=None):
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            raise RuntimeError("mocked bad vocoder checkpoint")
+        raise RuntimeError("mocked bad synthesizer checkpoint")
+
+    with patch(
+        "backend.services.tts_pipeline.torch.jit.load", side_effect=mock_jit_load
+    ):
+        with pytest.raises(RuntimeError, match="Failed to load"):
+            load_models("cpu")
+
+
+def test_synthesize_speech_raises_if_synthesizer_not_loaded(monkeypatch):
+    """synthesize_speech() must raise RuntimeError when _synthesizer is None.
+
+    Verifies the string-sentinel mock path has been removed — the function
+    must fail loudly rather than return random noise.
+    """
+    monkeypatch.setattr("backend.services.tts_pipeline._synthesizer", None)
+    with pytest.raises(RuntimeError, match="Synthesizer is not loaded"):
+        synthesize_speech("hello", np.zeros(256, dtype=np.float32))
+
+
+def test_vocode_raises_if_vocoder_not_loaded(monkeypatch):
+    """vocode() must raise RuntimeError when _vocoder is None.
+
+    Verifies the string-sentinel mock path has been removed — the function
+    must fail loudly rather than return random noise.
+    """
+    monkeypatch.setattr("backend.services.tts_pipeline._vocoder", None)
+    with pytest.raises(RuntimeError, match="Vocoder is not loaded"):
+        vocode(np.zeros((60, 80), dtype=np.float32))
+
+
+def test_embed_speaker_raises_if_encoder_not_loaded(monkeypatch):
+    """embed_speaker() must raise RuntimeError when _encoder is None.
+
+    Verifies that the encoder-missing case is no longer silently swallowed
+    and blended with the audio-input guard.
+    """
+    monkeypatch.setattr("backend.services.tts_pipeline._encoder", None)
+    with pytest.raises(RuntimeError, match="Speaker encoder is not loaded"):
+        embed_speaker(np.random.randn(16000).astype(np.float32))

@@ -7,13 +7,13 @@ import wave
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.services.tts_pipeline import load_models
+from backend.services.tts_pipeline import load_mock_models
 
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_models_for_synthesize():
-    """Load TTS models once for the entire module."""
-    load_models("cpu")
+    """Inject lightweight mock models once for the entire synthesis test module."""
+    load_mock_models("cpu")
 
 
 @pytest.fixture
