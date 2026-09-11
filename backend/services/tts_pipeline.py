@@ -1,5 +1,6 @@
 """Core text-to-speech inference pipeline."""
 
+import asyncio
 import logging
 import os
 import uuid
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 _encoder = None
 _synthesizer = None
 _vocoder = None
+
+# Process-wide semaphore: permits exactly one model forward pass at a time.
+# Prevents concurrent GPU OOM / CPU thrash when multiple requests arrive
+# simultaneously. Replace with a Celery/ARQ task queue for multi-GPU scaling.
+_inference_semaphore = asyncio.Semaphore(1)
 
 
 def load_models(device: str = "cpu") -> None:
@@ -119,3 +125,52 @@ def save_output(
 
     duration = len(waveform) / sample_rate
     return file_path, float(duration)
+
+
+async def run_inference_pipeline(
+    text: str, embedding: np.ndarray, user_id: str
+) -> tuple[str, float]:
+    """Run the full TTS inference pipeline serialised by the inference semaphore.
+
+    Acquires ``_inference_semaphore`` before executing the two model forward
+    passes (synthesizer and vocoder) so that concurrent HTTP requests cannot
+    trigger simultaneous GPU/CPU inference.  File I/O (``save_output``) runs
+    outside the semaphore because it is disk-bound and safe to parallelise.
+
+    Args:
+        text: Input text to synthesise.
+        embedding: 256-dim speaker embedding produced by the encoder.
+        user_id: Owner of this generation; used for output directory routing.
+
+    Returns:
+        Tuple of (absolute output WAV path, duration in seconds).
+    """
+    async with _inference_semaphore:
+        logger.debug(
+            "Inference semaphore acquired — starting synthesizer forward pass."
+        )
+        mel = await asyncio.to_thread(synthesize_speech, text, embedding)
+        wav = await asyncio.to_thread(vocode, mel)
+        logger.debug("Inference semaphore releasing — forward passes complete.")
+
+    out_path, duration = await asyncio.to_thread(
+        save_output, wav, settings.VOCODER_SAMPLE_RATE, user_id
+    )
+    return out_path, duration
+
+
+async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
+    """Async wrapper for ``embed_speaker`` serialised by the inference semaphore.
+
+    The encoder forward pass shares the same hardware resources as the
+    synthesizer and vocoder, so it is gated by the same semaphore to prevent
+    concurrent model execution during voice-profile upload.
+
+    Args:
+        audio: Preprocessed, normalised audio array at 16 kHz.
+
+    Returns:
+        256-dim float32 speaker embedding.
+    """
+    async with _inference_semaphore:
+        return await asyncio.to_thread(embed_speaker, audio)
