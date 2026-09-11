@@ -9,13 +9,9 @@ import os
 import numpy as np
 import pytest
 
-from backend.services.tts_pipeline import (
-    embed_speaker,
-    load_models,
-    save_output,
-    synthesize_speech,
-    vocode,
-)
+from backend.services.tts_pipeline import (embed_speaker, load_models,
+                                           save_output, synthesize_speech,
+                                           vocode)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -77,3 +73,74 @@ def test_save_output_returns_duration():
     path, duration = save_output(wav, 16000, "test_user")
     assert duration == pytest.approx(0.5, rel=1e-3)
     os.remove(path)
+
+
+# ---------------------------------------------------------------------------
+# Concurrency / semaphore tests
+# ---------------------------------------------------------------------------
+
+
+def test_inference_semaphore_is_initialized():
+    """Semaphore must exist and be unlocked (value=1) before any inference."""
+    from backend.services.tts_pipeline import _inference_semaphore
+
+    assert (
+        not _inference_semaphore.locked()
+    ), "Semaphore must not be locked at rest — nothing is currently holding it."
+
+
+def test_run_inference_pipeline_returns_valid_output():
+    """run_inference_pipeline must return an existing WAV path and positive duration."""
+    import asyncio
+
+    from backend.services.tts_pipeline import run_inference_pipeline
+
+    embedding = np.zeros(256, dtype=np.float32)
+    path, duration = asyncio.run(
+        run_inference_pipeline("Hello world.", embedding, "test_pipeline_user")
+    )
+
+    assert os.path.exists(path), f"Output file not found: {path}"
+    assert duration > 0.0, "Duration must be positive"
+    os.remove(path)
+
+
+def test_concurrent_inference_completes_without_error():
+    """Three simultaneous gather() coroutines must all complete under the semaphore.
+
+    This validates that the semaphore serialises without deadlocking.
+    """
+    import asyncio
+
+    from backend.services.tts_pipeline import run_inference_pipeline
+
+    async def _run_all() -> list[tuple[str, float]]:
+        embedding = np.zeros(256, dtype=np.float32)
+        tasks = [
+            run_inference_pipeline(
+                f"Concurrent request {i}", embedding, "test_conc_user"
+            )
+            for i in range(3)
+        ]
+        return await asyncio.gather(*tasks)
+
+    results = asyncio.run(_run_all())
+
+    assert len(results) == 3, "All three concurrent calls must return results"
+    for path, duration in results:
+        assert os.path.exists(path), f"Expected output file missing: {path}"
+        assert duration > 0.0
+        os.remove(path)
+
+
+def test_embed_speaker_async_returns_correct_shape():
+    """embed_speaker_async must return a 256-dim float32 embedding under the semaphore."""
+    import asyncio
+
+    from backend.services.tts_pipeline import embed_speaker_async
+
+    audio = np.random.randn(16000).astype(np.float32)
+    embedding = asyncio.run(embed_speaker_async(audio))
+
+    assert embedding.shape == (256,), f"Expected (256,), got {embedding.shape}"
+    assert embedding.dtype == np.float32

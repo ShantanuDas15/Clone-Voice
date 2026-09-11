@@ -9,14 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.security import get_current_user
 from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import save_output, synthesize_speech, vocode
+from backend.services.tts_pipeline import run_inference_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ router = APIRouter()
 
 
 @router.post("", response_class=FileResponse)
-def synthesize(
+async def synthesize(
     req: SynthesizeRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -57,12 +56,9 @@ def synthesize(
         len(req.text),
     )
 
-    mel = synthesize_speech(req.text, embedding)
-    wav = vocode(mel)
-
-    sample_rate = settings.VOCODER_SAMPLE_RATE
-
-    out_path, duration = save_output(wav, sample_rate, str(current_user.id))
+    out_path, duration = await run_inference_pipeline(
+        req.text, embedding, str(current_user.id)
+    )
     logger.info(
         "Synthesis complete — user_id=%s, duration=%.2fs, out=%s",
         current_user.id,
