@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.core.database import Base, get_db
 from backend.main import app
+from backend.services.tts_pipeline import load_mock_models
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
@@ -19,6 +20,18 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_ml_models():
+    """Load lightweight mock ML models once for the entire test session.
+
+    Runs before any individual test module so every module that exercises the
+    inference pipeline (including test_security.py, which runs alphabetically
+    before the TTS-specific modules) has models available without relying on
+    hidden execution-order side-effects.
+    """
+    load_mock_models("cpu")
 
 
 @pytest.fixture(scope="session", autouse=True)

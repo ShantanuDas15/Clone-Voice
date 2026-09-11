@@ -29,14 +29,21 @@ _inference_semaphore = asyncio.Semaphore(1)
 
 
 def load_models(device: str = "cpu") -> None:
-    """Load all TTS models into memory for inference."""
-    global _encoder, _synthesizer, _vocoder
-    logger.info(f"Loading SV2TTS models on {device}...")
+    """Load all SV2TTS models into memory for inference.
 
-    if VoiceEncoder is not None:
-        _encoder = VoiceEncoder(device=device)
-    else:
-        logger.warning("resemblyzer not found.")
+    Raises:
+        RuntimeError: If resemblyzer is not installed or any model checkpoint
+            fails to load.  The server must not start in a degraded state.
+    """
+    global _encoder, _synthesizer, _vocoder
+    logger.info("Loading SV2TTS models on %s...", device)
+
+    if VoiceEncoder is None:
+        raise RuntimeError(
+            "resemblyzer is not installed. " "Run: pip install resemblyzer"
+        )
+    _encoder = VoiceEncoder(device=device)
+    logger.info("Speaker encoder loaded.")
 
     weights_dir = os.path.join(os.path.dirname(__file__), "..", "weights")
 
@@ -47,11 +54,12 @@ def load_models(device: str = "cpu") -> None:
     try:
         _synthesizer = torch.jit.load(synth_path, map_location=device)
         _synthesizer.eval()
-    except Exception as e:
-        logger.warning(
-            f"Could not load real synthesizer from {synth_path}: {e}. Using mock."
-        )
-        _synthesizer = "Tacotron2_Mock"
+        logger.info("Synthesizer loaded from %s.", synth_path)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to load synthesizer from '{synth_path}': {exc}. "
+            "Ensure valid TorchScript weights are present in the weights/ directory."
+        ) from exc
 
     voc_path = os.path.join(weights_dir, "vocoder.pt")
     if not os.path.exists(voc_path):
@@ -60,18 +68,35 @@ def load_models(device: str = "cpu") -> None:
     try:
         _vocoder = torch.jit.load(voc_path, map_location=device)
         _vocoder.eval()
-    except Exception as e:
-        logger.warning(f"Could not load real vocoder from {voc_path}: {e}. Using mock.")
-        _vocoder = "WaveRNN_Mock"
+        logger.info("Vocoder loaded from %s.", voc_path)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to load vocoder from '{voc_path}': {exc}. "
+            "Ensure valid TorchScript weights are present in the weights/ directory."
+        ) from exc
 
-    logger.info("Models loaded successfully.")
+    logger.info("All SV2TTS models loaded successfully.")
 
 
 def embed_speaker(audio: np.ndarray) -> np.ndarray:
-    """Extract a 256-dim speaker embedding from a preprocessed audio array."""
-    if _encoder is None or audio is None or len(audio) == 0:
+    """Extract a 256-dim speaker embedding from a preprocessed audio array.
+
+    Args:
+        audio: Normalised float32 audio array at 16 kHz.  Returns a zero
+            embedding (not an error) when the array is None or empty — this
+            can legitimately occur after aggressive silence trimming.
+
+    Raises:
+        RuntimeError: If the speaker encoder has not been loaded via
+            ``load_models()`` or ``load_mock_models()``.
+    """
+    if _encoder is None:
+        raise RuntimeError(
+            "Speaker encoder is not loaded. Call load_models() before inference."
+        )
+    if audio is None or len(audio) == 0:
         logger.warning(
-            "embed_speaker: encoder unavailable or empty audio — returning zeros."
+            "embed_speaker: received None or empty audio — returning zero embedding."
         )
         return np.zeros(256, dtype=np.float32)
 
@@ -79,14 +104,18 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
 
 
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
-    """Generate a mel spectrogram from text and a speaker embedding."""
-    if _synthesizer is None or isinstance(_synthesizer, str):
-        logger.warning("synthesize_speech: model unavailable — returning mock mel.")
-        mel_frames = len(text) * 5
-        return np.random.randn(mel_frames, 80).astype(np.float32)
+    """Generate a mel spectrogram from text and a speaker embedding.
+
+    Raises:
+        RuntimeError: If the synthesizer has not been loaded.
+    """
+    if _synthesizer is None:
+        raise RuntimeError(
+            "Synthesizer is not loaded. Call load_models() before inference."
+        )
 
     with torch.no_grad():
-        # Minimal conversion; actual models vary.
+        # Minimal conversion; actual model interface varies by checkpoint.
         text_tensor = torch.tensor([ord(c) for c in text], dtype=torch.long).unsqueeze(
             0
         )
@@ -96,11 +125,15 @@ def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
 
 
 def vocode(mel: np.ndarray) -> np.ndarray:
-    """Convert a mel spectrogram to a raw audio waveform."""
-    if _vocoder is None or isinstance(_vocoder, str):
-        logger.warning("vocode: model unavailable — returning mock waveform.")
-        samples = mel.shape[0] * 200
-        return np.random.randn(samples).astype(np.float32)
+    """Convert a mel spectrogram to a raw audio waveform.
+
+    Raises:
+        RuntimeError: If the vocoder has not been loaded.
+    """
+    if _vocoder is None:
+        raise RuntimeError(
+            "Vocoder is not loaded. Call load_models() before inference."
+        )
 
     with torch.no_grad():
         mel_tensor = torch.from_numpy(mel).unsqueeze(0)
@@ -174,3 +207,60 @@ async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
     """
     async with _inference_semaphore:
         return await asyncio.to_thread(embed_speaker, audio)
+
+
+# ---------------------------------------------------------------------------
+# Test utilities — NOT for production use
+# ---------------------------------------------------------------------------
+
+
+class _MockSynthesizer(torch.nn.Module):
+    """Lightweight Tacotron-2 test double.
+
+    Returns a zero mel spectrogram of the correct shape
+    ``(1, text_len * 5, 80)`` so that downstream shape assertions hold without
+    loading real model weights.
+    """
+
+    def forward(
+        self, text_ids: torch.Tensor, speaker_emb: torch.Tensor
+    ) -> torch.Tensor:
+        """Return a deterministic zero mel spectrogram."""
+        T = text_ids.shape[1] * 5
+        return torch.zeros(1, T, 80)
+
+
+class _MockVocoder(torch.nn.Module):
+    """Lightweight WaveRNN/HiFi-GAN test double.
+
+    Accepts a mel spectrogram of shape ``(1, T, 80)`` and returns a zero
+    waveform of shape ``(1, T * 200)`` so that duration and shape assertions
+    hold without loading real model weights.
+    """
+
+    def forward(self, mel: torch.Tensor) -> torch.Tensor:
+        """Return a deterministic zero waveform."""
+        return torch.zeros(1, mel.shape[1] * 200)
+
+
+def load_mock_models(device: str = "cpu") -> None:
+    """Inject lightweight mock models for unit and integration tests.
+
+    Loads the real ``VoiceEncoder`` from resemblyzer's cached pre-trained
+    weights (so encoder-facing tests remain realistic) but replaces the
+    synthesizer and vocoder with ``_MockSynthesizer`` and ``_MockVocoder``
+    instances that return correctly-shaped zero tensors.
+
+    Warning:
+        This function must **never** be called in production.  Use
+        ``load_models()`` for all deployment contexts.
+    """
+    global _encoder, _synthesizer, _vocoder
+    if VoiceEncoder is None:
+        raise RuntimeError(
+            "resemblyzer is not installed — cannot load mock models for tests."
+        )
+    _encoder = VoiceEncoder(device=device)
+    _synthesizer = _MockSynthesizer().to(device).eval()
+    _vocoder = _MockVocoder().to(device).eval()
+    logger.debug("Mock TTS models loaded for testing (device=%s).", device)
