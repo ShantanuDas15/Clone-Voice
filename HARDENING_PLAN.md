@@ -9,7 +9,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 
 | Category | Item | Status | Severity | Evidence (file:line) | Risk if unaddressed |
 |----------|------|--------|----------|----------------------|---------------------|
-| **B. ML/Inference** | Concurrency & Threading | ❌ Missing | **Critical** | `api/synthesize.py:60-61` | Multiple concurrent requests hit the threadpool simultaneously. With no locks or queues, this will crash the GPU (OOM) or thrash the CPU instantly. |
+| **B. ML/Inference** | Concurrency & Threading | ✅ Fixed | **Critical** | `services/tts_pipeline.py` — `_inference_semaphore`, `run_inference_pipeline()`, `embed_speaker_async()` · commit `9782213` | Resolved: process-wide `asyncio.Semaphore(1)` serialises all model forward passes; `async def synthesize` prevents event-loop blocking. |
 | **C. Resilience** | Circuit Breaker / Fallback | ❌ Missing | **Critical** | `services/tts_pipeline.py:48, 59` | If model loading fails, it silently falls back to "mock" models. Users will receive random noise instead of real audio in production. |
 | **B. ML/Inference** | GPU Memory Management | ❌ Missing | **High** | `services/tts_pipeline.py:82-90` | Missing explicit `del` or `torch.cuda.empty_cache()`. Over time, VRAM fragmentation will cause OOM errors. |
 | **C. Resilience** | Resource Cleanup Guarantees | ⚠️ Partial | **High** | `api/voice.py:56-67` | If embedding extraction fails, the uploaded audio file remains on disk forever, causing a slow disk leak. |
