@@ -10,6 +10,13 @@ from backend.core.database import Base, get_db
 from backend.main import app
 from backend.services.tts_pipeline import load_mock_models
 
+# Disable rate limiting for all tests by default.  Every test request uses the
+# same "testclient" IP, so leaving the limiter on would cause the tight
+# per-minute limits (5 or 10 req/min) to trip mid-suite.
+# Tests in test_rate_limit.py re-enable it explicitly and clear storage in
+# their own setup/teardown.
+app.state.limiter.enabled = False
+
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 # Session-scoped engine — one connection kept alive for the entire test session.

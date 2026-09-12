@@ -5,11 +5,12 @@ import os
 from typing import List
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
+from backend.core.rate_limit import limiter
 from backend.core.security import get_current_user
 from backend.models.generation import Generation
 from backend.models.user import User
@@ -23,7 +24,9 @@ router = APIRouter()
 
 
 @router.post("", response_class=FileResponse)
+@limiter.limit("5/minute")
 async def synthesize(
+    request: Request,
     req: SynthesizeRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

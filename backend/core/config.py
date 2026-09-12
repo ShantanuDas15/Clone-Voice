@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     OUTPUT_DIR: str = "outputs"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
     VOCODER_SAMPLE_RATE: int = 22050
+    RATE_LIMIT_ENABLED: bool = True
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod
