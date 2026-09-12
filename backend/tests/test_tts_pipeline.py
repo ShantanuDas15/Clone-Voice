@@ -231,3 +231,68 @@ def test_embed_speaker_raises_if_encoder_not_loaded(monkeypatch):
     monkeypatch.setattr("backend.services.tts_pipeline._encoder", None)
     with pytest.raises(RuntimeError, match="Speaker encoder is not loaded"):
         embed_speaker(np.random.randn(16000).astype(np.float32))
+
+
+# ---------------------------------------------------------------------------
+# GPU memory management — HARDENING_PLAN Phase 2
+# ---------------------------------------------------------------------------
+
+
+def test_synthesize_speech_frees_gpu_memory_when_cuda_available():
+    """synthesize_speech() must call torch.cuda.empty_cache() when CUDA is present."""
+    with patch(
+        "backend.services.tts_pipeline.torch.cuda.is_available", return_value=True
+    ), patch("backend.services.tts_pipeline.torch.cuda.empty_cache") as mock_empty:
+        synthesize_speech("Hello world.", np.random.randn(256).astype(np.float32))
+    mock_empty.assert_called_once()
+
+
+def test_vocode_frees_gpu_memory_when_cuda_available():
+    """vocode() must call torch.cuda.empty_cache() when CUDA is present."""
+    mel = np.random.randn(60, 80).astype(np.float32)
+    with patch(
+        "backend.services.tts_pipeline.torch.cuda.is_available", return_value=True
+    ), patch("backend.services.tts_pipeline.torch.cuda.empty_cache") as mock_empty:
+        vocode(mel)
+    mock_empty.assert_called_once()
+
+
+def test_embed_speaker_frees_gpu_memory_when_cuda_available():
+    """embed_speaker() must call torch.cuda.empty_cache() when CUDA is present."""
+    audio = np.random.randn(16000).astype(np.float32)
+    with patch(
+        "backend.services.tts_pipeline.torch.cuda.is_available", return_value=True
+    ), patch("backend.services.tts_pipeline.torch.cuda.empty_cache") as mock_empty:
+        embed_speaker(audio)
+    mock_empty.assert_called_once()
+
+
+def test_free_gpu_memory_is_noop_without_cuda():
+    """_free_gpu_memory() must not touch the cache allocator on CPU-only hosts."""
+    from backend.services.tts_pipeline import _free_gpu_memory
+
+    with patch(
+        "backend.services.tts_pipeline.torch.cuda.is_available", return_value=False
+    ), patch("backend.services.tts_pipeline.torch.cuda.empty_cache") as mock_empty:
+        _free_gpu_memory()
+    mock_empty.assert_not_called()
+
+
+def test_embed_speaker_frees_gpu_memory_even_on_encoder_failure(monkeypatch):
+    """_free_gpu_memory() must still run if the encoder forward pass raises.
+
+    Guards against a partially-executed inference leaving GPU memory
+    unreleased when the model itself errors out mid-pass.
+    """
+    from backend.services.tts_pipeline import _encoder
+
+    def boom(_audio):
+        raise RuntimeError("mocked encoder failure")
+
+    monkeypatch.setattr(_encoder, "embed_utterance", boom)
+    with patch(
+        "backend.services.tts_pipeline.torch.cuda.is_available", return_value=True
+    ), patch("backend.services.tts_pipeline.torch.cuda.empty_cache") as mock_empty:
+        with pytest.raises(RuntimeError, match="mocked encoder failure"):
+            embed_speaker(np.random.randn(16000).astype(np.float32))
+    mock_empty.assert_called_once()
