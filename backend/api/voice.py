@@ -5,12 +5,13 @@ import uuid
 from typing import List
 
 import numpy as np
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
-                     status)
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile, status)
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
 from backend.core.database import get_db
+from backend.core.rate_limit import limiter
 from backend.core.security import get_current_user
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
@@ -27,7 +28,9 @@ router = APIRouter()
 @router.post(
     "/upload", response_model=VoiceProfileOut, status_code=status.HTTP_201_CREATED
 )
+@limiter.limit("10/minute")
 async def upload_audio(
+    request: Request,
     name: str = Form(...),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
