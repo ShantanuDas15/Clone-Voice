@@ -28,6 +28,19 @@ _vocoder = None
 _inference_semaphore = asyncio.Semaphore(1)
 
 
+def _free_gpu_memory() -> None:
+    """Return cached GPU memory to the driver after a model forward pass.
+
+    PyTorch's caching allocator keeps freed tensor memory reserved for reuse
+    rather than releasing it back to the driver, which fragments VRAM under
+    sustained load. Called after each inference-heavy operation (encoder,
+    synthesizer, vocoder) once their intermediate tensors are no longer
+    referenced. No-op on CPU-only deployments.
+    """
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def load_models(device: str = "cpu") -> None:
     """Load all SV2TTS models into memory for inference.
 
@@ -100,7 +113,10 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
         )
         return np.zeros(256, dtype=np.float32)
 
-    return _encoder.embed_utterance(audio)
+    try:
+        return _encoder.embed_utterance(audio)
+    finally:
+        _free_gpu_memory()
 
 
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
@@ -121,7 +137,14 @@ def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
         )
         emb_tensor = torch.from_numpy(embedding).unsqueeze(0)
         mel = _synthesizer(text_tensor, emb_tensor)
-        return mel.squeeze(0).cpu().numpy()
+        result = mel.squeeze(0).cpu().numpy()
+
+    # Explicitly drop references to the GPU tensors before releasing cached
+    # memory — Python's refcounting won't free them promptly otherwise since
+    # they're still bound to these local variables.
+    del text_tensor, emb_tensor, mel
+    _free_gpu_memory()
+    return result
 
 
 def vocode(mel: np.ndarray) -> np.ndarray:
@@ -138,7 +161,11 @@ def vocode(mel: np.ndarray) -> np.ndarray:
     with torch.no_grad():
         mel_tensor = torch.from_numpy(mel).unsqueeze(0)
         wav = _vocoder(mel_tensor)
-        return wav.squeeze(0).cpu().numpy()
+        result = wav.squeeze(0).cpu().numpy()
+
+    del mel_tensor, wav
+    _free_gpu_memory()
+    return result
 
 
 def save_output(
