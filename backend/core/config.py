@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
     VOCODER_SAMPLE_RATE: int = 22050
     RATE_LIMIT_ENABLED: bool = True
+    STORAGE_MAX_AGE_HOURS: float = 24
+    STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod
