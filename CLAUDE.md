@@ -5,6 +5,16 @@
 
 ---
 
+## 0. Attribution — MANDATORY
+
+- Do **not** add any Claude/Claude Code attribution to git commits or pull requests —
+  no `Co-Authored-By: Claude ...` trailer, no `Claude-Session:` line, and no
+  "🤖 Generated with Claude Code" footer in PR descriptions.
+- Commit and push using the repository's configured git user only. Claude must never
+  appear as a contributor/author/co-author on any commit or PR in this repository.
+
+---
+
 ## 1. Project Context
 
 **Project**: CloneVoice — AI-Powered Voice Cloning Web Application
@@ -61,6 +71,7 @@ Whenever executing a milestone or sub-task, YOU MUST strictly follow this standa
 - Commit using the **Conventional Commits** format:
   `feat|fix|chore(scope): [Milestone X.X] <Subject>`
   *Example:* `feat(db): [Milestone 1.2] Implement SQLAlchemy ORM models and Alembic`
+- Do NOT add any Claude/Claude Code attribution trailer or footer (see Section 0).
 - Push to the remote repository: `git push -u origin <branch-name>` (or `main` if directly integrating).
 
 ### Phase 3.6 — Plan Synchronization
@@ -169,3 +180,4 @@ backend/
 - **Atomic Commits**: One commit per logical milestone or sub-task. Do not bundle unrelated changes.
 - **No Force Pushing**: Never run `git push -f` against `main`.
 - **Main Protection**: The `main` branch must always remain deployable. Code only enters `main` when tests pass 100%.
+- **No AI Attribution**: Never add Claude/AI co-author trailers, session links, or "Generated with" footers to commits or PRs (see Section 0).
