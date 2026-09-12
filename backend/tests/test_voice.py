@@ -101,6 +101,30 @@ def test_upload_empty_file(client: TestClient, auth_headers):
     assert "Empty file" in response.json()["detail"]
 
 
+def test_upload_embedding_failure_deletes_orphaned_file(
+    client: TestClient, auth_headers, tmp_path
+):
+    """A failed embedding extraction must not leave the uploaded file on disk."""
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
+        "backend.api.voice.embed_speaker_async", side_effect=RuntimeError("boom")
+    ):
+        wav_data = create_dummy_wav()
+        files = {"file": ("fail.wav", wav_data, "audio/wav")}
+        data = {"name": "Fail Voice"}
+        response = client.post(
+            "/api/voice/upload", headers=auth_headers, data=data, files=files
+        )
+
+    assert response.status_code == 500
+    remaining_files = list(tmp_path.rglob("*.wav"))
+    assert remaining_files == [], f"Orphaned upload(s) left on disk: {remaining_files}"
+
+    profiles = client.get("/api/voice/profiles", headers=auth_headers).json()
+    failed = [p for p in profiles if p["name"] == "Fail Voice"]
+    assert len(failed) == 1
+    assert failed[0]["status"] == "failed"
+
+
 def test_upload_unauthenticated(client: TestClient):
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}

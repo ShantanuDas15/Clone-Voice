@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import logging.config
 from contextlib import asynccontextmanager
@@ -13,6 +14,7 @@ from backend.api.synthesize import router as synthesize_router
 from backend.api.voice import router as voice_router
 from backend.core.config import settings
 from backend.core.rate_limit import limiter
+from backend.services.storage_cleanup import periodic_cleanup
 from backend.services.tts_pipeline import load_models
 
 
@@ -53,8 +55,28 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan events."""
     logger.info("Starting CloneVoice API — loading SV2TTS models...")
     load_models(device=settings.DEVICE)
+
+    cleanup_task = asyncio.create_task(
+        periodic_cleanup(
+            directories=[settings.UPLOAD_DIR, settings.OUTPUT_DIR],
+            interval_seconds=settings.STORAGE_CLEANUP_INTERVAL_SECONDS,
+            max_age_hours=settings.STORAGE_MAX_AGE_HOURS,
+        )
+    )
+    logger.info(
+        "Storage cleanup background task started (every %.0fs, max age %.0fh).",
+        settings.STORAGE_CLEANUP_INTERVAL_SECONDS,
+        settings.STORAGE_MAX_AGE_HOURS,
+    )
+
     logger.info("Application startup complete.")
     yield
+
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     logger.info("Application shutting down.")
 
 

@@ -1,6 +1,7 @@
 """Voice profile management API routes."""
 
 import logging
+import os
 import uuid
 from typing import List
 
@@ -59,6 +60,13 @@ async def upload_audio(
             "Embedding extraction failed for user_id=%s — persisting failed profile",
             current_user.id,
         )
+        try:
+            os.remove(file_path)
+            logger.info(
+                "Removed orphaned upload after embedding failure: %s", file_path
+            )
+        except OSError:
+            logger.exception("Failed to remove orphaned upload: %s", file_path)
         profile = VoiceProfile(
             user_id=current_user.id,
             name=name,
