@@ -16,7 +16,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 | **H. Deployment** | Dockerfile & Resources | ❌ Missing | **High** | `backend/` directory | Lack of containerization and documented VRAM requirements prevents reproducible and stable production deployment. |
 | **A. API Layer** | Rate Limiting | ✅ Fixed | **High** | `core/rate_limit.py` — `Limiter(key_func=get_remote_address)`; `api/synthesize.py` — `@limiter.limit("5/minute")`; `api/voice.py` — `@limiter.limit("10/minute")` · commit `83e8dd1` | Resolved: `slowapi` integrated; 5 req/min on synthesize, 10 req/min on upload; disabled in test suite via `conftest.py`; 3 new rate-limit tests added. |
 | **B. ML/Inference** | Model Warm-up / Health | ❌ Missing | **Medium** | `main.py:75` | `/health` returns "ok" statically. Load balancers might route traffic before heavy models are actually ready or if models crashed. |
-| **D. Observability** | Structured Logging | ⚠️ Partial | **Medium** | `main.py:25` | Uses standard text logging. Missing JSON formatting and request/correlation IDs makes debugging concurrent ML issues in production very hard. |
+| **D. Observability** | Structured Logging | ✅ Fixed | **Medium** | `main.py` — `configure_logging()`, `CorrelationIdMiddleware`; `tests/test_logging.py` · commit `f79edda` | Resolved: root logging now emits JSON via `python-json-logger`; `asgi-correlation-id` middleware generates a per-request correlation ID, echoes it as `X-Request-ID`, and tags every log record with a `request_id` field via `CorrelationIdFilter`. |
 | **D. Observability** | Metrics & Exceptions | ❌ Missing | **Medium** | `main.py` | No visibility into inference latency, GPU utilization, or queue depth. No centralized error tracking (e.g., Sentry). |
 | **C. Resilience** | Graceful Shutdown | ❌ Missing | **Medium** | `main.py:55` | Shutdown does not wait for in-flight requests or safely release GPU memory. |
 | **A. API Layer** | API Versioning | ❌ Missing | **Low** | `main.py:70-72` | Routes are mounted at `/api/...` rather than `/api/v1/...`, making future breaking changes difficult. |
@@ -50,7 +50,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
    - *How*: Create a multi-stage `Dockerfile` using an official NVIDIA PyTorch base image, running the app as a non-root user.
 
 ### Phase 3: Medium (Observability)
-1. **Introduce JSON Logging & Request IDs**:
+1. **Introduce JSON Logging & Request IDs** — ✅ Done (commit `f79edda`):
    - *Why*: Tracing an error through concurrent ML requests requires request isolation in logs.
    - *How*: Use `asgi-correlation-id` middleware and configure Python logging to output JSON (e.g., using `python-json-logger`).
 2. **Real Health Checks**:
