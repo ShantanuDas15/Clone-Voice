@@ -41,6 +41,61 @@ def _free_gpu_memory() -> None:
         torch.cuda.empty_cache()
 
 
+def _module_device(module: torch.nn.Module) -> "torch.device | None":
+    """Return the torch device a module's parameters live on.
+
+    Falls back to ``None`` for parameter-less modules (e.g. the mock test
+    doubles below), since such a module has no device of its own to report.
+    """
+    try:
+        return next(module.parameters()).device
+    except StopIteration:
+        return None
+
+
+def get_model_health(expected_device: str | None = None) -> dict:
+    """Report whether each SV2TTS model is loaded and on the expected device.
+
+    Backs the ``/health`` endpoint so a load balancer only routes traffic
+    once inference is actually possible, instead of trusting a static "ok".
+
+    Args:
+        expected_device: The device (e.g. ``"cpu"``, ``"cuda"``) models are
+            expected to run on, typically ``settings.DEVICE``. When omitted,
+            device placement is not checked — only presence is.
+
+    Returns:
+        A dict with one entry per model (``loaded``, ``device``,
+        ``device_ok``) plus a top-level ``ready`` flag that is ``True`` only
+        when every model is loaded and correctly placed.
+    """
+    expected = torch.device(expected_device) if expected_device else None
+
+    status: dict = {}
+    for name, model in (
+        ("encoder", _encoder),
+        ("synthesizer", _synthesizer),
+        ("vocoder", _vocoder),
+    ):
+        loaded = model is not None
+        device = getattr(model, "device", None) if loaded else None
+        if loaded and device is None:
+            device = _module_device(model)
+
+        device_ok = True
+        if loaded and expected is not None and device is not None:
+            device_ok = torch.device(device).type == expected.type
+
+        status[name] = {
+            "loaded": loaded,
+            "device": str(device) if device is not None else None,
+            "device_ok": device_ok,
+        }
+
+    status["ready"] = all(s["loaded"] and s["device_ok"] for s in status.values())
+    return status
+
+
 def load_models(device: str = "cpu") -> None:
     """Load all SV2TTS models into memory for inference.
 

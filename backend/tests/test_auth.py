@@ -4,7 +4,10 @@ from fastapi.testclient import TestClient
 def test_health_endpoint(client: TestClient):
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "1.0.0"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["version"] == "1.0.0"
+    assert all(model["loaded"] for model in body["models"].values())
 
 
 def test_signup_success(client: TestClient):

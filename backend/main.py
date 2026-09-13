@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
@@ -15,7 +16,7 @@ from backend.api.voice import router as voice_router
 from backend.core.config import settings
 from backend.core.rate_limit import limiter
 from backend.services.storage_cleanup import periodic_cleanup
-from backend.services.tts_pipeline import load_models
+from backend.services.tts_pipeline import get_model_health, load_models
 
 
 def configure_logging() -> None:
@@ -106,5 +107,15 @@ app.include_router(synthesize_router, prefix="/api/synthesize", tags=["synthesiz
 
 @app.get("/health")
 def health():
-    """Return application health status."""
-    return {"status": "ok", "version": "1.0.0"}
+    """Report application health, verifying the SV2TTS models are actually
+    loaded and placed on the configured device rather than trusting a
+    static "ok" — so a load balancer never routes traffic to an instance
+    whose models failed to load or crashed after startup."""
+    model_status = get_model_health(settings.DEVICE)
+    ready = model_status.pop("ready")
+    payload = {
+        "status": "ok" if ready else "degraded",
+        "version": "1.0.0",
+        "models": model_status,
+    }
+    return JSONResponse(status_code=200 if ready else 503, content=payload)
