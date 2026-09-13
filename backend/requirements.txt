@@ -26,3 +26,5 @@ python-dotenv==1.0.1
 itsdangerous==2.2.0
 bcrypt<4.0.0
 slowapi==0.1.9
+asgi-correlation-id==5.0.1
+python-json-logger==4.2.0
