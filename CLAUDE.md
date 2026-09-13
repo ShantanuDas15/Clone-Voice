@@ -81,6 +81,15 @@ Whenever executing a milestone or sub-task, YOU MUST strictly follow this standa
 - Update the document's top-level Status and Last Reviewed date.
 - Commit the plan update separately: `git commit -am "docs: Update phase plan for Milestone X.X" && git push`.
 
+### Phase 3.7 — Merge to Main — MANDATORY
+- **After an implementation is complete and verified** (Phase 3.3 tests pass with zero errors, and the plan-sync commit from Phase 3.6 is pushed), merge the feature branch into `main` in the same session — do not leave it as an unmerged, dangling branch waiting on a separate step.
+- `git checkout main && git pull --ff-only`, then `git merge --no-ff <feature-branch>` (or a fast-forward if history allows).
+- Resolve any merge conflicts (e.g. in `HARDENING_PLAN.md`/`PHASE_X_PLAN.md` when multiple milestones touched adjacent rows), preserving every merged branch's resolved findings — never silently drop one side's fix.
+- Re-run the full test suite on `main` post-merge (zero-error tolerance still applies) before pushing.
+- `git push origin main`.
+- Delete the feature branch, both locally (`git branch -d <feature-branch>`) and on the remote (`git push origin --delete <feature-branch>`), once it is fully merged.
+- This applies to every implementation going forward — not just when the user explicitly asks for a merge.
+
 ---
 
 ## 4. Phase Plan Generation & Test Design Standards
