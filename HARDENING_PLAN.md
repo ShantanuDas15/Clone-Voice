@@ -15,7 +15,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 | **C. Resilience** | Resource Cleanup Guarantees | ✅ Fixed | **High** | `services/storage_cleanup.py` — `cleanup_stale_files()`, `periodic_cleanup()`; `main.py` — lifespan background task; `api/voice.py` — `except` block · commit `a596055` | Resolved: hourly background task prunes files older than 24h from `uploads/` and `outputs/`; `api/voice.py` now deletes the uploaded file in the `except` block when embedding extraction fails. |
 | **H. Deployment** | Dockerfile & Resources | ❌ Missing | **High** | `backend/` directory | Lack of containerization and documented VRAM requirements prevents reproducible and stable production deployment. |
 | **A. API Layer** | Rate Limiting | ✅ Fixed | **High** | `core/rate_limit.py` — `Limiter(key_func=get_remote_address)`; `api/synthesize.py` — `@limiter.limit("5/minute")`; `api/voice.py` — `@limiter.limit("10/minute")` · commit `83e8dd1` | Resolved: `slowapi` integrated; 5 req/min on synthesize, 10 req/min on upload; disabled in test suite via `conftest.py`; 3 new rate-limit tests added. |
-| **B. ML/Inference** | Model Warm-up / Health | ❌ Missing | **Medium** | `main.py:75` | `/health` returns "ok" statically. Load balancers might route traffic before heavy models are actually ready or if models crashed. |
+| **B. ML/Inference** | Model Warm-up / Health | ✅ Fixed | **Medium** | `services/tts_pipeline.py` — `get_model_health()`; `main.py` — `health()`; `tests/test_health.py` · commit `02c04a3` | Resolved: `/health` now checks that `_encoder`, `_synthesizer`, and `_vocoder` are loaded and on the configured device, returning `200 {"status": "ok"}` only when all are ready and `503 {"status": "degraded"}` (with per-model detail) otherwise. |
 | **D. Observability** | Structured Logging | ⚠️ Partial | **Medium** | `main.py:25` | Uses standard text logging. Missing JSON formatting and request/correlation IDs makes debugging concurrent ML issues in production very hard. |
 | **D. Observability** | Metrics & Exceptions | ❌ Missing | **Medium** | `main.py` | No visibility into inference latency, GPU utilization, or queue depth. No centralized error tracking (e.g., Sentry). |
 | **C. Resilience** | Graceful Shutdown | ❌ Missing | **Medium** | `main.py:55` | Shutdown does not wait for in-flight requests or safely release GPU memory. |
@@ -53,7 +53,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 1. **Introduce JSON Logging & Request IDs**:
    - *Why*: Tracing an error through concurrent ML requests requires request isolation in logs.
    - *How*: Use `asgi-correlation-id` middleware and configure Python logging to output JSON (e.g., using `python-json-logger`).
-2. **Real Health Checks**:
+2. **Real Health Checks** — ✅ Done (commit `02c04a3`):
    - *Why*: The load balancer needs to know if the model is actually capable of serving requests.
    - *How*: Update `GET /health` to verify that `_encoder`, `_synthesizer`, and `_vocoder` are not `None` and are assigned to the correct torch device.
 3. **Exception Tracking**:
