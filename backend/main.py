@@ -127,9 +127,13 @@ app.add_middleware(
 # The generated ID is echoed back to the client via the X-Request-ID header.
 app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
 
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-app.include_router(voice_router, prefix="/api/voice", tags=["voice"])
-app.include_router(synthesize_router, prefix="/api/synthesize", tags=["synthesize"])
+API_V1_PREFIX = "/api/v1"
+
+app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/auth", tags=["auth"])
+app.include_router(voice_router, prefix=f"{API_V1_PREFIX}/voice", tags=["voice"])
+app.include_router(
+    synthesize_router, prefix=f"{API_V1_PREFIX}/synthesize", tags=["synthesize"]
+)
 
 
 @app.get("/health")

@@ -14,7 +14,7 @@ from backend.services.audio_processing import preprocess_audio
 @pytest.fixture
 def auth_headers(client: TestClient):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "voice@example.com",
             "password": "Password123!",
@@ -22,7 +22,7 @@ def auth_headers(client: TestClient):
         },
     )
     resp = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "voice@example.com", "password": "Password123!"},
     )
     token = resp.json()["access_token"]
@@ -47,7 +47,7 @@ def test_upload_valid_wav(client: TestClient, auth_headers):
     data = {"name": "My Voice"}
 
     response = client.post(
-        "/api/voice/upload", headers=auth_headers, data=data, files=files
+        "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
     )
     assert response.status_code == 201
     res_data = response.json()
@@ -63,7 +63,7 @@ def test_upload_valid_mp3(client: TestClient, auth_headers):
         files = {"file": ("test.mp3", b"ID3 dummy mp3 data", "audio/mp3")}
         data = {"name": "MP3 Voice"}
         response = client.post(
-            "/api/voice/upload", headers=auth_headers, data=data, files=files
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
         assert response.status_code == 201
 
@@ -72,7 +72,7 @@ def test_upload_invalid_format_txt(client: TestClient, auth_headers):
     files = {"file": ("test.txt", b"hello text", "text/plain")}
     data = {"name": "Text Voice"}
     response = client.post(
-        "/api/voice/upload", headers=auth_headers, data=data, files=files
+        "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
     )
     assert response.status_code == 422
     assert "Invalid audio format" in response.json()["detail"]
@@ -85,7 +85,7 @@ def test_upload_oversized_file(client: TestClient, auth_headers):
         files = {"file": ("test.wav", wav_data, "audio/wav")}
         data = {"name": "Big Voice"}
         response = client.post(
-            "/api/voice/upload", headers=auth_headers, data=data, files=files
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
         assert response.status_code == 413
         assert "File too large" in response.json()["detail"]
@@ -95,7 +95,7 @@ def test_upload_empty_file(client: TestClient, auth_headers):
     files = {"file": ("test.wav", b"", "audio/wav")}
     data = {"name": "Empty Voice"}
     response = client.post(
-        "/api/voice/upload", headers=auth_headers, data=data, files=files
+        "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
     )
     assert response.status_code == 422
     assert "Empty file" in response.json()["detail"]
@@ -112,14 +112,14 @@ def test_upload_embedding_failure_deletes_orphaned_file(
         files = {"file": ("fail.wav", wav_data, "audio/wav")}
         data = {"name": "Fail Voice"}
         response = client.post(
-            "/api/voice/upload", headers=auth_headers, data=data, files=files
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
 
     assert response.status_code == 500
     remaining_files = list(tmp_path.rglob("*.wav"))
     assert remaining_files == [], f"Orphaned upload(s) left on disk: {remaining_files}"
 
-    profiles = client.get("/api/voice/profiles", headers=auth_headers).json()
+    profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
     failed = [p for p in profiles if p["name"] == "Fail Voice"]
     assert len(failed) == 1
     assert failed[0]["status"] == "failed"
@@ -129,13 +129,13 @@ def test_upload_unauthenticated(client: TestClient):
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}
     data = {"name": "No Auth"}
-    response = client.post("/api/voice/upload", data=data, files=files)
+    response = client.post("/api/v1/voice/upload", data=data, files=files)
     assert response.status_code == 401
 
 
 def test_list_profiles_empty(client: TestClient):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "empty@example.com",
             "password": "Password123!",
@@ -143,12 +143,12 @@ def test_list_profiles_empty(client: TestClient):
         },
     )
     token = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "empty@example.com", "password": "Password123!"},
     ).json()["access_token"]
 
     response = client.get(
-        "/api/voice/profiles", headers={"Authorization": f"Bearer {token}"}
+        "/api/v1/voice/profiles", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
     assert response.json() == []
@@ -158,13 +158,13 @@ def test_list_profiles_after_upload(client: TestClient, auth_headers):
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}
     client.post(
-        "/api/voice/upload",
+        "/api/v1/voice/upload",
         headers=auth_headers,
         data={"name": "My Voice"},
         files=files,
     )
 
-    response = client.get("/api/voice/profiles", headers=auth_headers)
+    response = client.get("/api/v1/voice/profiles", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
@@ -175,21 +175,25 @@ def test_delete_profile_success(client: TestClient, auth_headers):
     wav_data = create_dummy_wav()
     files = {"file": ("delete_test.wav", wav_data, "audio/wav")}
     up_res = client.post(
-        "/api/voice/upload", headers=auth_headers, data={"name": "Del"}, files=files
+        "/api/v1/voice/upload", headers=auth_headers, data={"name": "Del"}, files=files
     )
     profile_id = up_res.json()["id"]
 
-    del_res = client.delete(f"/api/voice/profiles/{profile_id}", headers=auth_headers)
+    del_res = client.delete(
+        f"/api/v1/voice/profiles/{profile_id}", headers=auth_headers
+    )
     assert del_res.status_code == 200
 
-    list_res = client.get("/api/voice/profiles", headers=auth_headers)
+    list_res = client.get("/api/v1/voice/profiles", headers=auth_headers)
     ids = [p["id"] for p in list_res.json()]
     assert profile_id not in ids
 
 
 def test_delete_profile_not_found(client: TestClient, auth_headers):
 
-    del_res = client.delete(f"/api/voice/profiles/{uuid.uuid4()}", headers=auth_headers)
+    del_res = client.delete(
+        f"/api/v1/voice/profiles/{uuid.uuid4()}", headers=auth_headers
+    )
     assert del_res.status_code == 404
 
 
@@ -199,7 +203,7 @@ def test_delete_profile_wrong_user(client: TestClient, auth_headers):
     wav_data = create_dummy_wav()
     files = {"file": ("owner.wav", wav_data, "audio/wav")}
     up_res = client.post(
-        "/api/voice/upload",
+        "/api/v1/voice/upload",
         headers=auth_headers,
         data={"name": "Owner Voice"},
         files=files,
@@ -208,7 +212,7 @@ def test_delete_profile_wrong_user(client: TestClient, auth_headers):
 
     # User B signs up and logs in
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "intruder@example.com",
             "password": "Password123!",
@@ -216,17 +220,17 @@ def test_delete_profile_wrong_user(client: TestClient, auth_headers):
         },
     )
     token_b = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "intruder@example.com", "password": "Password123!"},
     ).json()["access_token"]
     headers_b = {"Authorization": f"Bearer {token_b}"}
 
     # User B attempts to delete User A's profile — must be rejected
-    del_res = client.delete(f"/api/voice/profiles/{profile_id}", headers=headers_b)
+    del_res = client.delete(f"/api/v1/voice/profiles/{profile_id}", headers=headers_b)
     assert del_res.status_code == 404
 
     # Confirm profile still belongs to User A and is intact
-    list_res = client.get("/api/voice/profiles", headers=auth_headers)
+    list_res = client.get("/api/v1/voice/profiles", headers=auth_headers)
     ids = [p["id"] for p in list_res.json()]
     assert profile_id in ids
 

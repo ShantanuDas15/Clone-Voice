@@ -1,4 +1,4 @@
-"""Integration tests for the /api/synthesize endpoint."""
+"""Integration tests for the /api/v1/synthesize endpoint."""
 
 import io
 import uuid
@@ -20,7 +20,7 @@ def setup_models_for_synthesize():
 def auth_headers_syn(client: TestClient):
     """Create and authenticate a test user for synthesis tests."""
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "syn@example.com",
             "password": "Password123!",
@@ -28,7 +28,8 @@ def auth_headers_syn(client: TestClient):
         },
     )
     resp = client.post(
-        "/api/auth/login", json={"email": "syn@example.com", "password": "Password123!"}
+        "/api/v1/auth/login",
+        json={"email": "syn@example.com", "password": "Password123!"},
     )
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
@@ -51,7 +52,7 @@ def upload_profile(client: TestClient, headers: dict) -> str:
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}
     up_res = client.post(
-        "/api/voice/upload", headers=headers, data={"name": "Syn Voice"}, files=files
+        "/api/v1/voice/upload", headers=headers, data={"name": "Syn Voice"}, files=files
     )
     return up_res.json()["id"]
 
@@ -59,7 +60,7 @@ def upload_profile(client: TestClient, headers: dict) -> str:
 def test_synthesize_success(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, auth_headers_syn)
     res = client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": profile_id, "text": "Hello world!"},
     )
@@ -70,19 +71,19 @@ def test_synthesize_success(client: TestClient, auth_headers_syn):
 def test_synthesize_creates_db_row(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, auth_headers_syn)
     client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": profile_id, "text": "Row Test"},
     )
 
-    res = client.get("/api/synthesize/history", headers=auth_headers_syn)
+    res = client.get("/api/v1/synthesize/history", headers=auth_headers_syn)
     assert res.status_code == 200
     assert len(res.json()) == 1
 
 
 def test_synthesize_invalid_profile(client: TestClient, auth_headers_syn):
     res = client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": str(uuid.uuid4()), "text": "Hello"},
     )
@@ -91,7 +92,7 @@ def test_synthesize_invalid_profile(client: TestClient, auth_headers_syn):
 
 def test_synthesize_wrong_user_profile(client: TestClient, auth_headers_syn):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "other@example.com",
             "password": "Password123!",
@@ -99,7 +100,7 @@ def test_synthesize_wrong_user_profile(client: TestClient, auth_headers_syn):
         },
     )
     token2 = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "other@example.com", "password": "Password123!"},
     ).json()["access_token"]
     headers2 = {"Authorization": f"Bearer {token2}"}
@@ -107,7 +108,7 @@ def test_synthesize_wrong_user_profile(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, headers2)
 
     res = client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": profile_id, "text": "Hello"},
     )
@@ -117,7 +118,7 @@ def test_synthesize_wrong_user_profile(client: TestClient, auth_headers_syn):
 def test_synthesize_empty_text(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, auth_headers_syn)
     res = client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": profile_id, "text": ""},
     )
@@ -128,7 +129,7 @@ def test_synthesize_text_too_long(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, auth_headers_syn)
     long_text = "a" * 501
     res = client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": profile_id, "text": long_text},
     )
@@ -137,14 +138,15 @@ def test_synthesize_text_too_long(client: TestClient, auth_headers_syn):
 
 def test_synthesize_unauthenticated(client: TestClient):
     res = client.post(
-        "/api/synthesize", json={"voice_profile_id": str(uuid.uuid4()), "text": "Hello"}
+        "/api/v1/synthesize",
+        json={"voice_profile_id": str(uuid.uuid4()), "text": "Hello"},
     )
     assert res.status_code == 401
 
 
 def test_history_empty(client: TestClient):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "history@example.com",
             "password": "Password123!",
@@ -152,12 +154,12 @@ def test_history_empty(client: TestClient):
         },
     )
     token = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "history@example.com", "password": "Password123!"},
     ).json()["access_token"]
 
     res = client.get(
-        "/api/synthesize/history", headers={"Authorization": f"Bearer {token}"}
+        "/api/v1/synthesize/history", headers={"Authorization": f"Bearer {token}"}
     )
     assert res.status_code == 200
     assert len(res.json()) == 0
@@ -166,18 +168,18 @@ def test_history_empty(client: TestClient):
 def test_history_after_synthesis(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, auth_headers_syn)
     client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": profile_id, "text": "Hist"},
     )
 
-    res = client.get("/api/synthesize/history", headers=auth_headers_syn)
+    res = client.get("/api/v1/synthesize/history", headers=auth_headers_syn)
     assert res.status_code == 200
     assert len(res.json()) == 1
 
 
 def test_history_pagination(client: TestClient, auth_headers_syn):
-    res = client.get("/api/synthesize/history?limit=100", headers=auth_headers_syn)
+    res = client.get("/api/v1/synthesize/history?limit=100", headers=auth_headers_syn)
     assert res.status_code == 200
     assert len(res.json()) <= 50
 
@@ -185,18 +187,18 @@ def test_history_pagination(client: TestClient, auth_headers_syn):
 def test_history_excludes_soft_deleted(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, auth_headers_syn)
     client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=auth_headers_syn,
         json={"voice_profile_id": profile_id, "text": "Soft delete test"},
     )
 
-    res = client.get("/api/synthesize/history", headers=auth_headers_syn)
+    res = client.get("/api/v1/synthesize/history", headers=auth_headers_syn)
     assert len(res.json()) >= 1
 
     res_del = client.delete(
-        f"/api/voice/profiles/{profile_id}", headers=auth_headers_syn
+        f"/api/v1/voice/profiles/{profile_id}", headers=auth_headers_syn
     )
     assert res_del.status_code == 200
 
-    res_after = client.get("/api/synthesize/history", headers=auth_headers_syn)
+    res_after = client.get("/api/v1/synthesize/history", headers=auth_headers_syn)
     assert all(gen["voice_profile_id"] != profile_id for gen in res_after.json())

@@ -12,7 +12,7 @@ def test_health_endpoint(client: TestClient):
 
 def test_signup_success(client: TestClient):
     response = client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "test@example.com",
             "password": "Password123!",
@@ -27,7 +27,7 @@ def test_signup_success(client: TestClient):
 
 def test_signup_duplicate_email(client: TestClient):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "test@example.com",
             "password": "Password123!",
@@ -35,7 +35,7 @@ def test_signup_duplicate_email(client: TestClient):
         },
     )
     response = client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "test@example.com",
             "password": "Password123!",
@@ -47,7 +47,7 @@ def test_signup_duplicate_email(client: TestClient):
 
 def test_signup_invalid_email(client: TestClient):
     response = client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={"email": "not-an-email", "password": "Password123!", "name": "Test User"},
     )
     assert response.status_code == 422
@@ -55,14 +55,14 @@ def test_signup_invalid_email(client: TestClient):
 
 def test_signup_missing_password(client: TestClient):
     response = client.post(
-        "/api/auth/signup", json={"email": "test@example.com", "name": "Test User"}
+        "/api/v1/auth/signup", json={"email": "test@example.com", "name": "Test User"}
     )
     assert response.status_code == 422
 
 
 def test_login_success(client: TestClient):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "test@example.com",
             "password": "Password123!",
@@ -70,7 +70,7 @@ def test_login_success(client: TestClient):
         },
     )
     response = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "test@example.com", "password": "Password123!"},
     )
     assert response.status_code == 200
@@ -81,7 +81,7 @@ def test_login_success(client: TestClient):
 
 def test_login_wrong_password(client: TestClient):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "test@example.com",
             "password": "Password123!",
@@ -89,7 +89,7 @@ def test_login_wrong_password(client: TestClient):
         },
     )
     response = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "test@example.com", "password": "WrongPassword!"},
     )
     assert response.status_code == 401
@@ -97,7 +97,7 @@ def test_login_wrong_password(client: TestClient):
 
 def test_login_nonexistent_email(client: TestClient):
     response = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "nobody@example.com", "password": "Password123!"},
     )
     assert response.status_code == 401
@@ -105,7 +105,7 @@ def test_login_nonexistent_email(client: TestClient):
 
 def test_me_authenticated(client: TestClient):
     signup_resp = client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "test@example.com",
             "password": "Password123!",
@@ -113,7 +113,9 @@ def test_me_authenticated(client: TestClient):
         },
     )
     token = signup_resp.json()["access_token"]
-    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    response = client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["email"] == "test@example.com"
@@ -122,20 +124,20 @@ def test_me_authenticated(client: TestClient):
 
 
 def test_me_unauthenticated(client: TestClient):
-    response = client.get("/api/auth/me")
+    response = client.get("/api/v1/auth/me")
     assert response.status_code == 401
 
 
 def test_me_expired_token(client: TestClient):
     response = client.get(
-        "/api/auth/me", headers={"Authorization": "Bearer invalid.token.here"}
+        "/api/v1/auth/me", headers={"Authorization": "Bearer invalid.token.here"}
     )
     assert response.status_code == 401
 
 
 def test_refresh_valid_cookie(client: TestClient):
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "test@example.com",
             "password": "Password123!",
@@ -143,19 +145,19 @@ def test_refresh_valid_cookie(client: TestClient):
         },
     )
     login_resp = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "test@example.com", "password": "Password123!"},
     )
     refresh_cookie = login_resp.cookies.get("refresh_token")
     response = client.post(
-        "/api/auth/refresh", cookies={"refresh_token": refresh_cookie}
+        "/api/v1/auth/refresh", cookies={"refresh_token": refresh_cookie}
     )
     assert response.status_code == 200
     assert "access_token" in response.json()
 
 
 def test_refresh_missing_cookie(client: TestClient):
-    response = client.post("/api/auth/refresh")
+    response = client.post("/api/v1/auth/refresh")
     assert response.status_code == 401
 
 
@@ -184,7 +186,7 @@ def test_google_callback_new_user(client: TestClient):
             # Since authorize_access_token relies on starlette session, the TestClient request needs a session cookie,
             # but mocking authorize_access_token bypasses the actual session verification inside authlib!
             response = client.get(
-                "/api/auth/google/callback?code=mock_code&state=mock_state"
+                "/api/v1/auth/google/callback?code=mock_code&state=mock_state"
             )
 
             assert response.status_code == 200
@@ -195,7 +197,7 @@ def test_google_callback_new_user(client: TestClient):
             # Verify it's actually in DB as google provider
             token = data["access_token"]
             me_resp = client.get(
-                "/api/auth/me", headers={"Authorization": f"Bearer {token}"}
+                "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
             )
             me_data = me_resp.json()
             assert me_data["email"] == "newgoogleuser@example.com"
@@ -205,7 +207,7 @@ def test_google_callback_new_user(client: TestClient):
 def test_google_callback_existing_local(client: TestClient):
     # Setup local user
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "localgoogle@example.com",
             "password": "Password123!",
@@ -230,7 +232,7 @@ def test_google_callback_existing_local(client: TestClient):
             mock_parse.return_value = mock_user_info
 
             response = client.get(
-                "/api/auth/google/callback?code=mock_code&state=mock_state"
+                "/api/v1/auth/google/callback?code=mock_code&state=mock_state"
             )
 
             assert response.status_code == 200
@@ -240,7 +242,7 @@ def test_google_callback_existing_local(client: TestClient):
             # Check provider changed to google
             token = data["access_token"]
             me_resp = client.get(
-                "/api/auth/me", headers={"Authorization": f"Bearer {token}"}
+                "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
             )
             me_data = me_resp.json()
             assert me_data["provider"] == "google"
@@ -256,7 +258,7 @@ def test_google_callback_invalid_code(client: TestClient):
         )
 
         response = client.get(
-            "/api/auth/google/callback?code=bad_code&state=mock_state"
+            "/api/v1/auth/google/callback?code=bad_code&state=mock_state"
         )
 
         assert response.status_code == 400
@@ -266,7 +268,7 @@ def test_google_callback_invalid_code(client: TestClient):
 def test_update_me(client: TestClient):
     # Setup token
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "update@example.com",
             "password": "Password123!",
@@ -274,16 +276,18 @@ def test_update_me(client: TestClient):
         },
     )
     token = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "update@example.com", "password": "Password123!"},
     ).json()["access_token"]
     auth_headers = {"Authorization": f"Bearer {token}"}
 
     # Valid update
-    res = client.patch("/api/auth/me", headers=auth_headers, json={"name": "New Name"})
+    res = client.patch(
+        "/api/v1/auth/me", headers=auth_headers, json={"name": "New Name"}
+    )
     assert res.status_code == 200
     assert res.json()["name"] == "New Name"
 
     # Invalid update
-    res = client.patch("/api/auth/me", headers=auth_headers, json={"name": ""})
+    res = client.patch("/api/v1/auth/me", headers=auth_headers, json={"name": ""})
     assert res.status_code == 422
