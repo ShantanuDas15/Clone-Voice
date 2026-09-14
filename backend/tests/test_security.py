@@ -26,7 +26,7 @@ def test_jwt_secret_too_short_raises():
 def test_refresh_token_rotated(client: TestClient):
     """After calling /refresh, the cookie value must differ from the original."""
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "rotate@example.com",
             "password": "Password123!",
@@ -34,14 +34,14 @@ def test_refresh_token_rotated(client: TestClient):
         },
     )
     login_resp = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "rotate@example.com", "password": "Password123!"},
     )
     old_refresh = login_resp.cookies.get("refresh_token")
     assert old_refresh is not None
 
     refresh_resp = client.post(
-        "/api/auth/refresh", cookies={"refresh_token": old_refresh}
+        "/api/v1/auth/refresh", cookies={"refresh_token": old_refresh}
     )
     assert refresh_resp.status_code == 200
 
@@ -71,7 +71,7 @@ def test_deleted_user_token_rejected(client: TestClient, db_session):
     db_session.flush()
 
     # Old token must now be rejected
-    resp = client.get("/api/auth/me", headers=headers)
+    resp = client.get("/api/v1/auth/me", headers=headers)
     assert resp.status_code == 401
 
 
@@ -80,7 +80,7 @@ def test_path_not_in_generation_response(client: TestClient):
 
     # Set up user and upload profile
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={
             "email": "pathcheck@example.com",
             "password": "Password123!",
@@ -88,7 +88,7 @@ def test_path_not_in_generation_response(client: TestClient):
         },
     )
     token = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": "pathcheck@example.com", "password": "Password123!"},
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -103,7 +103,7 @@ def test_path_not_in_generation_response(client: TestClient):
     wav_bytes = buf.read()
 
     up_res = client.post(
-        "/api/voice/upload",
+        "/api/v1/voice/upload",
         headers=headers,
         data={"name": "Path Voice"},
         files={"file": ("path.wav", wav_bytes, "audio/wav")},
@@ -113,12 +113,12 @@ def test_path_not_in_generation_response(client: TestClient):
 
     # Synthesize to generate a history entry
     client.post(
-        "/api/synthesize",
+        "/api/v1/synthesize",
         headers=headers,
         json={"voice_profile_id": profile_id, "text": "Path check test"},
     )
 
-    history = client.get("/api/synthesize/history", headers=headers).json()
+    history = client.get("/api/v1/synthesize/history", headers=headers).json()
     assert len(history) >= 1
 
     # Verify no OS path separators appear in filename field
