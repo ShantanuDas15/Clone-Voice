@@ -33,11 +33,11 @@ from backend.main import app
 def _signup_and_token(client: TestClient, email: str) -> dict:
     """Create a user account and return Bearer auth headers."""
     client.post(
-        "/api/auth/signup",
+        "/api/v1/auth/signup",
         json={"email": email, "password": "Password123!", "name": "RL Test"},
     )
     resp = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         json={"email": email, "password": "Password123!"},
     )
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
@@ -71,7 +71,7 @@ def test_rate_limit_disabled_in_tests_by_default():
 
 
 def test_synthesize_rate_limit_enforced(client: TestClient):
-    """POST /api/synthesize must return HTTP 429 after 5 requests per minute.
+    """POST /api/v1/synthesize must return HTTP 429 after 5 requests per minute.
 
     Strategy: send 6 requests with valid auth but a random (non-existent)
     voice_profile_id.  Requests 1–5 return 404 (profile not found — the route
@@ -90,7 +90,8 @@ def test_synthesize_rate_limit_enforced(client: TestClient):
     try:
         _enable_limiter()
         responses = [
-            client.post("/api/synthesize", headers=headers, json=body) for _ in range(6)
+            client.post("/api/v1/synthesize", headers=headers, json=body)
+            for _ in range(6)
         ]
         status_codes = [r.status_code for r in responses]
         assert 429 in status_codes, (
@@ -108,7 +109,7 @@ def test_synthesize_rate_limit_enforced(client: TestClient):
 
 
 def test_voice_upload_rate_limit_enforced(client: TestClient):
-    """POST /api/voice/upload must return HTTP 429 after 10 requests per minute.
+    """POST /api/v1/voice/upload must return HTTP 429 after 10 requests per minute.
 
     Strategy: send 11 requests with valid auth and a minimal WAV file.
     Requests 1–10 will return 4xx (audio too short / validation error).
@@ -124,7 +125,7 @@ def test_voice_upload_rate_limit_enforced(client: TestClient):
         responses = []
         for _ in range(11):
             resp = client.post(
-                "/api/voice/upload",
+                "/api/v1/voice/upload",
                 headers=headers,
                 data={"name": "RL Upload"},
                 files={"file": ("test.wav", b"\x00", "audio/wav")},

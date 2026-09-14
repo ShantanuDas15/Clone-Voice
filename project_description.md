@@ -174,7 +174,7 @@ clone-voice/
 | **Email + Password Signup** | Hash with bcrypt, store in PostgreSQL |
 | **Email + Password Login** | Verify hash → issue JWT access token |
 | **Google OAuth Login/Signup** | NextAuth.js on frontend + Authlib on backend |
-| **Protected Routes** | JWT middleware on all `/api/voice` and `/api/synthesize` endpoints |
+| **Protected Routes** | JWT middleware on all `/api/v1/voice` and `/api/v1/synthesize` endpoints |
 | **Profile Screen** | View account info, linked OAuth provider, voice profile history |
 
 ### Token Strategy
@@ -235,25 +235,25 @@ generations (id, user_id→users, voice_profile_id→voice_profiles, input_text,
 ### Auth
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/auth/signup` | Register with email + password |
-| `POST` | `/api/auth/login` | Login → returns JWT |
-| `POST` | `/api/auth/refresh` | Refresh access token |
-| `GET` | `/api/auth/me` | Get current user profile |
-| `GET` | `/api/auth/google` | Initiate Google OAuth flow |
-| `GET` | `/api/auth/google/callback` | Handle OAuth callback |
+| `POST` | `/api/v1/auth/signup` | Register with email + password |
+| `POST` | `/api/v1/auth/login` | Login → returns JWT |
+| `POST` | `/api/v1/auth/refresh` | Refresh access token |
+| `GET` | `/api/v1/auth/me` | Get current user profile |
+| `GET` | `/api/v1/auth/google` | Initiate Google OAuth flow |
+| `GET` | `/api/v1/auth/google/callback` | Handle OAuth callback |
 
 ### Voice
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/voice/upload` | Upload audio sample(s), create voice profile |
-| `GET` | `/api/voice/profiles` | List user's voice profiles |
-| `DELETE` | `/api/voice/profiles/{id}` | Delete a voice profile |
+| `POST` | `/api/v1/voice/upload` | Upload audio sample(s), create voice profile |
+| `GET` | `/api/v1/voice/profiles` | List user's voice profiles |
+| `DELETE` | `/api/v1/voice/profiles/{id}` | Delete a voice profile |
 
 ### Synthesis
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/synthesize` | Generate speech from text + voice profile ID |
-| `GET` | `/api/synthesize/history` | List user's generated audio history |
+| `POST` | `/api/v1/synthesize` | Generate speech from text + voice profile ID |
+| `GET` | `/api/v1/synthesize/history` | List user's generated audio history |
 
 ---
 
