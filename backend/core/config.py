@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod
