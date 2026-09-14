@@ -17,7 +17,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 | **A. API Layer** | Rate Limiting | ✅ Fixed | **High** | `core/rate_limit.py` — `Limiter(key_func=get_remote_address)`; `api/synthesize.py` — `@limiter.limit("5/minute")`; `api/voice.py` — `@limiter.limit("10/minute")` · commit `83e8dd1` | Resolved: `slowapi` integrated; 5 req/min on synthesize, 10 req/min on upload; disabled in test suite via `conftest.py`; 3 new rate-limit tests added. |
 | **B. ML/Inference** | Model Warm-up / Health | ✅ Fixed | **Medium** | `services/tts_pipeline.py` — `get_model_health()`; `main.py` — `health()`; `tests/test_health.py` · commit `02c04a3` | Resolved: `/health` now checks that `_encoder`, `_synthesizer`, and `_vocoder` are loaded and on the configured device, returning `200 {"status": "ok"}` only when all are ready and `503 {"status": "degraded"}` (with per-model detail) otherwise. |
 | **D. Observability** | Structured Logging | ✅ Fixed | **Medium** | `main.py` — `configure_logging()`, `CorrelationIdMiddleware`; `tests/test_logging.py` · commit `f79edda` | Resolved: root logging now emits JSON via `python-json-logger`; `asgi-correlation-id` middleware generates a per-request correlation ID, echoes it as `X-Request-ID`, and tags every log record with a `request_id` field via `CorrelationIdFilter`. |
-| **D. Observability** | Metrics & Exceptions | ❌ Missing | **Medium** | `main.py` | No visibility into inference latency, GPU utilization, or queue depth. No centralized error tracking (e.g., Sentry). |
+| **D. Observability** | Metrics & Exceptions | ⚠️ Partial | **Medium** | `core/sentry.py` — `init_sentry()`, `_before_send()`; `main.py`; `tests/test_sentry.py` · commit `8cdc99d` | Exception tracking resolved: `sentry-sdk` initialized with FastAPI/Starlette/logging integrations behind an optional `SENTRY_DSN` (no-op when unset); events tagged with the request's correlation ID. Inference latency/GPU-utilization/queue-depth metrics remain unaddressed. |
 | **C. Resilience** | Graceful Shutdown | ❌ Missing | **Medium** | `main.py:55` | Shutdown does not wait for in-flight requests or safely release GPU memory. |
 | **A. API Layer** | API Versioning | ❌ Missing | **Low** | `main.py:70-72` | Routes are mounted at `/api/...` rather than `/api/v1/...`, making future breaking changes difficult. |
 | **B. ML/Inference** | Reproducibility | ❌ Missing | **Low** | `services/tts_pipeline.py` | No mechanisms to enforce deterministic output via seeds for debugging or testing. |
@@ -56,7 +56,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 2. **Real Health Checks** — ✅ Done (commit `02c04a3`):
    - *Why*: The load balancer needs to know if the model is actually capable of serving requests.
    - *How*: Update `GET /health` to verify that `_encoder`, `_synthesizer`, and `_vocoder` are not `None` and are assigned to the correct torch device.
-3. **Exception Tracking**:
+3. **Exception Tracking** — ✅ Done (commit `8cdc99d`):
    - *Why*: Silent failures in the ML pipeline are hard to diagnose from logs alone.
    - *How*: Integrate Sentry via `sentry-sdk` with FastAPI integration.
 

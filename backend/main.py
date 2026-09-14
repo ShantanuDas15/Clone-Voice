@@ -16,6 +16,7 @@ from backend.api.synthesize import router as synthesize_router
 from backend.api.voice import router as voice_router
 from backend.core.config import settings
 from backend.core.rate_limit import limiter
+from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
 from backend.services.tts_pipeline import get_model_health, load_models
 
@@ -66,6 +67,7 @@ def configure_logging() -> None:
 
 
 configure_logging()
+init_sentry()
 
 logger = logging.getLogger(__name__)
 
