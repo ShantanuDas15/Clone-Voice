@@ -19,7 +19,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 | **D. Observability** | Structured Logging | ✅ Fixed | **Medium** | `main.py` — `configure_logging()`, `CorrelationIdMiddleware`; `tests/test_logging.py` · commit `f79edda` | Resolved: root logging now emits JSON via `python-json-logger`; `asgi-correlation-id` middleware generates a per-request correlation ID, echoes it as `X-Request-ID`, and tags every log record with a `request_id` field via `CorrelationIdFilter`. |
 | **D. Observability** | Metrics & Exceptions | ⚠️ Partial | **Medium** | `core/sentry.py` — `init_sentry()`, `_before_send()`; `main.py`; `tests/test_sentry.py` · commit `8cdc99d` | Exception tracking resolved: `sentry-sdk` initialized with FastAPI/Starlette/logging integrations behind an optional `SENTRY_DSN` (no-op when unset); events tagged with the request's correlation ID. Inference latency/GPU-utilization/queue-depth metrics remain unaddressed. |
 | **C. Resilience** | Graceful Shutdown | ❌ Missing | **Medium** | `main.py:55` | Shutdown does not wait for in-flight requests or safely release GPU memory. |
-| **A. API Layer** | API Versioning | ❌ Missing | **Low** | `main.py:70-72` | Routes are mounted at `/api/...` rather than `/api/v1/...`, making future breaking changes difficult. |
+| **A. API Layer** | API Versioning | ✅ Fixed | **Low** | `main.py` — `API_V1_PREFIX`; `tests/test_api_versioning.py` · commit `f9e493c` | Resolved: auth, voice, and synthesize routers are now mounted under `/api/v1/...` instead of bare `/api/...`; `/health` remains unversioned. Future breaking changes can ship as `/api/v2` without disturbing existing clients. |
 | **B. ML/Inference** | Reproducibility | ❌ Missing | **Low** | `services/tts_pipeline.py` | No mechanisms to enforce deterministic output via seeds for debugging or testing. |
 | **F. Config** | Hardcoded Paths | ⚠️ Partial | **Low** | `services/tts_pipeline.py:35` | Model weights directory is hardcoded relative to `__file__`, rather than driven by environment variables. |
 
@@ -61,7 +61,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
    - *How*: Integrate Sentry via `sentry-sdk` with FastAPI integration.
 
 ### Phase 4: Low (Polish)
-1. **API Versioning**:
+1. **API Versioning** — ✅ Done (commit `f9e493c`):
    - *Why*: Future-proof the API design.
    - *How*: Move routers to `/api/v1/auth`, `/api/v1/voice`, etc.
 2. **Configuration Cleanup**:
