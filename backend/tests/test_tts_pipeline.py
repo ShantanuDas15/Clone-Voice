@@ -157,49 +157,6 @@ def test_embed_speaker_async_returns_correct_shape():
 # ---------------------------------------------------------------------------
 
 
-def test_load_models_raises_on_bad_synthesizer_weights():
-    """load_models() must raise RuntimeError when synthesizer checkpoint is invalid.
-
-    Mocks torch.jit.load to raise on the first call (synthesizer), verifying
-    that no silent fallback occurs and a descriptive error propagates up.
-    """
-    call_count = {"n": 0}
-    original_jit_load = torch.jit.load
-
-    def mock_jit_load(path: str, map_location=None):
-        call_count["n"] += 1
-        if call_count["n"] == 1:
-            raise RuntimeError("mocked bad checkpoint")
-        return original_jit_load(path, map_location=map_location)
-
-    with patch(
-        "backend.services.tts_pipeline.torch.jit.load", side_effect=mock_jit_load
-    ):
-        with pytest.raises(RuntimeError, match="Failed to load synthesizer"):
-            load_models("cpu")
-
-
-def test_load_models_raises_on_bad_vocoder_weights():
-    """load_models() must raise RuntimeError when vocoder checkpoint is invalid.
-
-    Mocks torch.jit.load to raise only on the second call (vocoder), ensuring
-    the synthesizer path is irrelevant and the vocoder path is still guarded.
-    """
-    call_count = {"n": 0}
-
-    def mock_jit_load(path: str, map_location=None):
-        call_count["n"] += 1
-        if call_count["n"] == 2:
-            raise RuntimeError("mocked bad vocoder checkpoint")
-        raise RuntimeError("mocked bad synthesizer checkpoint")
-
-    with patch(
-        "backend.services.tts_pipeline.torch.jit.load", side_effect=mock_jit_load
-    ):
-        with pytest.raises(RuntimeError, match="Failed to load"):
-            load_models("cpu")
-
-
 def test_load_models_raises_when_no_checkpoints_present(tmp_path, monkeypatch):
     """load_models() must raise RuntimeError — not silently succeed or fall
     back to a mock — when WEIGHTS_DIR contains no checkpoint files at all.
@@ -208,13 +165,128 @@ def test_load_models_raises_when_no_checkpoints_present(tmp_path, monkeypatch):
     `download_weights.py` used to write placeholder bytes into `weights/`,
     making the directory *look* provisioned. This test uses a genuinely
     empty directory (no file written to `tmp_path`) and exercises the real
-    filesystem lookup in `load_models()`, not a mocked `torch.jit.load`.
+    filesystem lookup in `load_models()`.
     """
     monkeypatch.setattr(
         "backend.services.tts_pipeline.settings.WEIGHTS_DIR", str(tmp_path)
     )
-    with pytest.raises(RuntimeError, match="Failed to load synthesizer"):
+    with pytest.raises(RuntimeError, match="Synthesizer checkpoint not found"):
         load_models("cpu")
+
+
+def test_load_models_raises_on_synthesizer_checksum_mismatch(tmp_path, monkeypatch):
+    """load_models() must reject a synthesizer.pt whose SHA256 doesn't match
+    the pinned manifest — and must never pass that file to torch.load.
+
+    This is the security-relevant property from HARDENING_PLAN.md finding
+    C2: a corrupted download or a tampered checkpoint is rejected before any
+    deserialization is attempted, not after. Uses the real, unmocked
+    checksum path against `backend/weights_manifest.json` — the pinned
+    SHA256 for the real file will never match these garbage bytes.
+
+    Spies on (rather than replaces) torch.load: resemblyzer's VoiceEncoder
+    also calls torch.load internally to load its own pretrained weights, and
+    since `patch("...tts_pipeline.torch.load", ...)` patches the process-wide
+    torch module (not a private copy), a bare replacement would break that
+    unrelated call too. `wraps=` lets real calls through so we can assert on
+    which *paths* were ever loaded, not a raw call count.
+    """
+    (tmp_path / "synthesizer.pt").write_bytes(b"not a real checkpoint")
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.WEIGHTS_DIR", str(tmp_path)
+    )
+    real_torch_load = torch.load
+    with patch(
+        "backend.services.tts_pipeline.torch.load", wraps=real_torch_load
+    ) as spy_torch_load:
+        with pytest.raises(RuntimeError, match="Checksum mismatch"):
+            load_models("cpu")
+        loaded_paths = [str(call.args[0]) for call in spy_torch_load.call_args_list]
+        assert not any("synthesizer.pt" in p for p in loaded_paths)
+
+
+def _write_real_shaped_synthesizer_checkpoint(path) -> None:
+    """Save a full-size, correctly-shaped (but randomly-initialized) Tacotron
+    state_dict to ``path``, using the exact hparams `load_models()` builds
+    its Tacotron with — so `load_state_dict()` succeeds against it without
+    needing the real trained (and not-network-fetchable-in-tests) weights.
+    """
+    from backend.services.sv2tts.synthesizer.hparams import hparams as synth_hp
+    from backend.services.sv2tts.synthesizer.models.tacotron import Tacotron
+    from backend.services.sv2tts.synthesizer.utils.symbols import symbols
+
+    real_shaped = Tacotron(
+        embed_dims=synth_hp.tts_embed_dims,
+        num_chars=len(symbols),
+        encoder_dims=synth_hp.tts_encoder_dims,
+        decoder_dims=synth_hp.tts_decoder_dims,
+        n_mels=synth_hp.num_mels,
+        fft_bins=synth_hp.num_mels,
+        postnet_dims=synth_hp.tts_postnet_dims,
+        encoder_K=synth_hp.tts_encoder_K,
+        lstm_dims=synth_hp.tts_lstm_dims,
+        postnet_K=synth_hp.tts_postnet_K,
+        num_highways=synth_hp.tts_num_highways,
+        dropout=synth_hp.tts_dropout,
+        stop_threshold=synth_hp.tts_stop_threshold,
+        speaker_embedding_size=synth_hp.speaker_embedding_size,
+    )
+    torch.save({"model_state": real_shaped.state_dict()}, path)
+
+
+def test_load_models_raises_on_vocoder_checksum_mismatch(tmp_path, monkeypatch):
+    """Same guarantee as the synthesizer checksum test, for vocoder.pt.
+
+    Requires the synthesizer path to succeed first so the vocoder check is
+    actually reached: a real-shaped (untrained) synthesizer checkpoint plus
+    a mocked checksum pass gets past the synthesizer step, isolating the
+    vocoder checksum mismatch as the only remaining failure.
+    """
+    _write_real_shaped_synthesizer_checkpoint(tmp_path / "synthesizer.pt")
+    (tmp_path / "vocoder.pt").write_bytes(b"not a real checkpoint")
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.WEIGHTS_DIR", str(tmp_path)
+    )
+
+    def fake_verify(path, filename, manifest):
+        if filename == "synthesizer.pt":
+            return  # accept the untrained-but-real-shaped test checkpoint
+        raise RuntimeError(f"Checksum mismatch for '{filename}'")
+
+    real_torch_load = torch.load
+    with patch(
+        "backend.services.tts_pipeline.verify_checksum", side_effect=fake_verify
+    ):
+        # wraps=real_torch_load: synthesizer's load must genuinely succeed
+        # (against the real-shaped file on disk) for this test to prove
+        # anything about the *vocoder* path specifically.
+        with patch(
+            "backend.services.tts_pipeline.torch.load", wraps=real_torch_load
+        ) as spy_torch_load:
+            with pytest.raises(RuntimeError, match="Checksum mismatch"):
+                load_models("cpu")
+            loaded_paths = [str(call.args[0]) for call in spy_torch_load.call_args_list]
+            # The synthesizer (which passed its mocked checksum check) *was*
+            # loaded — proving this test actually reached the vocoder step —
+            # but the rejected vocoder.pt never was.
+            assert any("synthesizer.pt" in p for p in loaded_paths)
+            assert not any("vocoder.pt" in p for p in loaded_paths)
+
+
+def test_load_models_raises_on_malformed_synthesizer_checkpoint(tmp_path, monkeypatch):
+    """A checksum-verified synthesizer.pt that doesn't match the real Tacotron
+    architecture must still fail loudly (missing/mismatched state_dict keys),
+    not load partially or silently.
+    """
+    torch.save(
+        {"model_state": {"bogus_key": torch.zeros(1)}}, tmp_path / "synthesizer.pt"
+    )
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.WEIGHTS_DIR", str(tmp_path)
+    )
+    with patch("backend.services.tts_pipeline.verify_checksum", return_value=None):
+        with pytest.raises(RuntimeError, match="Failed to load synthesizer"):
+            load_models("cpu")
 
 
 def test_synthesize_speech_raises_if_synthesizer_not_loaded(monkeypatch):
