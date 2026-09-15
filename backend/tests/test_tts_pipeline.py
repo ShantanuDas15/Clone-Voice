@@ -200,6 +200,23 @@ def test_load_models_raises_on_bad_vocoder_weights():
             load_models("cpu")
 
 
+def test_load_models_raises_when_no_checkpoints_present(tmp_path, monkeypatch):
+    """load_models() must raise RuntimeError — not silently succeed or fall
+    back to a mock — when WEIGHTS_DIR contains no checkpoint files at all.
+
+    Regression test for HARDENING_PLAN.md Critical finding C2:
+    `download_weights.py` used to write placeholder bytes into `weights/`,
+    making the directory *look* provisioned. This test uses a genuinely
+    empty directory (no file written to `tmp_path`) and exercises the real
+    filesystem lookup in `load_models()`, not a mocked `torch.jit.load`.
+    """
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.WEIGHTS_DIR", str(tmp_path)
+    )
+    with pytest.raises(RuntimeError, match="Failed to load synthesizer"):
+        load_models("cpu")
+
+
 def test_synthesize_speech_raises_if_synthesizer_not_loaded(monkeypatch):
     """synthesize_speech() must raise RuntimeError when _synthesizer is None.
 
