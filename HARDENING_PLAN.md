@@ -21,7 +21,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 | **C. Resilience** | Graceful Shutdown | ❌ Missing | **Medium** | `main.py:55` | Shutdown does not wait for in-flight requests or safely release GPU memory. |
 | **A. API Layer** | API Versioning | ✅ Fixed | **Low** | `main.py` — `API_V1_PREFIX`; `tests/test_api_versioning.py` · commit `f9e493c` | Resolved: auth, voice, and synthesize routers are now mounted under `/api/v1/...` instead of bare `/api/...`; `/health` remains unversioned. Future breaking changes can ship as `/api/v2` without disturbing existing clients. |
 | **B. ML/Inference** | Reproducibility | ❌ Missing | **Low** | `services/tts_pipeline.py` | No mechanisms to enforce deterministic output via seeds for debugging or testing. |
-| **F. Config** | Hardcoded Paths | ⚠️ Partial | **Low** | `services/tts_pipeline.py:35` | Model weights directory is hardcoded relative to `__file__`, rather than driven by environment variables. |
+| **F. Config** | Hardcoded Paths | ✅ Fixed | **Low** | `core/config.py` — `Settings.WEIGHTS_DIR`; `services/tts_pipeline.py` — `load_models()`; `tests/test_config.py` · commit `293efa6` | Resolved: `WEIGHTS_DIR` added to `Settings` (defaults to `backend/weights`, overridable via env/`.env`); `load_models()` now reads `settings.WEIGHTS_DIR` instead of a path hardcoded relative to `__file__`. |
 
 ---
 
@@ -64,7 +64,7 @@ The CloneVoice backend provides a solid structural foundation, utilizing FastAPI
 1. **API Versioning** — ✅ Done (commit `f9e493c`):
    - *Why*: Future-proof the API design.
    - *How*: Move routers to `/api/v1/auth`, `/api/v1/voice`, etc.
-2. **Configuration Cleanup**:
+2. **Configuration Cleanup** — ✅ Done (commit `293efa6`):
    - *Why*: Improves environment flexibility.
    - *How*: Add `WEIGHTS_DIR` to `core/config.py` instead of the hardcoded `os.path.join` in `tts_pipeline.py`.
 
