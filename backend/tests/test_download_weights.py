@@ -10,11 +10,24 @@ from backend.download_weights import (_check_synthesizer_and_vocoder,
                                       download_weights)
 
 
-def test_check_synthesizer_and_vocoder_true_when_both_present(tmp_path):
+def test_check_synthesizer_and_vocoder_true_when_present_and_checksum_verified(
+    tmp_path,
+):
     (tmp_path / "synthesizer.pt").write_bytes(b"not empty")
     (tmp_path / "vocoder.pt").write_bytes(b"not empty")
 
-    assert _check_synthesizer_and_vocoder(str(tmp_path)) is True
+    with patch("backend.download_weights.verify_checksum", return_value=None):
+        assert _check_synthesizer_and_vocoder(str(tmp_path)) is True
+
+
+def test_check_synthesizer_and_vocoder_false_on_checksum_mismatch(tmp_path):
+    """Real, unmocked checksum path: dummy bytes will never match the
+    pinned manifest hash for the real checkpoint (HARDENING_PLAN.md finding
+    C2 — corrupted/tampered files must be reported, not just missing ones)."""
+    (tmp_path / "synthesizer.pt").write_bytes(b"not the real checkpoint")
+    (tmp_path / "vocoder.pt").write_bytes(b"not the real checkpoint")
+
+    assert _check_synthesizer_and_vocoder(str(tmp_path)) is False
 
 
 def test_check_synthesizer_and_vocoder_false_when_missing(tmp_path):
@@ -54,7 +67,8 @@ def test_download_weights_true_when_encoder_and_checkpoints_ready(tmp_path):
         with patch(
             "backend.download_weights._ensure_encoder_weights", return_value=True
         ):
-            result = download_weights()
+            with patch("backend.download_weights.verify_checksum", return_value=None):
+                result = download_weights()
 
     assert result is True
 

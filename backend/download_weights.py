@@ -6,22 +6,24 @@ that cache so the first real `load_models()` call doesn't pay the download
 cost at request time.
 
 The synthesizer and vocoder checkpoints are NOT bundled or auto-downloaded
-here. Unlike the encoder, no public, freely licensable TorchScript-serialized
-Tacotron2/WaveRNN checkpoint compatible with this pipeline's
-`torch.jit.load` interface (`backend.services.tts_pipeline.load_models`) is
-available to fetch automatically. An operator must supply real checkpoints
-at `WEIGHTS_DIR/synthesizer.pt` and `WEIGHTS_DIR/vocoder.pt` (see README.md,
-"Model Weights") before starting the server. `load_models()` raises
-`RuntimeError` and the server refuses to start rather than run with missing
-or invalid weights (HARDENING_PLAN.md, Critical finding C2).
+here yet (that is `--fetch` mode, a follow-up — see HARDENING_PLAN.md
+Milestone C2.2). An operator must manually place the real checkpoints —
+sourced from https://huggingface.co/CorentinJ/SV2TTS (MIT licensed; only
+`synthesizer.pt` and `vocoder.pt` are needed, `encoder.pt` is unused — see
+`backend/services/sv2tts/THIRD_PARTY_NOTICE.md`) — at
+`WEIGHTS_DIR/synthesizer.pt` and `WEIGHTS_DIR/vocoder.pt` (see README.md,
+"Model Weights") before starting the server. `load_models()`
+(`backend.services.tts_pipeline`) verifies each file's SHA256 against
+`backend/weights_manifest.json` and raises `RuntimeError` — refusing to
+start — on anything missing, corrupted, tampered with, or otherwise unable
+to load into the real Tacotron2/WaveRNN architecture
+(HARDENING_PLAN.md, Critical finding C2).
 
 This script previously wrote placeholder byte strings to
 `weights/tacotron.pt` and `weights/wavernn.pt` so the app *appeared* to have
 checkpoints provisioned. That masked the missing-weights problem instead of
-surfacing it: `torch.jit.load` failed on the garbage bytes at server
-startup, but anything checking only `Path.exists()` (this script included)
-was fooled into reporting readiness. This script no longer creates or
-overwrites any checkpoint file — it only reports what is present.
+surfacing it. This script no longer creates or overwrites any checkpoint
+file — it only reports what is present and checksum-verified.
 """
 
 import logging
@@ -29,6 +31,7 @@ import os
 import sys
 
 from backend.core.config import settings
+from backend.services.sv2tts.checksum import load_manifest, verify_checksum
 
 logger = logging.getLogger(__name__)
 
@@ -60,21 +63,23 @@ def _ensure_encoder_weights() -> bool:
 
 
 def _check_synthesizer_and_vocoder(weights_dir: str) -> bool:
-    """Report whether synthesizer/vocoder checkpoints are present at ``weights_dir``.
+    """Report whether synthesizer/vocoder checkpoints are present *and
+    checksum-verified* at ``weights_dir``.
 
-    This is a presence check only — it does not attempt to validate that the
-    files are loadable TorchScript modules. That check belongs solely to
-    ``load_models()`` (`backend.services.tts_pipeline`), which the running
-    server calls at startup and which refuses to start on an invalid or
-    missing checkpoint. Reporting presence here lets a provisioning or CI
-    step fail before the server is even started.
+    Uses the same pinned manifest and verification routine as
+    `load_models()` (`backend.services.tts_pipeline`,
+    `backend.services.sv2tts.checksum`) so a provisioning or CI step fails
+    with the same diagnosis the running server would hit at startup —
+    before the server is even started, and before a large checkpoint file
+    is ever deserialized.
 
     Args:
         weights_dir: Directory expected to hold both checkpoint files,
             typically ``settings.WEIGHTS_DIR``.
 
     Returns:
-        True if both checkpoints are present at ``weights_dir``.
+        True if both checkpoints are present at ``weights_dir`` and match
+        their pinned SHA256 in `backend/weights_manifest.json`.
     """
     missing = [
         name
@@ -91,7 +96,19 @@ def _check_synthesizer_and_vocoder(weights_dir: str) -> bool:
             ", ".join(missing),
         )
         return False
-    logger.info("Synthesizer and vocoder checkpoints found in %s.", weights_dir)
+
+    try:
+        manifest = load_manifest()
+        for name in REQUIRED_CHECKPOINTS:
+            verify_checksum(os.path.join(weights_dir, name), name, manifest)
+    except RuntimeError as exc:
+        logger.error("Checkpoint verification failed: %s", exc)
+        return False
+
+    logger.info(
+        "Synthesizer and vocoder checkpoints found and checksum-verified in %s.",
+        weights_dir,
+    )
     return True
 
 

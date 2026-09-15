@@ -63,15 +63,29 @@ docker-compose up --build
 
 ### 5. Model Weights
 
-The backend refuses to start without real SV2TTS checkpoints — it does not fall back to mock or placeholder weights (see `HARDENING_PLAN.md`, finding C2).
+The backend refuses to start without real, checksum-verified SV2TTS checkpoints — it does not
+fall back to mock, placeholder, or unverified weights (see `HARDENING_PLAN.md`, finding C2).
 
-- **Speaker encoder:** downloads automatically on first use via the `resemblyzer` package. Run `python -m backend.download_weights` to pre-warm this cache and confirm it succeeds.
-- **Synthesizer & vocoder:** you must supply your own TorchScript-serialized checkpoints, matching the interface in `backend/services/tts_pipeline.py` (`torch.jit.load`). Place them at:
+- **Speaker encoder:** downloads automatically on first use via the `resemblyzer` package. Run
+  `python -m backend.download_weights` to pre-warm this cache and confirm it succeeds.
+- **Synthesizer & vocoder:** real Tacotron2/WaveRNN checkpoints, loaded via the architecture
+  vendored at `backend/services/sv2tts/` (MIT licensed; see
+  `backend/services/sv2tts/THIRD_PARTY_NOTICE.md` for provenance and the exact upstream commit
+  pinned). Download `synthesizer.pt` and `vocoder.pt` (**not** `encoder.pt` — that's unused, the
+  encoder above already covers it) from
+  [huggingface.co/CorentinJ/SV2TTS](https://huggingface.co/CorentinJ/SV2TTS) (~424 MB combined)
+  and place them at:
   ```
   <WEIGHTS_DIR>/synthesizer.pt
   <WEIGHTS_DIR>/vocoder.pt
   ```
-  `WEIGHTS_DIR` defaults to `backend/weights/` and can be overridden via `.env` (`core/config.py`). `python -m backend.download_weights` exits non-zero and lists whichever checkpoint is missing.
+  `WEIGHTS_DIR` defaults to `backend/weights/` and can be overridden via `.env`
+  (`core/config.py`). Each file's SHA256 is checked against the pinned manifest at
+  `backend/weights_manifest.json` before it is ever loaded — a corrupted download or a tampered
+  file is rejected with a clear error, not silently loaded. `python -m backend.download_weights`
+  exits non-zero and reports exactly which checkpoint is missing or fails verification, without
+  making any network calls for these two files (a scripted, resumable `--fetch` download is
+  tracked as a follow-up — HARDENING_PLAN.md Milestone C2.2).
 
 ## 🗺️ Roadmap
 
