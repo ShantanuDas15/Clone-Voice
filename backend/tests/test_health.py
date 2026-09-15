@@ -29,6 +29,42 @@ def test_get_model_health_ready_when_all_models_loaded() -> None:
         assert status[name]["device_ok"] is True
 
 
+def test_checksum_verified_false_for_mock_models() -> None:
+    """The test suite runs on load_mock_models() — real checkpoints were
+    never loaded, so checksum_verified must be False (not True, and not
+    silently absent), never mistaken for a verified production deployment
+    (HARDENING_PLAN.md Milestone C2.3)."""
+    status = get_model_health("cpu")
+    assert status["synthesizer"]["checksum_verified"] is False
+    assert status["vocoder"]["checksum_verified"] is False
+
+
+def test_checksum_verified_none_for_encoder() -> None:
+    """The encoder's weights come from resemblyzer's own cache, not
+    weights_manifest.json — checksum verification doesn't apply to it, and
+    must be reported as None, not False (which would read as "checked and
+    failed")."""
+    status = get_model_health("cpu")
+    assert status["encoder"]["checksum_verified"] is None
+
+
+def test_checksum_verified_none_when_model_not_loaded() -> None:
+    with _temporarily(tts_pipeline, "_synthesizer", None):
+        status = get_model_health("cpu")
+    assert status["synthesizer"]["loaded"] is False
+    assert status["synthesizer"]["checksum_verified"] is None
+
+
+def test_checksum_verified_true_reflects_module_flag_when_loaded() -> None:
+    """get_model_health() reports whatever load_models() actually recorded —
+    verified here via the module flag directly (real load_models() needs
+    real weights, covered separately by the opt-in
+    test_real_weights_end_to_end_synthesis in test_sv2tts_vendored.py)."""
+    with _temporarily(tts_pipeline, "_synthesizer_checksum_verified", True):
+        status = get_model_health("cpu")
+    assert status["synthesizer"]["checksum_verified"] is True
+
+
 def test_get_model_health_not_ready_when_a_model_is_missing() -> None:
     """A model that failed to load (None) must flip `ready` to False."""
     with _temporarily(tts_pipeline, "_synthesizer", None):

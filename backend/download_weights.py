@@ -17,6 +17,10 @@ https://huggingface.co/CorentinJ/SV2TTS). Two modes are available:
     checkpoint from the pinned Hugging Face repo via `huggingface_hub`
     (resumable, retried, and idempotent — a file already present and
     checksum-verified is never re-downloaded).
+  - `--verify-inference`: after the above, loads the real models and runs
+    one short end-to-end synthesis as a post-deploy smoke test. Heavier
+    (loads ~424 MB into memory, runs a real forward pass) and deliberately
+    not part of the default/`--fetch` checks — a manual, one-time gate.
 
 Either way, `load_models()` (`backend.services.tts_pipeline`) is the
 authoritative gate: it re-verifies each checksum itself and refuses to
@@ -39,6 +43,7 @@ import os
 import sys
 from typing import List, Optional
 
+import numpy as np
 from huggingface_hub import hf_hub_download
 
 from backend.core.config import settings
@@ -250,6 +255,62 @@ def fetch_weights() -> bool:
     return encoder_ready and checkpoints_ready
 
 
+def verify_inference() -> bool:
+    """Load the real models and run one short end-to-end synthesis as a
+    post-deploy smoke test (`--verify-inference`).
+
+    Presence and checksum checks (this module's other functions) prove a
+    checkpoint *file* is intact — they can't prove it actually produces
+    working audio through the real inference code path (a shape mismatch,
+    a wrong hparam, or a subtly incompatible checkpoint would still pass
+    them). This is the one check in this module that actually runs
+    inference, so an operator can catch that class of problem once, after
+    deploying, before it's discovered on a real user's first request.
+
+    Not part of `download_weights()`/`fetch_weights()`/the server's own
+    startup: it loads the full ~424 MB of real weights into memory and runs
+    a real forward pass through both models, which is too heavy for a fast
+    CI/pre-deploy gate. Intended as a deliberate, manual, one-time check.
+
+    Returns:
+        True if the models loaded and produced a non-empty waveform.
+    """
+    # Imported here rather than at module scope: pulls in the full
+    # sv2tts package (torch, the vendored models) only when this heavier
+    # check is actually requested, keeping `--fetch`/the default
+    # presence+checksum check's import cost light.
+    from backend.services.tts_pipeline import (load_models, synthesize_speech,
+                                               vocode)
+
+    try:
+        load_models(device=settings.DEVICE)
+    except Exception:
+        logger.exception("verify-inference: load_models() failed.")
+        return False
+
+    try:
+        embedding = np.zeros(256, dtype=np.float32)
+        mel = synthesize_speech(
+            "This is a post deployment inference smoke test.", embedding
+        )
+        waveform = vocode(mel)
+    except Exception:
+        logger.exception("verify-inference: synthesis failed.")
+        return False
+
+    if waveform.size == 0:
+        logger.error("verify-inference: synthesis produced an empty waveform.")
+        return False
+
+    logger.info(
+        "verify-inference: OK — produced %d samples (%.2fs at %dHz).",
+        waveform.size,
+        waveform.size / settings.VOCODER_SAMPLE_RATE,
+        settings.VOCODER_SAMPLE_RATE,
+    )
+    return True
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point.
 
@@ -272,9 +333,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             "calls are made for these two files unless --fetch is passed."
         ),
     )
+    parser.add_argument(
+        "--verify-inference",
+        action="store_true",
+        help=(
+            "After the checks above (or --fetch) succeed, load the real "
+            "models and run one short end-to-end synthesis as a smoke "
+            "test — catches a shape/interface/checkpoint-compatibility "
+            "problem before it's discovered on a real request. Loads the "
+            "full ~424MB of weights into memory; a deliberate, heavier, "
+            "manual check, not a fast CI gate."
+        ),
+    )
     args = parser.parse_args(argv)
 
     ready = fetch_weights() if args.fetch else download_weights()
+    if ready and args.verify_inference:
+        ready = verify_inference()
     return 0 if ready else 1
 
 
