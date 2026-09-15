@@ -61,6 +61,18 @@ docker-compose up --build
 - **API Documentation:** http://localhost:8000/docs
 - **Database:** localhost:5432
 
+### 5. Model Weights
+
+The backend refuses to start without real SV2TTS checkpoints — it does not fall back to mock or placeholder weights (see `HARDENING_PLAN.md`, finding C2).
+
+- **Speaker encoder:** downloads automatically on first use via the `resemblyzer` package. Run `python -m backend.download_weights` to pre-warm this cache and confirm it succeeds.
+- **Synthesizer & vocoder:** you must supply your own TorchScript-serialized checkpoints, matching the interface in `backend/services/tts_pipeline.py` (`torch.jit.load`). Place them at:
+  ```
+  <WEIGHTS_DIR>/synthesizer.pt
+  <WEIGHTS_DIR>/vocoder.pt
+  ```
+  `WEIGHTS_DIR` defaults to `backend/weights/` and can be overridden via `.env` (`core/config.py`). `python -m backend.download_weights` exits non-zero and lists whichever checkpoint is missing.
+
 ## 🗺️ Roadmap
 
 - **Phase 1:** Core Backend Architecture & AI Inference Pipeline (In Progress)
