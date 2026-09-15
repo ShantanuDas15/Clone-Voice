@@ -113,7 +113,7 @@ def load_models(device: str = "cpu") -> None:
     _encoder = VoiceEncoder(device=device)
     logger.info("Speaker encoder loaded.")
 
-    weights_dir = os.path.join(os.path.dirname(__file__), "..", "weights")
+    weights_dir = settings.WEIGHTS_DIR
 
     synth_path = os.path.join(weights_dir, "synthesizer.pt")
     if not os.path.exists(synth_path):
