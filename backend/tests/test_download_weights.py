@@ -2,7 +2,9 @@
 finding C2 — no fake checkpoint may ever be written, and missing real
 checkpoints must be reported loudly, not masked; Milestone C2.2 — the
 `--fetch` download path must be idempotent, network-frugal, and never
-silently accept a corrupted download)."""
+silently accept a corrupted download; Milestone C2.3 — the
+`--verify-inference` smoke test must actually exercise inference, not just
+report presence/checksum)."""
 
 import os
 from unittest.mock import patch
@@ -12,7 +14,7 @@ from backend.download_weights import (REQUIRED_CHECKPOINTS,
                                       _ensure_encoder_weights,
                                       download_weights,
                                       fetch_and_verify_checkpoints,
-                                      fetch_weights, main)
+                                      fetch_weights, main, verify_inference)
 
 
 def test_check_synthesizer_and_vocoder_true_when_present_and_checksum_verified(
@@ -270,3 +272,77 @@ def test_main_fetch_flag_calls_fetch_weights_not_download_weights():
 def test_main_returns_nonzero_when_not_ready():
     with patch("backend.download_weights.download_weights", return_value=False):
         assert main([]) == 1
+
+
+# ---------------------------------------------------------------------------
+# --verify-inference (HARDENING_PLAN.md Milestone C2.3)
+# ---------------------------------------------------------------------------
+
+
+def test_verify_inference_true_on_successful_synthesis():
+    import numpy as np
+
+    with patch("backend.services.tts_pipeline.load_models"):
+        with patch(
+            "backend.services.tts_pipeline.synthesize_speech",
+            return_value=np.zeros((80, 10), dtype=np.float32),
+        ):
+            with patch(
+                "backend.services.tts_pipeline.vocode",
+                return_value=np.zeros(2000, dtype=np.float32),
+            ):
+                assert verify_inference() is True
+
+
+def test_verify_inference_false_when_load_models_fails():
+    with patch(
+        "backend.services.tts_pipeline.load_models",
+        side_effect=RuntimeError("boom"),
+    ):
+        assert verify_inference() is False
+
+
+def test_verify_inference_false_when_synthesis_raises():
+    with patch("backend.services.tts_pipeline.load_models"):
+        with patch(
+            "backend.services.tts_pipeline.synthesize_speech",
+            side_effect=RuntimeError("shape mismatch"),
+        ):
+            assert verify_inference() is False
+
+
+def test_verify_inference_false_on_empty_waveform():
+    import numpy as np
+
+    with patch("backend.services.tts_pipeline.load_models"):
+        with patch(
+            "backend.services.tts_pipeline.synthesize_speech",
+            return_value=np.zeros((80, 0), dtype=np.float32),
+        ):
+            with patch(
+                "backend.services.tts_pipeline.vocode",
+                return_value=np.zeros(0, dtype=np.float32),
+            ):
+                assert verify_inference() is False
+
+
+def test_main_verify_inference_flag_runs_only_after_ready_check_passes():
+    with patch("backend.download_weights.download_weights", return_value=True):
+        with patch(
+            "backend.download_weights.verify_inference", return_value=True
+        ) as vi:
+            exit_code = main(["--verify-inference"])
+
+    assert exit_code == 0
+    vi.assert_called_once()
+
+
+def test_main_verify_inference_flag_skipped_when_not_ready():
+    """No point running a heavy inference smoke test if the checkpoints
+    themselves aren't even present/verified yet."""
+    with patch("backend.download_weights.download_weights", return_value=False):
+        with patch("backend.download_weights.verify_inference") as vi:
+            exit_code = main(["--verify-inference"])
+
+    assert exit_code == 1
+    vi.assert_not_called()
