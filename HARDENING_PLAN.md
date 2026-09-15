@@ -3,6 +3,60 @@
 **Audit date:** 2026-09-15 · **Audited commit:** `367d671` (main) · **Status:** COMPLETE for backend application code; tests and Alembic migrations NOT reviewed (see §1)
 **Last reviewed:** 2026-09-15
 
+## Progress Overview
+
+**32 findings total — 5 Fixed · 0 Partial · 27 Not Started** (as of 2026-09-15). This is the
+current-state dashboard; the **Task Status Log** below it is the commit-by-commit history of how
+each fix landed, and **§3 Fix Plan** has the fuller action description for every not-started item.
+
+### ✅ Completed (5)
+
+| # | Finding | Commit(s) |
+|---|---------|-----------|
+| C1 | Storage cleanup deleted files still referenced by active voice profiles/generations | `9bb1922` |
+| C2 | No loadable model checkpoint — real weights (C2.1), fetch tooling (C2.2), health/smoke-test (C2.3), all 3 milestones done | `f253d3d`, `9a2d8c7`, `5e641e8`, `6bd0017` |
+| H1 | Inference tensors never moved to the model's device | `9a2d8c7` |
+| H2 | Text tokenized as raw Unicode code points instead of the real symbol set | `9a2d8c7` |
+| L8 | `download_weights.py` ignored `settings.WEIGHTS_DIR` (resolved incidentally by the C2 rewrite) | `f253d3d` |
+
+### ⚠️ Partial / In Progress (0)
+
+None currently — every finding below is either fully fixed above or not started yet.
+
+### ❌ Not Started (27)
+
+| # | Sev. | Finding | Planned fix (§3 has detail) |
+|---|------|---------|------------------------------|
+| C3 | Critical | User audio (130 files) committed to git history on `origin/main` | Remove from index; purge history via `git filter-repo` if the audio is real |
+| H3 | High | Inference errors (incl. OOM) not caught in the route; no failed-generation record | Wrap the pipeline call, map to 503/500, persist `status="failed"`, free CUDA cache |
+| H4 | High | WEBM/mixed-case uploads create profiles that can never be synthesized | Derive the storage extension from validated magic bytes, not the client filename |
+| H5 | High | Blocking upload/preprocessing/DB work runs directly on the event loop | Offload via `asyncio.to_thread` or make handlers sync `def` |
+| H6 | High | Inference semaphore has no acquisition timeout or queue-depth cap | Add an acquisition timeout + per-call inference timeout; job queue longer-term |
+| H7 | High | No Dockerfile/container definition; documented start path can't start the API | Add a backend Dockerfile + compose service, single-worker uvicorn command |
+| M1 | Medium | Refresh tokens are usable as access tokens (no `type` claim) | Add a `type` claim, enforce it in `get_current_user`/`/refresh` |
+| M2 | Medium | Google OAuth links/creates accounts without checking `email_verified` | Require `email_verified is True` before linking |
+| M3 | Medium | No rate limit on `/login`/`/signup`; limiter uses in-memory, per-process storage | Rate-limit auth endpoints; configure a shared `storage_uri` |
+| M4 | Medium | Zero-duration trimmed audio silently accepted and saved as `ready` | Reject below a minimum voiced duration, cap maximum |
+| M5 | Medium | Upload size checked only after the full multipart body is received | Enforce a body-size limit before multipart parsing |
+| M6 | Medium | Semaphore release doesn't wait for the worker thread to actually finish | Shield the thread future; drain in-flight inference on shutdown |
+| M7 | Medium | `/health` checks model presence only, never the DB | Split liveness/readiness; readiness adds a DB `SELECT 1` |
+| M8 | Medium | No latency/queue-depth metrics around inference | Emit per-stage latency, semaphore wait time, queue depth |
+| M9 | Medium | `UPLOAD_DIR`/`OUTPUT_DIR` relative to process CWD, unlike `WEIGHTS_DIR` | Anchor to `BASE_DIR` or require absolute paths |
+| M10 | Medium | `python-jose==3.3.0` — possible CVE-2024-33663/33664 (unverified) | Run `pip-audit`; upgrade or migrate to `PyJWT` |
+| L1 | Low | Orphaned upload + raw exception text returned on preprocessing failure | Delete the saved file, return a generic error detail |
+| L2 | Low | Wrong status code (500, not 4xx) for a non-`ready` voice profile | Return 409/422 when `profile.status != "ready"` |
+| L3 | Low | `/history` `limit`/`offset` unvalidated at the lower bound | Add `Query(ge=...)` bounds |
+| L4 | Low | Storage cleanup's directory walk runs synchronously inside the async task | Run `cleanup_stale_files` via `asyncio.to_thread` |
+| L5 | Low | DB engine has no `pool_pre_ping`, pool sizing, or connect timeout | Set `pool_pre_ping=True`, pool size, connect timeout |
+| L6 | Low | JWT signing secret reused as the session-cookie secret | Use a separate `SESSION_SECRET_KEY` |
+| L7 | Low | Dev/test tools (`pytest`, `black`, `isort`) in runtime `requirements.txt` | Split into `requirements-dev.txt`; pin `bcrypt` exactly |
+| L9 | Low | OAuth2 `tokenUrl` still points to the pre-versioning path | Set `tokenUrl` to `api/v1/auth/login` |
+| L10 | Low | Raw email (PII) logged on failed login / duplicate signup | Log a user ID or hashed email instead |
+| L11 | Low | `generations` table has no `updated_at`/`deleted_at` (CLAUDE.md §6) | Add both via an Alembic migration |
+| L12 | Low | `docker-compose.yml` hardcodes the DB password, exposes 5432 on all interfaces | Move credentials to env, bind to `127.0.0.1` |
+
+---
+
 ## Task Status Log
 
 | Finding | Status | Commit | Notes |
