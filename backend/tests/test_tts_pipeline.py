@@ -273,6 +273,60 @@ def test_load_models_raises_on_vocoder_checksum_mismatch(tmp_path, monkeypatch):
             assert not any("vocoder.pt" in p for p in loaded_paths)
 
 
+def _write_real_shaped_vocoder_checkpoint(path) -> None:
+    """Save a full-size, correctly-shaped (but randomly-initialized) WaveRNN
+    state_dict to ``path`` — the vocoder counterpart of
+    `_write_real_shaped_synthesizer_checkpoint` above."""
+    from backend.services.sv2tts.vocoder import hparams as voc_hp
+    from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
+
+    real_shaped = WaveRNN(
+        rnn_dims=voc_hp.voc_rnn_dims,
+        fc_dims=voc_hp.voc_fc_dims,
+        bits=voc_hp.bits,
+        pad=voc_hp.voc_pad,
+        upsample_factors=voc_hp.voc_upsample_factors,
+        feat_dims=voc_hp.num_mels,
+        compute_dims=voc_hp.voc_compute_dims,
+        res_out_dims=voc_hp.voc_res_out_dims,
+        res_blocks=voc_hp.voc_res_blocks,
+        hop_length=voc_hp.hop_length,
+        sample_rate=voc_hp.sample_rate,
+        mode=voc_hp.voc_mode,
+    )
+    torch.save({"model_state": real_shaped.state_dict()}, path)
+
+
+def test_load_models_sets_checksum_verified_flags_on_success(tmp_path, monkeypatch):
+    """load_models() must record checksum_verified=True for each model it
+    successfully loads (HARDENING_PLAN.md Milestone C2.3) — and
+    load_mock_models() must leave both False again afterward, so this test
+    doesn't leak a "verified" state into any test that runs after it.
+    """
+    _write_real_shaped_synthesizer_checkpoint(tmp_path / "synthesizer.pt")
+    _write_real_shaped_vocoder_checkpoint(tmp_path / "vocoder.pt")
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.WEIGHTS_DIR", str(tmp_path)
+    )
+
+    import backend.services.tts_pipeline as tts_pipeline_module
+
+    try:
+        with patch("backend.services.tts_pipeline.verify_checksum", return_value=None):
+            load_models("cpu")
+
+        assert tts_pipeline_module._synthesizer_checksum_verified is True
+        assert tts_pipeline_module._vocoder_checksum_verified is True
+
+        status = tts_pipeline_module.get_model_health("cpu")
+        assert status["synthesizer"]["checksum_verified"] is True
+        assert status["vocoder"]["checksum_verified"] is True
+    finally:
+        # Restore the module-scoped mock fixture's state for every test that
+        # runs after this one in the file.
+        load_mock_models("cpu")
+
+
 def test_load_models_raises_on_malformed_synthesizer_checkpoint(tmp_path, monkeypatch):
     """A checksum-verified synthesizer.pt that doesn't match the real Tacotron
     architecture must still fail loudly (missing/mismatched state_dict keys),
