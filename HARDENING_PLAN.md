@@ -1,6 +1,18 @@
 # CloneVoice Backend — Production-Hardening Audit
 
 **Audit date:** 2026-09-15 · **Audited commit:** `367d671` (main) · **Status:** COMPLETE for backend application code; tests and Alembic migrations NOT reviewed (see §1)
+**Last reviewed:** 2026-09-15
+
+## Task Status Log
+
+| Finding | Status | Commit | Notes |
+|---------|--------|--------|-------|
+| C1 — Storage cleanup deletes live user data | ✅ Fixed | `9bb1922` | `get_protected_paths()` queries active voice-profile and generation paths from the DB each pass; `cleanup_stale_files()` skips them regardless of age. Soft-deleted profiles remain eligible for pruning. Validated: 13/13 tests in `test_storage_cleanup.py` pass (6 new), full suite 103/103 pass, zero errors/failures. |
+| C2 — No loadable model checkpoints | ❌ Open | — | Unchanged. |
+| C3 — User audio committed to git history | ❌ Open | — | Unchanged. |
+| H1–H7 | ❌ Open | — | Unchanged. |
+| M1–M10 | ❌ Open | — | Unchanged. |
+| L1–L12 | ❌ Open | — | Unchanged. |
 
 > This file replaces the previous hardening tracker (last version at commit `07299f1`, recoverable with `git show 07299f1:HARDENING_PLAN.md`).
 > That tracker marked "Resource Cleanup Guarantees" as ✅ Fixed (`a596055`). This audit finds that the fix itself deletes live user data (finding **C1**).
@@ -46,7 +58,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 
 | # | Area | Issue | Evidence (file:line) | Severity + justification | Observed / Inferred |
 |---|------|-------|----------------------|--------------------------|---------------------|
-| C1 | Failure modes / data | Storage cleanup deletes files in `uploads/` and `outputs/` purely by mtime. It never checks the DB. Every voice profile's audio sample and `_embed.npy` lives in `UPLOAD_DIR`, so cleanup destroys them 24h after creation while the profile stays `ready`. | `services/storage_cleanup.py:48-49`; `main.py:82-86`; `core/config.py:30` (`STORAGE_MAX_AGE_HOURS = 24`); `api/voice.py:47-49` (embedding path derived from upload path); `api/synthesize.py:47-53` (`np.load` failure → 500) | **Critical.** The default config enables deletion on startup (`main.py:81`), and the only embedding copy is the file being deleted. Once a profile is 24h old, the code path is `np.load` → exception → HTTP 500, so the core feature breaks for every profile. | Observed (code path). Not executed end-to-end. |
+| C1 | Failure modes / data | ✅ **Fixed** (`9bb1922`). Storage cleanup deleted files in `uploads/` and `outputs/` purely by mtime, never checking the DB. Every voice profile's audio sample and `_embed.npy` lived in `UPLOAD_DIR`, so cleanup destroyed them 24h after creation while the profile stayed `ready`. | `services/storage_cleanup.py:48-49`; `main.py:82-86`; `core/config.py:30` (`STORAGE_MAX_AGE_HOURS = 24`); `api/voice.py:47-49` (embedding path derived from upload path); `api/synthesize.py:47-53` (`np.load` failure → 500) | **Critical.** The default config enables deletion on startup (`main.py:81`), and the only embedding copy is the file being deleted. Once a profile is 24h old, the code path is `np.load` → exception → HTTP 500, so the core feature breaks for every profile. | Observed (code path). Not executed end-to-end. |
 | C2 | Model loading | The repo contains no loadable synthesizer or vocoder checkpoint. `download_weights.py` writes placeholder bytes, and `load_models()` raises on them, so the app lifespan fails. | `download_weights.py:28-36` (`b"dummy_tacotron_weights"`); `backend/weights/tacotron.pt` = 22 bytes, `wavernn.pt` = 21 bytes; `services/tts_pipeline.py:122-130, 136-144`; `main.py:79` | **Critical.** Executed: both files fail `torch.jit.load`. With the only weights this repo can provision, the server cannot start. | Observed (executed). Whether real weights exist elsewhere via `WEIGHTS_DIR` → §4. |
 | C3 | Config / repo hygiene | Uploaded voice recordings, speaker embeddings, and synthesized outputs are committed and pushed to `origin/main`. They were added before the ignore rule existed, and `.gitignore` does not untrack files. | 130 files under `uploads/` on `origin/main`; added in `1d73633`, `5c5ea10`, `4765cb4`, `8d74f37`; ignore rules added later in `fd7c02e` (`.gitignore:27-28`) | **High, or Critical if the recordings are real people's voices.** Speaker embeddings are biometric identifiers and are now in remote git history, which a later deletion does not remove. | Observed (git). Whether the audio is real → §4. |
 | H1 | Inference path | Input tensors are built on CPU and never moved to the model device, while models are loaded with `map_location=device`. | `services/tts_pipeline.py:190-193`, `:217` (no `.to(...)`); `:123`, `:137` (`map_location=device`); `core/config.py:22` (`DEVICE` configurable) | **High.** Grep confirms no `.to(` on inputs anywhere in production code. The GPU configuration is exposed but unusable. | Inferred: with `DEVICE=cuda`, every forward pass raises a device-mismatch `RuntimeError`. |
@@ -84,7 +96,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 ## 3. Fix Plan (by severity)
 
 ### Critical
-- **C1:** Stop age-pruning referenced files. Exclude any path referenced by a non-deleted `voice_profiles` or `generations` row, or prune only after soft-delete. Store embeddings outside the pruned tree.
+- **C1:** ✅ Done (`9bb1922`) — Stop age-pruning referenced files. Exclude any path referenced by a non-deleted `voice_profiles` or `generations` row.
 - **C2:** Provision real TorchScript synthesizer/vocoder checkpoints (download plus checksum verification). Delete the placeholder-writing code and fail loudly if the files are missing.
 - **C3:** Remove `uploads/`, `outputs/`, and `test_output.wav` from the index. If the audio is real, purge it from history (`git filter-repo`) and coordinate with anyone who has cloned the repo.
 
