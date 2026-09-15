@@ -15,6 +15,7 @@ from backend.api.auth import router as auth_router
 from backend.api.synthesize import router as synthesize_router
 from backend.api.voice import router as voice_router
 from backend.core.config import settings
+from backend.core.database import SessionLocal
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
@@ -83,6 +84,7 @@ async def lifespan(app: FastAPI):
             directories=[settings.UPLOAD_DIR, settings.OUTPUT_DIR],
             interval_seconds=settings.STORAGE_CLEANUP_INTERVAL_SECONDS,
             max_age_hours=settings.STORAGE_MAX_AGE_HOURS,
+            session_factory=SessionLocal,
         )
     )
     logger.info(
