@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     MAX_AUDIO_SIZE_MB: int = 25
     UPLOAD_DIR: str = "uploads"
     OUTPUT_DIR: str = "outputs"
+    WEIGHTS_DIR: str = str(BASE_DIR / "weights")
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
     VOCODER_SAMPLE_RATE: int = 22050
     RATE_LIMIT_ENABLED: bool = True
