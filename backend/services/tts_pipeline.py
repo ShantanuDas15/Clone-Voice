@@ -10,6 +10,15 @@ import soundfile as sf
 import torch
 
 from backend.core.config import settings
+from backend.services.sv2tts.checksum import load_manifest, verify_checksum
+from backend.services.sv2tts.synthesizer.hparams import \
+    hparams as synth_hparams
+from backend.services.sv2tts.synthesizer.models.tacotron import Tacotron
+from backend.services.sv2tts.synthesizer.utils.symbols import \
+    symbols as sv2tts_symbols
+from backend.services.sv2tts.synthesizer.utils.text import text_to_sequence
+from backend.services.sv2tts.vocoder import hparams as vocoder_hparams
+from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
 
 try:
     from resemblyzer import VoiceEncoder
@@ -51,6 +60,17 @@ def _module_device(module: torch.nn.Module) -> "torch.device | None":
         return next(module.parameters()).device
     except StopIteration:
         return None
+
+
+def _inference_device(module: torch.nn.Module) -> torch.device:
+    """Return the device to place inference inputs on for ``module``.
+
+    Reads the real device from the module's own parameters
+    (HARDENING_PLAN.md finding H1 — never assume or guess) and falls back to
+    CPU only for the parameter-less mock test doubles, which have no device
+    of their own.
+    """
+    return _module_device(module) or torch.device("cpu")
 
 
 def get_model_health(expected_device: str | None = None) -> dict:
@@ -99,9 +119,19 @@ def get_model_health(expected_device: str | None = None) -> dict:
 def load_models(device: str = "cpu") -> None:
     """Load all SV2TTS models into memory for inference.
 
+    The synthesizer and vocoder are real Tacotron2/WaveRNN checkpoints
+    (vendored architecture: `backend/services/sv2tts/`, see
+    `THIRD_PARTY_NOTICE.md` there) loaded as raw ``state_dict``s — not
+    TorchScript. Each checkpoint's SHA256 is verified against
+    `backend/weights_manifest.json` *before* ``torch.load`` ever touches the
+    file, so a corrupted download or a tampered file is rejected before any
+    deserialization is attempted (HARDENING_PLAN.md finding C2).
+
     Raises:
-        RuntimeError: If resemblyzer is not installed or any model checkpoint
-            fails to load.  The server must not start in a degraded state.
+        RuntimeError: If resemblyzer is not installed, the checksum manifest
+            is missing/malformed, a checkpoint file is missing, its checksum
+            does not match, or it fails to load into the real model
+            architecture. The server must not start in a degraded state.
     """
     global _encoder, _synthesizer, _vocoder
     logger.info("Loading SV2TTS models on %s...", device)
@@ -114,33 +144,80 @@ def load_models(device: str = "cpu") -> None:
     logger.info("Speaker encoder loaded.")
 
     weights_dir = settings.WEIGHTS_DIR
+    manifest = load_manifest()
 
     synth_path = os.path.join(weights_dir, "synthesizer.pt")
     if not os.path.exists(synth_path):
-        synth_path = os.path.join(weights_dir, "tacotron.pt")
-
+        raise RuntimeError(
+            f"Synthesizer checkpoint not found at '{synth_path}'. Run "
+            "`python -m backend.download_weights` for provisioning guidance "
+            "(see README.md 'Model Weights')."
+        )
     try:
-        _synthesizer = torch.jit.load(synth_path, map_location=device)
+        verify_checksum(synth_path, "synthesizer.pt", manifest)
+        _synthesizer = Tacotron(
+            embed_dims=synth_hparams.tts_embed_dims,
+            num_chars=len(sv2tts_symbols),
+            encoder_dims=synth_hparams.tts_encoder_dims,
+            decoder_dims=synth_hparams.tts_decoder_dims,
+            n_mels=synth_hparams.num_mels,
+            fft_bins=synth_hparams.num_mels,
+            postnet_dims=synth_hparams.tts_postnet_dims,
+            encoder_K=synth_hparams.tts_encoder_K,
+            lstm_dims=synth_hparams.tts_lstm_dims,
+            postnet_K=synth_hparams.tts_postnet_K,
+            num_highways=synth_hparams.tts_num_highways,
+            dropout=synth_hparams.tts_dropout,
+            stop_threshold=synth_hparams.tts_stop_threshold,
+            speaker_embedding_size=synth_hparams.speaker_embedding_size,
+        ).to(device)
+        checkpoint = torch.load(synth_path, map_location=device, weights_only=True)
+        _synthesizer.load_state_dict(checkpoint["model_state"])
         _synthesizer.eval()
-        logger.info("Synthesizer loaded from %s.", synth_path)
+        logger.info(
+            "Synthesizer loaded from %s (checksum verified, trained to step %d).",
+            synth_path,
+            int(checkpoint["model_state"]["step"].item()),
+        )
     except Exception as exc:
         raise RuntimeError(
             f"Failed to load synthesizer from '{synth_path}': {exc}. "
-            "Ensure valid TorchScript weights are present in the weights/ directory."
+            "Ensure a valid, checksum-verified checkpoint is present in the "
+            "weights directory."
         ) from exc
 
     voc_path = os.path.join(weights_dir, "vocoder.pt")
     if not os.path.exists(voc_path):
-        voc_path = os.path.join(weights_dir, "wavernn.pt")
-
+        raise RuntimeError(
+            f"Vocoder checkpoint not found at '{voc_path}'. Run "
+            "`python -m backend.download_weights` for provisioning guidance "
+            "(see README.md 'Model Weights')."
+        )
     try:
-        _vocoder = torch.jit.load(voc_path, map_location=device)
+        verify_checksum(voc_path, "vocoder.pt", manifest)
+        _vocoder = WaveRNN(
+            rnn_dims=vocoder_hparams.voc_rnn_dims,
+            fc_dims=vocoder_hparams.voc_fc_dims,
+            bits=vocoder_hparams.bits,
+            pad=vocoder_hparams.voc_pad,
+            upsample_factors=vocoder_hparams.voc_upsample_factors,
+            feat_dims=vocoder_hparams.num_mels,
+            compute_dims=vocoder_hparams.voc_compute_dims,
+            res_out_dims=vocoder_hparams.voc_res_out_dims,
+            res_blocks=vocoder_hparams.voc_res_blocks,
+            hop_length=vocoder_hparams.hop_length,
+            sample_rate=vocoder_hparams.sample_rate,
+            mode=vocoder_hparams.voc_mode,
+        ).to(device)
+        checkpoint = torch.load(voc_path, map_location=device, weights_only=True)
+        _vocoder.load_state_dict(checkpoint["model_state"])
         _vocoder.eval()
-        logger.info("Vocoder loaded from %s.", voc_path)
+        logger.info("Vocoder loaded from %s (checksum verified).", voc_path)
     except Exception as exc:
         raise RuntimeError(
             f"Failed to load vocoder from '{voc_path}': {exc}. "
-            "Ensure valid TorchScript weights are present in the weights/ directory."
+            "Ensure a valid, checksum-verified checkpoint is present in the "
+            "weights directory."
         ) from exc
 
     logger.info("All SV2TTS models loaded successfully.")
@@ -177,6 +254,13 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
     """Generate a mel spectrogram from text and a speaker embedding.
 
+    Text is converted to model input IDs via the vendored SV2TTS symbol
+    table and cleaner pipeline (`sv2tts.synthesizer.utils.text`), matching
+    the real Tacotron2 checkpoint's embedding table — not a placeholder
+    (HARDENING_PLAN.md finding H2). Input tensors are moved to the
+    synthesizer's own device before the forward pass, not assumed
+    (HARDENING_PLAN.md finding H1).
+
     Raises:
         RuntimeError: If the synthesizer has not been loaded.
     """
@@ -185,25 +269,45 @@ def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
             "Synthesizer is not loaded. Call load_models() before inference."
         )
 
+    device = _inference_device(_synthesizer)
+    sequence = text_to_sequence(text, synth_hparams.tts_cleaner_names)
+
     with torch.no_grad():
-        # Minimal conversion; actual model interface varies by checkpoint.
-        text_tensor = torch.tensor([ord(c) for c in text], dtype=torch.long).unsqueeze(
+        text_tensor = torch.tensor(sequence, dtype=torch.long, device=device).unsqueeze(
             0
         )
-        emb_tensor = torch.from_numpy(embedding).unsqueeze(0)
-        mel = _synthesizer(text_tensor, emb_tensor)
-        result = mel.squeeze(0).cpu().numpy()
+        emb_tensor = torch.from_numpy(embedding).float().to(device).unsqueeze(0)
+        _, mel_tensor, _ = _synthesizer.generate(text_tensor, emb_tensor)
+        result = mel_tensor.squeeze(0).cpu().numpy().astype(np.float32)
 
     # Explicitly drop references to the GPU tensors before releasing cached
     # memory — Python's refcounting won't free them promptly otherwise since
     # they're still bound to these local variables.
-    del text_tensor, emb_tensor, mel
+    del text_tensor, emb_tensor, mel_tensor
     _free_gpu_memory()
+
+    # Trim trailing frames the model marked as silence via its stop token —
+    # matches CorentinJ's reference Synthesizer.synthesize_spectrograms
+    # behavior exactly (see THIRD_PARTY_NOTICE.md).
+    stop_threshold = synth_hparams.tts_stop_threshold
+    while result.shape[1] > 1 and np.max(result[:, -1]) < stop_threshold:
+        result = result[:, :-1]
+
     return result
 
 
 def vocode(mel: np.ndarray) -> np.ndarray:
     """Convert a mel spectrogram to a raw audio waveform.
+
+    The mel is normalized the same way the reference vocoder inference code
+    does (`sv2tts.vocoder.hparams.mel_max_abs_value`) and moved to the
+    vocoder's own device before the forward pass, not assumed
+    (HARDENING_PLAN.md finding H1). Output is clipped to [-1, 1] before
+    return: real (in-distribution) speaker embeddings stay comfortably
+    within that range, but de-emphasis on out-of-distribution input can
+    occasionally push samples slightly outside it, and clipping here is the
+    single place that protects every caller and every downstream `.wav`
+    write.
 
     Raises:
         RuntimeError: If the vocoder has not been loaded.
@@ -213,14 +317,28 @@ def vocode(mel: np.ndarray) -> np.ndarray:
             "Vocoder is not loaded. Call load_models() before inference."
         )
 
-    with torch.no_grad():
-        mel_tensor = torch.from_numpy(mel).unsqueeze(0)
-        wav = _vocoder(mel_tensor)
-        result = wav.squeeze(0).cpu().numpy()
+    device = _inference_device(_vocoder)
+    mel_normalized = mel / vocoder_hparams.mel_max_abs_value
 
-    del mel_tensor, wav
+    with torch.no_grad():
+        mel_tensor = torch.from_numpy(mel_normalized[None, ...]).float().to(device)
+        # WaveRNN.generate() already returns a plain numpy array (not a
+        # tensor) — see backend/services/sv2tts/vocoder/models/fatchord_version.py.
+        # progress_callback is a no-op: the reference implementation's default
+        # writes a carriage-return progress bar to stdout on every ~100
+        # samples, which is fine interactively but spams a server's logs.
+        result = _vocoder.generate(
+            mel_tensor,
+            True,  # batched: realtime+ generation via fold/xfade-unfold
+            8000,  # target samples per batch entry (reference default)
+            800,  # crossfade overlap in samples (reference default)
+            vocoder_hparams.mu_law,
+            lambda *_args: None,
+        )
+
+    del mel_tensor
     _free_gpu_memory()
-    return result
+    return np.clip(result, -1.0, 1.0).astype(np.float32)
 
 
 def save_output(
@@ -299,30 +417,36 @@ async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
 class _MockSynthesizer(torch.nn.Module):
     """Lightweight Tacotron-2 test double.
 
-    Returns a zero mel spectrogram of the correct shape
-    ``(1, text_len * 5, 80)`` so that downstream shape assertions hold without
-    loading real model weights.
+    Exposes the same ``generate(text_ids, speaker_emb) -> (_, mel, _)``
+    interface as the real vendored
+    ``backend.services.sv2tts.synthesizer.models.tacotron.Tacotron``, so
+    ``synthesize_speech()`` runs unmodified against either. Returns a zero
+    mel spectrogram of shape ``(1, 80, text_len * 5)`` — mel-channels-first,
+    matching the real model's output layout — with no trained weights
+    needed.
     """
 
-    def forward(
-        self, text_ids: torch.Tensor, speaker_emb: torch.Tensor
-    ) -> torch.Tensor:
-        """Return a deterministic zero mel spectrogram."""
+    def generate(self, text_ids: torch.Tensor, speaker_emb: torch.Tensor):
+        """Return ``(None, mel, None)``, a deterministic zero mel spectrogram."""
         T = text_ids.shape[1] * 5
-        return torch.zeros(1, T, 80)
+        return None, torch.zeros(1, 80, T), None
 
 
 class _MockVocoder(torch.nn.Module):
-    """Lightweight WaveRNN/HiFi-GAN test double.
+    """Lightweight WaveRNN test double.
 
-    Accepts a mel spectrogram of shape ``(1, T, 80)`` and returns a zero
-    waveform of shape ``(1, T * 200)`` so that duration and shape assertions
-    hold without loading real model weights.
+    Exposes the same ``generate(mel, batched, target, overlap, mu_law,
+    progress_callback) -> np.ndarray`` interface as the real vendored
+    ``backend.services.sv2tts.vocoder.models.fatchord_version.WaveRNN``
+    (which itself returns a numpy array, not a tensor), so ``vocode()`` runs
+    unmodified against either. Accepts a mel of shape ``(1, 80, T)`` and
+    returns a zero waveform of length ``T * 200`` (``hop_length`` in the
+    real vocoder hparams), with no trained weights needed.
     """
 
-    def forward(self, mel: torch.Tensor) -> torch.Tensor:
-        """Return a deterministic zero waveform."""
-        return torch.zeros(1, mel.shape[1] * 200)
+    def generate(self, mel, batched, target, overlap, mu_law, progress_callback=None):
+        """Return a deterministic zero waveform as a numpy float64 array."""
+        return np.zeros(mel.shape[-1] * 200, dtype=np.float64)
 
 
 def load_mock_models(device: str = "cpu") -> None:

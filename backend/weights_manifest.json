@@ -1,0 +1,16 @@
+{
+  "source": "https://huggingface.co/CorentinJ/SV2TTS",
+  "source_repo": "https://github.com/CorentinJ/Real-Time-Voice-Cloning",
+  "license": "MIT",
+  "note": "encoder.pt is NOT used — the speaker encoder's pretrained weights come from the resemblyzer package instead. Only synthesizer.pt and vocoder.pt are required.",
+  "files": {
+    "synthesizer.pt": {
+      "sha256": "c05e07428f95d0ed8755e1ef54cc8ae251300413d94ce5867a56afe39c499d94",
+      "size_bytes": 370554559
+    },
+    "vocoder.pt": {
+      "sha256": "1d7a6861589e927e0fbdaa5849ca022258fe2b58a20cc7bfb8fb598ccf936169",
+      "size_bytes": 53845290
+    }
+  }
+}

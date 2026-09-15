@@ -25,7 +25,11 @@ class Settings(BaseSettings):
     OUTPUT_DIR: str = "outputs"
     WEIGHTS_DIR: str = str(BASE_DIR / "weights")
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
-    VOCODER_SAMPLE_RATE: int = 22050
+    # Must match backend/services/sv2tts/vocoder/hparams.py's `sample_rate`
+    # (itself derived from the synthesizer's hparams) for the real SV2TTS
+    # checkpoint (HARDENING_PLAN.md finding H1/C2 verification) — confirmed
+    # 16000, not the previously-guessed 22050.
+    VOCODER_SAMPLE_RATE: int = 16000
     RATE_LIMIT_ENABLED: bool = True
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
