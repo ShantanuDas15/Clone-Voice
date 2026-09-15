@@ -71,21 +71,28 @@ fall back to mock, placeholder, or unverified weights (see `HARDENING_PLAN.md`, 
 - **Synthesizer & vocoder:** real Tacotron2/WaveRNN checkpoints, loaded via the architecture
   vendored at `backend/services/sv2tts/` (MIT licensed; see
   `backend/services/sv2tts/THIRD_PARTY_NOTICE.md` for provenance and the exact upstream commit
-  pinned). Download `synthesizer.pt` and `vocoder.pt` (**not** `encoder.pt` — that's unused, the
-  encoder above already covers it) from
-  [huggingface.co/CorentinJ/SV2TTS](https://huggingface.co/CorentinJ/SV2TTS) (~424 MB combined)
-  and place them at:
-  ```
-  <WEIGHTS_DIR>/synthesizer.pt
-  <WEIGHTS_DIR>/vocoder.pt
+  pinned), sourced from
+  [huggingface.co/CorentinJ/SV2TTS](https://huggingface.co/CorentinJ/SV2TTS) (~424 MB for
+  `synthesizer.pt` + `vocoder.pt` combined — **not** `encoder.pt`, that's unused, the encoder
+  above already covers it). Two ways to provision them:
+  ```bash
+  # Downloads whichever of synthesizer.pt/vocoder.pt are missing or fail
+  # checksum verification into WEIGHTS_DIR, via huggingface_hub (resumable,
+  # retried, and idempotent — a file already present and verified is never
+  # re-downloaded). The only command in this repo that makes a network call
+  # for these two files; never triggered automatically by the running app.
+  python -m backend.download_weights --fetch
+
+  # Or place them yourself at <WEIGHTS_DIR>/synthesizer.pt and
+  # <WEIGHTS_DIR>/vocoder.pt, then verify without downloading:
+  python -m backend.download_weights
   ```
   `WEIGHTS_DIR` defaults to `backend/weights/` and can be overridden via `.env`
-  (`core/config.py`). Each file's SHA256 is checked against the pinned manifest at
+  (`core/config.py`). Either way, each file's SHA256 is checked against the pinned manifest at
   `backend/weights_manifest.json` before it is ever loaded — a corrupted download or a tampered
-  file is rejected with a clear error, not silently loaded. `python -m backend.download_weights`
-  exits non-zero and reports exactly which checkpoint is missing or fails verification, without
-  making any network calls for these two files (a scripted, resumable `--fetch` download is
-  tracked as a follow-up — HARDENING_PLAN.md Milestone C2.2).
+  file is rejected with a clear error, not silently loaded, and re-running `--fetch` self-heals a
+  corrupted local copy by re-downloading it. `load_models()` (called at server startup) performs
+  this same verification independently and refuses to start without it either way.
 
 ## 🗺️ Roadmap
 
