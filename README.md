@@ -93,6 +93,17 @@ fall back to mock, placeholder, or unverified weights (see `HARDENING_PLAN.md`, 
   file is rejected with a clear error, not silently loaded, and re-running `--fetch` self-heals a
   corrupted local copy by re-downloading it. `load_models()` (called at server startup) performs
   this same verification independently and refuses to start without it either way.
+- **Post-deploy smoke test:** presence/checksum checks prove a checkpoint *file* is intact, not
+  that it actually produces working audio through the real model code. `--verify-inference` loads
+  the real models and runs one short end-to-end synthesis, catching a shape/interface/checkpoint
+  incompatibility once, deliberately, rather than on a real user's first request:
+  ```bash
+  python -m backend.download_weights --fetch --verify-inference
+  ```
+  `/health` also reports a `checksum_verified` field per model (`true` for a real, verified
+  checkpoint; `false` for the test suite's mock models; `null` where it doesn't apply, e.g. the
+  encoder) — diagnostic only, so it never flips a healthy mock-backed test deployment to
+  `"degraded"`.
 
 ## 🗺️ Roadmap
 

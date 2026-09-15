@@ -31,6 +31,15 @@ _encoder = None
 _synthesizer = None
 _vocoder = None
 
+# Set True only when the corresponding model was loaded by load_models()
+# *after* its checkpoint's SHA256 matched backend/weights_manifest.json —
+# never by load_mock_models(), which loads no checkpoint at all. Surfaced
+# via get_model_health()/`/health` so an operator or load balancer can tell
+# "some model is loaded" apart from "the specific, verified checkpoint is
+# loaded" (HARDENING_PLAN.md Milestone C2.3).
+_synthesizer_checksum_verified = False
+_vocoder_checksum_verified = False
+
 # Process-wide semaphore: permits exactly one model forward pass at a time.
 # Prevents concurrent GPU OOM / CPU thrash when multiple requests arrive
 # simultaneously. Replace with a Celery/ARQ task queue for multi-GPU scaling.
@@ -86,10 +95,24 @@ def get_model_health(expected_device: str | None = None) -> dict:
 
     Returns:
         A dict with one entry per model (``loaded``, ``device``,
-        ``device_ok``) plus a top-level ``ready`` flag that is ``True`` only
-        when every model is loaded and correctly placed.
+        ``device_ok``, ``checksum_verified``) plus a top-level ``ready``
+        flag that is ``True`` only when every model is loaded and correctly
+        placed. ``checksum_verified`` is ``None`` when the model isn't
+        loaded or checksum verification doesn't apply to it (the encoder —
+        its weights come from resemblyzer's own cache, not
+        `weights_manifest.json`); otherwise it is ``True`` only for a
+        synthesizer/vocoder loaded by `load_models()` with a checksum match,
+        and ``False`` for one loaded by `load_mock_models()` (test doubles,
+        never checksum-verified) — this is diagnostic, not part of
+        ``ready``, so the test suite's mock-backed `/health` checks are
+        unaffected (HARDENING_PLAN.md Milestone C2.3).
     """
     expected = torch.device(expected_device) if expected_device else None
+    checksum_verified = {
+        "encoder": None,
+        "synthesizer": _synthesizer_checksum_verified,
+        "vocoder": _vocoder_checksum_verified,
+    }
 
     status: dict = {}
     for name, model in (
@@ -110,6 +133,7 @@ def get_model_health(expected_device: str | None = None) -> dict:
             "loaded": loaded,
             "device": str(device) if device is not None else None,
             "device_ok": device_ok,
+            "checksum_verified": checksum_verified[name] if loaded else None,
         }
 
     status["ready"] = all(s["loaded"] and s["device_ok"] for s in status.values())
@@ -134,7 +158,10 @@ def load_models(device: str = "cpu") -> None:
             architecture. The server must not start in a degraded state.
     """
     global _encoder, _synthesizer, _vocoder
+    global _synthesizer_checksum_verified, _vocoder_checksum_verified
     logger.info("Loading SV2TTS models on %s...", device)
+    _synthesizer_checksum_verified = False
+    _vocoder_checksum_verified = False
 
     if VoiceEncoder is None:
         raise RuntimeError(
@@ -174,6 +201,7 @@ def load_models(device: str = "cpu") -> None:
         checkpoint = torch.load(synth_path, map_location=device, weights_only=True)
         _synthesizer.load_state_dict(checkpoint["model_state"])
         _synthesizer.eval()
+        _synthesizer_checksum_verified = True
         logger.info(
             "Synthesizer loaded from %s (checksum verified, trained to step %d).",
             synth_path,
@@ -212,6 +240,7 @@ def load_models(device: str = "cpu") -> None:
         checkpoint = torch.load(voc_path, map_location=device, weights_only=True)
         _vocoder.load_state_dict(checkpoint["model_state"])
         _vocoder.eval()
+        _vocoder_checksum_verified = True
         logger.info("Vocoder loaded from %s (checksum verified).", voc_path)
     except Exception as exc:
         raise RuntimeError(
@@ -462,6 +491,7 @@ def load_mock_models(device: str = "cpu") -> None:
         ``load_models()`` for all deployment contexts.
     """
     global _encoder, _synthesizer, _vocoder
+    global _synthesizer_checksum_verified, _vocoder_checksum_verified
     if VoiceEncoder is None:
         raise RuntimeError(
             "resemblyzer is not installed — cannot load mock models for tests."
@@ -469,4 +499,9 @@ def load_mock_models(device: str = "cpu") -> None:
     _encoder = VoiceEncoder(device=device)
     _synthesizer = _MockSynthesizer().to(device).eval()
     _vocoder = _MockVocoder().to(device).eval()
+    # No checkpoint is ever loaded here, so neither is ever checksum-verified
+    # — explicit, not just "happens to still be False", so get_model_health()
+    # never reports a mock as a verified real checkpoint.
+    _synthesizer_checksum_verified = False
+    _vocoder_checksum_verified = False
     logger.debug("Mock TTS models loaded for testing (device=%s).", device)
