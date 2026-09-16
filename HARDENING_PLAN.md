@@ -1,15 +1,15 @@
 # CloneVoice Backend — Production-Hardening Audit
 
 **Audit date:** 2026-09-15 · **Audited commit:** `367d671` (main) · **Status:** COMPLETE for backend application code; tests and Alembic migrations NOT reviewed (see §1)
-**Last reviewed:** 2026-09-16
+**Last reviewed:** 2026-09-16 (H3 fix landed same day)
 
 ## Progress Overview
 
-**32 findings total — 6 Fixed · 0 Partial · 26 Not Started** (as of 2026-09-16). This is the
+**32 findings total — 7 Fixed · 0 Partial · 25 Not Started** (as of 2026-09-16). This is the
 current-state dashboard; the **Task Status Log** below it is the commit-by-commit history of how
 each fix landed, and **§3 Fix Plan** has the fuller action description for every not-started item.
 
-### ✅ Completed (6)
+### ✅ Completed (7)
 
 | # | Finding | Commit(s) |
 |---|---------|-----------|
@@ -18,17 +18,17 @@ each fix landed, and **§3 Fix Plan** has the fuller action description for ever
 | C3 | User audio committed to git history on `origin/main` — index cleanup + history purge | `c6cbc25` (index cleanup), history rewritten to `830e215` via `git filter-repo` |
 | H1 | Inference tensors never moved to the model's device | `9a2d8c7` |
 | H2 | Text tokenized as raw Unicode code points instead of the real symbol set | `9a2d8c7` |
+| H3 | Inference errors (incl. OOM) not caught in the route; no failed-generation record | `c8392f1` |
 | L8 | `download_weights.py` ignored `settings.WEIGHTS_DIR` (resolved incidentally by the C2 rewrite) | `f253d3d` |
 
 ### ⚠️ Partial / In Progress (0)
 
 None currently — every finding below is either fully fixed above or not started yet.
 
-### ❌ Not Started (26)
+### ❌ Not Started (25)
 
 | # | Sev. | Finding | Planned fix (§3 has detail) |
 |---|------|---------|------------------------------|
-| H3 | High | Inference errors (incl. OOM) not caught in the route; no failed-generation record | Wrap the pipeline call, map to 503/500, persist `status="failed"`, free CUDA cache |
 | H4 | High | WEBM/mixed-case uploads create profiles that can never be synthesized | Derive the storage extension from validated magic bytes, not the client filename |
 | H5 | High | Blocking upload/preprocessing/DB work runs directly on the event loop | Offload via `asyncio.to_thread` or make handlers sync `def` |
 | H6 | High | Inference semaphore has no acquisition timeout or queue-depth cap | Add an acquisition timeout + per-call inference timeout; job queue longer-term |
@@ -66,7 +66,8 @@ None currently — every finding below is either fully fixed above or not starte
 | C3 — User audio committed to git history | ✅ Fixed | `c6cbc25`, history rewritten to `830e215` | 154 previously-tracked files under `uploads/`, `outputs/`, `test_output.wav` untracked from the index (kept locally, already/newly gitignored) in `c6cbc25`; merged to main and pushed as `3886705`. Investigation (`backend/tests/test_repo_hygiene.py` + manual waveform analysis) found nearly all committed audio was synthetic zero-amplitude test fixtures, except one real recording confirmed by the user as their own dev-testing voice (`uploads/64470944.../61e40feb....wav`, its `_embed.npy`, the matching `outputs/64470944.../f2ecf5cf....wav`, and root `test_output.wav`, all traced to commit `5c5ea10`). Per user confirmation there is only one clone of this repo (no coordination needed), those 4 real-audio paths were purged from all 83 rewritten commits via `git filter-repo --invert-paths` (verified via `git fsck --unreachable` — zero leftover blobs), `origin/main` force-pushed to the rewritten history (`830e215`), and 6 stale-but-fully-merged feature branches that still held the un-purged history were deleted from both origin and local per CLAUDE.md §3.7. `git ls-remote`/`git log --all --remotes` confirm the real audio no longer exists anywhere on origin. Validated: 161/161 tests pass (1 pre-existing opt-in skip), zero errors, including the 3 new `test_repo_hygiene.py` tests. |
 | H1 | ✅ Fixed | `9a2d8c7` | Folded into C2.1 — real checkpoint cannot run without it. See findings table row H1 below. |
 | H2 | ✅ Fixed | `9a2d8c7` | Folded into C2.1 — real checkpoint cannot run without it. See findings table row H2 below. |
-| H3–H7 | ❌ Open | — | Unchanged. |
+| H3 — Inference errors uncaught, no failed-generation record | ✅ Fixed | `c8392f1` | `api/synthesize.py` wraps `run_inference_pipeline(...)` in `try`/`except`: `torch.cuda.OutOfMemoryError` (a `RuntimeError` subclass, caught first) maps to 503 with a generic "temporarily overloaded" detail; any other exception maps to 500 with a generic "synthesis failed" detail — neither leaks internal exception text to the client. Both paths call a new `_record_failed_generation()` helper that persists a `Generation` row with `status="failed"`, `output_audio_path=None`, `duration_seconds=None` (both nullable columns), then free cached CUDA memory via a new public `tts_pipeline.free_gpu_memory()` wrapper around the existing private `_free_gpu_memory()` before re-raising as an `HTTPException`. Validated: 2 new tests in `test_synthesize.py` (mocking `run_inference_pipeline` to raise `OutOfMemoryError` and a plain `RuntimeError`) assert the mapped status code, that `free_gpu_memory()` was called, that sensitive exception text does not appear in the response `detail`, and that a `status="failed"` row shows up in `/history` with a null duration and empty output filename. Full suite: 163/163 pass (1 pre-existing opt-in skip), zero errors. |
+| H4–H7 | ❌ Open | — | Unchanged. |
 | M1–M10 | ❌ Open | — | Unchanged. |
 | L1–L12 | ❌ Open | — | Unchanged. L8 (download_weights.py ignoring `settings.WEIGHTS_DIR`) incidentally resolved by `f253d3d` as a side effect of the C2 rewrite. |
 
@@ -119,7 +120,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 | C3 | Config / repo hygiene | Uploaded voice recordings, speaker embeddings, and synthesized outputs are committed and pushed to `origin/main`. They were added before the ignore rule existed, and `.gitignore` does not untrack files. | 130 files under `uploads/` on `origin/main`; added in `1d73633`, `5c5ea10`, `4765cb4`, `8d74f37`; ignore rules added later in `fd7c02e` (`.gitignore:27-28`) | **High, or Critical if the recordings are real people's voices.** Speaker embeddings are biometric identifiers and are now in remote git history, which a later deletion does not remove. | Observed (git). Whether the audio is real → §4. |
 | H1 | Inference path | ✅ **Fixed** (`9a2d8c7`). Was: input tensors built on CPU and never moved to the model device. | `services/tts_pipeline.py` `_inference_device()`, `synthesize_speech()`, `vocode()`; `services/sv2tts/vocoder/models/fatchord_version.py` (7 sites, marked `# PATCHED`, documented in `THIRD_PARTY_NOTICE.md`) | **High — confirmed by reproduction, not just inference.** The *vendored library itself* (not just this repo's glue code) hardcoded `torch.cuda.is_available()` branching instead of using the model's own device. Reproduced on this session's CUDA-capable machine: a `WaveRNN` explicitly placed on `cpu` still crashed with `RuntimeError: Input type (torch.cuda.FloatTensor) and weight type (torch.FloatTensor) should be the same`. | Observed (executed, both the crash before the fix and success after, on real GPU hardware). |
 | H2 | Inference path | ✅ **Fixed** (`9a2d8c7`). Was: text tokenised as raw Unicode code points. | `services/tts_pipeline.py` `synthesize_speech()` (real vendored `text_to_sequence()`); `schemas/synthesize.py` (`SynthesizeRequest.validate_supported_characters`) | **High — confirmed the real behavior differs from what was inferred.** The real `text_to_sequence()` does not raise on unsupported characters (verified empirically) — it silently *drops* them, which is arguably worse (a request "succeeds" while quietly losing content). The schema validator closes this by rejecting, at the API boundary, anything the real cleaner pipeline (`english_cleaners`/`unidecode`) cannot represent — while correctly still accepting digits (cleaner-expanded) and accented Latin text (transliterated), which a naive raw-character check would have wrongly rejected (caught and fixed during this session's own testing). | Observed (executed against the real checkpoint and unit-tested for both acceptance and rejection cases). |
-| H3 | Failure modes | Inference errors, including CUDA OOM, are not caught in the route. No failed `Generation` row is written, and nothing anywhere handles `OutOfMemoryError`. | `api/synthesize.py:62-64` (no try/except); `api/synthesize.py:78` (status is only ever `"completed"`); grep: no `OutOfMemoryError` in backend | **High.** Violates CLAUDE.md §9 ("Never let unhandled exceptions propagate"). No audit record of failed syntheses exists. | Observed. Inferred: client gets a generic 500 with no recovery or retry signal. |
+| H3 | Failure modes | ✅ **Fixed** (`c8392f1`). Was: inference errors, including CUDA OOM, not caught in the route; no failed `Generation` row written; nothing anywhere handled `OutOfMemoryError`. | `api/synthesize.py` `synthesize()` (`try`/`except` around `run_inference_pipeline`, `_record_failed_generation()`); `services/tts_pipeline.py` `free_gpu_memory()` | **High — confirmed fixed.** `torch.cuda.OutOfMemoryError` now maps to 503, other pipeline/model errors to 500, both with a generic detail message (CLAUDE.md §9) and a `status="failed"` audit row. | Observed (executed both mocked failure paths and the success path; 2 new tests). |
 | H4 | Request handling | WEBM uploads, or any extension other than lowercase `.wav`/`.mp3` (e.g. `.WAV`), create profiles marked `ready` that can never be synthesized. The embedding path is left identical to the audio path, `np.save` appends `.npy`, and synthesis later calls `np.load` on the audio file. | `services/audio_processing.py:21` (webm allowed); `:63` (extension taken from client filename); `api/voice.py:47-49` (replaces only `.wav`/`.mp3`); `:88` (stores that path); `api/synthesize.py:48` | **High.** Reproduced: `np.save("x.webm")` → `x.webm.npy`; `np.load("x.webm")` → `ValueError` → 500. An advertised format is permanently broken. | Observed (executed). |
 | H5 | Event loop | `async def` handlers run blocking CPU and disk work directly on the event loop: reading and copying the upload, librosa decode, resample, and trim of up to 25 MB, plus synchronous SQLAlchemy queries, commits, and `np.load`. | `api/voice.py:41-45` → `services/audio_processing.py:28-42, 70-71, 79-80`; `core/config.py:23` (25 MB); `api/synthesize.py:35-37, 48, 80-82`; `core/database.py:8` (sync engine) | **High.** Only the model forward passes are offloaded (`tts_pipeline.py:267-268, 291`). A 25 MB MP3 decode runs inline. | Inferred: while a large upload decodes, every other request stalls, including `/health`, which could fail LB probes. |
 | H6 | Concurrency | The inference semaphore has no acquisition timeout and no queue-depth cap, and forward passes have no timeout. The limiter is per-IP (5/min), which does not bound the global queue behind a single slot. | `services/tts_pipeline.py:263`, `:290` (bare `async with`); `api/synthesize.py:27`; grep: no `wait_for`/`timeout` in backend | **High.** All synthesis and embedding traffic funnels through one permit (`tts_pipeline.py:28`) with unbounded waiting. | Inferred: under load, requests queue until client or proxy timeouts fire, while queued work still runs afterward. |
@@ -159,7 +160,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 ### High
 - **H1:** ✅ Done (`9a2d8c7`) — Every input tensor moved to the model's own device inside `synthesize_speech`/`vocode`; the vendored `WaveRNN`'s own hardcoded CUDA branching patched too. Validated on real GPU hardware.
 - **H2:** ✅ Done (`9a2d8c7`) — Replaced `ord(c)` with the real vendored text frontend (symbol set plus `english_cleaners`). `SynthesizeRequest` validates the character set against what the real cleaner pipeline can represent.
-- **H3:** Wrap the pipeline call. Map OOM and model errors to 503/500 with a controlled detail message, persist a `status="failed"` generation, and free CUDA cache on the error path.
+- **H3:** ✅ Done (`c8392f1`) — Pipeline call wrapped in `try`/`except`; `torch.cuda.OutOfMemoryError` maps to 503, other errors to 500, both with a controlled detail message; a `status="failed"` generation is persisted and CUDA cache freed on both error paths.
 - **H4:** Derive the storage extension from the validated magic bytes, not the client filename. Build `embedding_path` explicitly with `os.path.splitext(...)[0] + "_embed.npy"`.
 - **H5:** Offload validation, save, and preprocessing via `asyncio.to_thread`, or make the handlers sync `def`. Move DB work off the loop in `synthesize`.
 - **H6:** Add an acquisition timeout and max-waiters cap that return 503/429, plus a per-call inference timeout. Longer term, move to a job queue.
