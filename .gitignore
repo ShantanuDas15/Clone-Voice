@@ -26,3 +26,4 @@ clonevoice_test.db
 .idea/
 uploads/
 outputs/
+test_output.wav
