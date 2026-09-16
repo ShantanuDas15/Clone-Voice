@@ -1,20 +1,21 @@
 # CloneVoice Backend — Production-Hardening Audit
 
 **Audit date:** 2026-09-15 · **Audited commit:** `367d671` (main) · **Status:** COMPLETE for backend application code; tests and Alembic migrations NOT reviewed (see §1)
-**Last reviewed:** 2026-09-15
+**Last reviewed:** 2026-09-16
 
 ## Progress Overview
 
-**32 findings total — 5 Fixed · 0 Partial · 27 Not Started** (as of 2026-09-15). This is the
+**32 findings total — 6 Fixed · 0 Partial · 26 Not Started** (as of 2026-09-16). This is the
 current-state dashboard; the **Task Status Log** below it is the commit-by-commit history of how
 each fix landed, and **§3 Fix Plan** has the fuller action description for every not-started item.
 
-### ✅ Completed (5)
+### ✅ Completed (6)
 
 | # | Finding | Commit(s) |
 |---|---------|-----------|
 | C1 | Storage cleanup deleted files still referenced by active voice profiles/generations | `9bb1922` |
 | C2 | No loadable model checkpoint — real weights (C2.1), fetch tooling (C2.2), health/smoke-test (C2.3), all 3 milestones done | `f253d3d`, `9a2d8c7`, `5e641e8`, `6bd0017` |
+| C3 | User audio committed to git history on `origin/main` — index cleanup + history purge | `c6cbc25` (index cleanup), history rewritten to `830e215` via `git filter-repo` |
 | H1 | Inference tensors never moved to the model's device | `9a2d8c7` |
 | H2 | Text tokenized as raw Unicode code points instead of the real symbol set | `9a2d8c7` |
 | L8 | `download_weights.py` ignored `settings.WEIGHTS_DIR` (resolved incidentally by the C2 rewrite) | `f253d3d` |
@@ -23,11 +24,10 @@ each fix landed, and **§3 Fix Plan** has the fuller action description for ever
 
 None currently — every finding below is either fully fixed above or not started yet.
 
-### ❌ Not Started (27)
+### ❌ Not Started (26)
 
 | # | Sev. | Finding | Planned fix (§3 has detail) |
 |---|------|---------|------------------------------|
-| C3 | Critical | User audio (130 files) committed to git history on `origin/main` | Remove from index; purge history via `git filter-repo` if the audio is real |
 | H3 | High | Inference errors (incl. OOM) not caught in the route; no failed-generation record | Wrap the pipeline call, map to 503/500, persist `status="failed"`, free CUDA cache |
 | H4 | High | WEBM/mixed-case uploads create profiles that can never be synthesized | Derive the storage extension from validated magic bytes, not the client filename |
 | H5 | High | Blocking upload/preprocessing/DB work runs directly on the event loop | Offload via `asyncio.to_thread` or make handlers sync `def` |
@@ -63,7 +63,7 @@ None currently — every finding below is either fully fixed above or not starte
 |---------|--------|--------|-------|
 | C1 — Storage cleanup deletes live user data | ✅ Fixed | `9bb1922` | `get_protected_paths()` queries active voice-profile and generation paths from the DB each pass; `cleanup_stale_files()` skips them regardless of age. Soft-deleted profiles remain eligible for pruning. Validated: 13/13 tests in `test_storage_cleanup.py` pass (6 new), full suite 103/103 pass, zero errors/failures. |
 | C2 — No loadable model checkpoints | ✅ Fixed (3/3 milestones) | `f253d3d`, `9a2d8c7`, `5e641e8`, `6bd0017` | **C2.1** (`9a2d8c7`): real Tacotron2/WaveRNN architecture vendored (`backend/services/sv2tts/`, MIT, provenance in `THIRD_PARTY_NOTICE.md`), `load_models()` verifies each checkpoint's SHA256 against a pinned manifest (`backend/weights_manifest.json`) before `torch.load` ever touches the file, then loads the real `state_dict`. H1/H2 folded in since real weights cannot run without them. **C2.2** (`5e641e8`): `python -m backend.download_weights --fetch` downloads missing/corrupted checkpoints from the pinned HF repo via `huggingface_hub`, idempotent and self-healing. **C2.3** (`6bd0017`): `get_model_health()`/`/health` report a `checksum_verified` field per model (diagnostic only — never gates `ready`, so the mock-backed test suite's `/health` expectations are unaffected); `--verify-inference` loads the real models and runs one short end-to-end synthesis as a deliberate post-deploy smoke test, composable as `--fetch --verify-inference`. All three milestones validated against the real Hugging Face repo and real downloaded weights, not just mocks — specific runs and timings are in each milestone's commit message (`9a2d8c7`, `5e641e8`, `6bd0017`). Full suite: 158/158 pass + 1 opt-in real-weights test (correctly skipped by default per CLAUDE.md §4.2), zero errors. |
-| C3 — User audio committed to git history | ❌ Open | — | Unchanged. |
+| C3 — User audio committed to git history | ✅ Fixed | `c6cbc25`, history rewritten to `830e215` | 154 previously-tracked files under `uploads/`, `outputs/`, `test_output.wav` untracked from the index (kept locally, already/newly gitignored) in `c6cbc25`; merged to main and pushed as `3886705`. Investigation (`backend/tests/test_repo_hygiene.py` + manual waveform analysis) found nearly all committed audio was synthetic zero-amplitude test fixtures, except one real recording confirmed by the user as their own dev-testing voice (`uploads/64470944.../61e40feb....wav`, its `_embed.npy`, the matching `outputs/64470944.../f2ecf5cf....wav`, and root `test_output.wav`, all traced to commit `5c5ea10`). Per user confirmation there is only one clone of this repo (no coordination needed), those 4 real-audio paths were purged from all 83 rewritten commits via `git filter-repo --invert-paths` (verified via `git fsck --unreachable` — zero leftover blobs), `origin/main` force-pushed to the rewritten history (`830e215`), and 6 stale-but-fully-merged feature branches that still held the un-purged history were deleted from both origin and local per CLAUDE.md §3.7. `git ls-remote`/`git log --all --remotes` confirm the real audio no longer exists anywhere on origin. Validated: 161/161 tests pass (1 pre-existing opt-in skip), zero errors, including the 3 new `test_repo_hygiene.py` tests. |
 | H1 | ✅ Fixed | `9a2d8c7` | Folded into C2.1 — real checkpoint cannot run without it. See findings table row H1 below. |
 | H2 | ✅ Fixed | `9a2d8c7` | Folded into C2.1 — real checkpoint cannot run without it. See findings table row H2 below. |
 | H3–H7 | ❌ Open | — | Unchanged. |
@@ -154,7 +154,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 ### Critical
 - **C1:** ✅ Done (`9bb1922`) — Stop age-pruning referenced files. Exclude any path referenced by a non-deleted `voice_profiles` or `generations` row.
 - **C2:** ✅ Done (`f253d3d`, `9a2d8c7`, `5e641e8`, `6bd0017`) — Placeholder-writing removed, real vendored architecture loads real checksum-verified checkpoints (C2.1), scripted resumable `--fetch` download tooling (C2.2), `/health` checksum flag + `--verify-inference` post-deploy smoke test (C2.3) — see Task Status Log.
-- **C3:** Remove `uploads/`, `outputs/`, and `test_output.wav` from the index. If the audio is real, purge it from history (`git filter-repo`) and coordinate with anyone who has cloned the repo.
+- **C3:** ✅ Done (`c6cbc25`, history rewritten to `830e215`) — Removed from the index; confirmed one recording was real (user's own dev-testing voice), purged it and its embedding from all history via `git filter-repo`, force-pushed the rewritten `main`, and deleted the stale un-purged feature branches. Single-clone repo confirmed by the user, so no further coordination was required.
 
 ### High
 - **H1:** ✅ Done (`9a2d8c7`) — Every input tensor moved to the model's own device inside `synthesize_speech`/`vocode`; the vendored `WaveRNN`'s own hardcoded CUDA branching patched too. Validated on real GPU hardware.
@@ -199,7 +199,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 2. **C2.2 — ✅ Resolved (2026-09-15, `5e641e8`):** `huggingface_hub==0.26.5` added as a new runtime dependency for `--fetch` mode; validated against the real repo (see Task Status Log).
 3. **C2.3 — ✅ Resolved (2026-09-15, `6bd0017`):** `/health` checksum flag and `--verify-inference` post-deploy smoke test landed; validated with a real end-to-end run against the real downloaded weights (produced a real 1.40s waveform in ~8.6s). **C2 is now fully closed** — all three milestones done.
 4. **Responsible-use / misuse safeguards (new, unresolved by any commit):** now that real inference actually works, this repo can produce real cloned speech. Deepfake/impersonation risk, consent verification for uploaded voice samples, and any output watermarking are product/legal decisions outside this hardening pass's scope — flagged here so they aren't mistaken for "already handled" now that C2 is closed.
-5. **C3 — nature of the committed audio:** Are the 130 files on `origin/main` real people's voices or synthetic test audio? This decides Critical vs High and whether a history purge is required.
+5. **C3 — nature of the committed audio:** ✅ Resolved (2026-09-16, `c6cbc25`/`830e215`) — analysis (551 identical 500-sample zero-amplitude `.wav` fixtures, mostly-empty/ID3-stub `.mp3` fixtures) showed nearly all 154 tracked files were synthetic test fixtures. Exactly one recording was real (waveform variance confirmed non-silent, full-scale amplitude); the user confirmed it was their own dev-testing voice, not a third party's. History purge via `git filter-repo` proceeded as the finding prescribed.
 6. **Deployment topology:** Worker count, reverse proxy, and GPU vs CPU target are defined nowhere in the reviewed files. H6, H7, M3, and M6 severities depend on these answers.
 7. **M10 — CVE status:** CVE applicability to `python-jose==3.3.0` is from prior knowledge, not a scan. Confirm with `pip-audit -r backend/requirements.txt`.
 8. **Tests not reviewed:** Whether tests write into repo-root `uploads/`/`outputs/` (supporting M9 → C3) is based only on a grep of `conftest.py` that found no directory override. Coverage of C1, H4, and M4 by existing tests is unknown.
