@@ -5,6 +5,7 @@ import os
 from typing import List
 
 import numpy as np
+import torch
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -16,11 +17,32 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import run_inference_pipeline
+from backend.services.tts_pipeline import (free_gpu_memory,
+                                           run_inference_pipeline)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _record_failed_generation(
+    db: Session, user_id, voice_profile_id, text: str
+) -> None:
+    """Persist a `status="failed"` audit row for an inference error.
+
+    Runs on the error path only — a successful synthesis records its own
+    `status="completed"` row after the pipeline returns.
+    """
+    failed_generation = Generation(
+        user_id=user_id,
+        voice_profile_id=voice_profile_id,
+        input_text=text,
+        output_audio_path=None,
+        duration_seconds=None,
+        status="failed",
+    )
+    db.add(failed_generation)
+    db.commit()
 
 
 @router.post("", response_class=FileResponse)
@@ -59,9 +81,35 @@ async def synthesize(
         len(req.text),
     )
 
-    out_path, duration = await run_inference_pipeline(
-        req.text, embedding, str(current_user.id)
-    )
+    try:
+        out_path, duration = await run_inference_pipeline(
+            req.text, embedding, str(current_user.id)
+        )
+    except torch.cuda.OutOfMemoryError:
+        logger.exception(
+            "GPU OOM during synthesis — user_id=%s, profile_id=%s",
+            current_user.id,
+            profile.id,
+        )
+        _record_failed_generation(db, current_user.id, profile.id, req.text)
+        free_gpu_memory()
+        raise HTTPException(
+            status_code=503,
+            detail="Synthesis service is temporarily overloaded. Please try again shortly.",
+        )
+    except Exception:
+        logger.exception(
+            "Synthesis pipeline failed — user_id=%s, profile_id=%s",
+            current_user.id,
+            profile.id,
+        )
+        _record_failed_generation(db, current_user.id, profile.id, req.text)
+        free_gpu_memory()
+        raise HTTPException(
+            status_code=500,
+            detail="Speech synthesis failed. Please try again later.",
+        )
+
     logger.info(
         "Synthesis complete — user_id=%s, duration=%.2fs, out=%s",
         current_user.id,

@@ -3,8 +3,10 @@
 import io
 import uuid
 import wave
+from unittest.mock import patch
 
 import pytest
+import torch
 from fastapi.testclient import TestClient
 
 from backend.services.tts_pipeline import load_mock_models
@@ -202,3 +204,58 @@ def test_history_excludes_soft_deleted(client: TestClient, auth_headers_syn):
 
     res_after = client.get("/api/v1/synthesize/history", headers=auth_headers_syn)
     assert all(gen["voice_profile_id"] != profile_id for gen in res_after.json())
+
+
+def test_synthesize_cuda_oom_returns_503_and_records_failed_generation(
+    client: TestClient, auth_headers_syn
+):
+    """HARDENING_PLAN.md H3: CUDA OOM during inference maps to 503, not a
+    bare 500, and leaves a `status="failed"` audit row instead of no row."""
+    profile_id = upload_profile(client, auth_headers_syn)
+
+    with patch(
+        "backend.api.synthesize.run_inference_pipeline",
+        side_effect=torch.cuda.OutOfMemoryError("simulated CUDA OOM"),
+    ), patch("backend.api.synthesize.free_gpu_memory") as mock_free:
+        res = client.post(
+            "/api/v1/synthesize",
+            headers=auth_headers_syn,
+            json={"voice_profile_id": profile_id, "text": "OOM test"},
+        )
+
+    assert res.status_code == 503
+    mock_free.assert_called_once()
+
+    history = client.get("/api/v1/synthesize/history", headers=auth_headers_syn).json()
+    failed = [g for g in history if g["input_text"] == "OOM test"]
+    assert len(failed) == 1
+    assert failed[0]["output_filename"] == ""
+    assert failed[0]["duration_seconds"] is None
+
+
+def test_synthesize_model_error_returns_500_and_records_failed_generation(
+    client: TestClient, auth_headers_syn
+):
+    """HARDENING_PLAN.md H3: a non-OOM inference failure maps to 500 with a
+    controlled detail message, and also leaves a `status="failed"` row."""
+    profile_id = upload_profile(client, auth_headers_syn)
+
+    with patch(
+        "backend.api.synthesize.run_inference_pipeline",
+        side_effect=RuntimeError("simulated model failure with sensitive internals"),
+    ), patch("backend.api.synthesize.free_gpu_memory") as mock_free:
+        res = client.post(
+            "/api/v1/synthesize",
+            headers=auth_headers_syn,
+            json={"voice_profile_id": profile_id, "text": "Model error test"},
+        )
+
+    assert res.status_code == 500
+    assert "sensitive internals" not in res.json()["detail"]
+    mock_free.assert_called_once()
+
+    history = client.get("/api/v1/synthesize/history", headers=auth_headers_syn).json()
+    failed = [g for g in history if g["input_text"] == "Model error test"]
+    assert len(failed) == 1
+    assert failed[0]["output_filename"] == ""
+    assert failed[0]["duration_seconds"] is None

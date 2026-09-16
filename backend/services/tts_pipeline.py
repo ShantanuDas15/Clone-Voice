@@ -59,6 +59,11 @@ def _free_gpu_memory() -> None:
         torch.cuda.empty_cache()
 
 
+def free_gpu_memory() -> None:
+    """Public entry point for callers outside this module (e.g. API error paths)."""
+    _free_gpu_memory()
+
+
 def _module_device(module: torch.nn.Module) -> "torch.device | None":
     """Return the torch device a module's parameters live on.
 
