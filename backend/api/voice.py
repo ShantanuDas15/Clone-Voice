@@ -1,5 +1,6 @@
 """Voice profile management API routes."""
 
+import asyncio
 import logging
 import os
 import uuid
@@ -26,6 +27,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _persist_profile(db: Session, profile: VoiceProfile) -> None:
+    """Add, commit, and refresh a voice profile row (run off the event loop)."""
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+
 @router.post(
     "/upload", response_model=VoiceProfileOut, status_code=status.HTTP_201_CREATED
 )
@@ -38,18 +46,18 @@ async def upload_audio(
     db: Session = Depends(get_db),
 ):
     """Validate, process, and embed an uploaded audio sample."""
-    ext = validate_audio_file(file)
-    file_path = save_upload(file, str(current_user.id), ext)
+    ext = await asyncio.to_thread(validate_audio_file, file)
+    file_path = await asyncio.to_thread(save_upload, file, str(current_user.id), ext)
     logger.info("Audio uploaded by user_id=%s — file=%s", current_user.id, file_path)
 
-    y_processed = preprocess_audio(file_path)
+    y_processed = await asyncio.to_thread(preprocess_audio, file_path)
 
     embedding_path = os.path.splitext(file_path)[0] + "_embed.npy"
 
     try:
         logger.debug("Extracting speaker embedding for user_id=%s", current_user.id)
         embedding = await embed_speaker_async(y_processed)
-        np.save(embedding_path, embedding)
+        await asyncio.to_thread(np.save, embedding_path, embedding)
         logger.info(
             "Speaker embedding saved: %s (shape=%s)", embedding_path, embedding.shape
         )
@@ -59,7 +67,7 @@ async def upload_audio(
             current_user.id,
         )
         try:
-            os.remove(file_path)
+            await asyncio.to_thread(os.remove, file_path)
             logger.info(
                 "Removed orphaned upload after embedding failure: %s", file_path
             )
@@ -72,9 +80,7 @@ async def upload_audio(
             embedding_path="",
             status="failed",
         )
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
+        await asyncio.to_thread(_persist_profile, db, profile)
         raise HTTPException(
             status_code=500, detail="Failed to extract speaker embedding"
         )
@@ -86,9 +92,7 @@ async def upload_audio(
         embedding_path=embedding_path,
         status="ready",
     )
-    db.add(profile)
-    db.commit()
-    db.refresh(profile)
+    await asyncio.to_thread(_persist_profile, db, profile)
 
     logger.info(
         "Voice profile created: id=%s, name=%s, user_id=%s",
