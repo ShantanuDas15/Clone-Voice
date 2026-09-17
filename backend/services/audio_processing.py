@@ -11,8 +11,8 @@ from fastapi import HTTPException, UploadFile
 from backend.core.config import settings
 
 
-def validate_audio_file(file: UploadFile) -> None:
-    """Validate uploaded audio file MIME type, size, and magic bytes."""
+def validate_audio_file(file: UploadFile) -> str:
+    """Validate MIME type, size, and magic bytes; return the extension the magic bytes imply."""
     allowed_mimes = [
         "audio/wav",
         "audio/x-wav",
@@ -49,20 +49,20 @@ def validate_audio_file(file: UploadFile) -> None:
     )
     is_webm = magic.startswith(b"\x1a\x45\xdf\xa3")
 
-    if not (is_wav or is_mp3 or is_webm):
-        raise HTTPException(
-            status_code=422, detail="Invalid file signature (magic bytes)."
-        )
+    if is_wav:
+        return ".wav"
+    if is_mp3:
+        return ".mp3"
+    if is_webm:
+        return ".webm"
+
+    raise HTTPException(status_code=422, detail="Invalid file signature (magic bytes).")
 
 
-def save_upload(file: UploadFile, user_id: str) -> str:
-    """Save an uploaded audio file to the user-specific upload directory."""
+def save_upload(file: UploadFile, user_id: str, ext: str) -> str:
+    """Save an uploaded audio file to the user-specific upload directory under the given extension."""
     user_dir = os.path.join(settings.UPLOAD_DIR, user_id)
     os.makedirs(user_dir, exist_ok=True)
-
-    ext = os.path.splitext(file.filename or "")[1]
-    if not ext:
-        ext = ".wav"
 
     filename = f"{uuid.uuid4()}{ext}"
     file_path = os.path.join(user_dir, filename)
