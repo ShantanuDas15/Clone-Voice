@@ -1,5 +1,6 @@
 """TTS synthesis API routes and history."""
 
+import asyncio
 import logging
 import os
 from typing import List
@@ -45,6 +46,13 @@ def _record_failed_generation(
     db.commit()
 
 
+def _persist_generation(db: Session, generation: Generation) -> None:
+    """Add, commit, and refresh a completed generation row (run off the event loop)."""
+    db.add(generation)
+    db.commit()
+    db.refresh(generation)
+
+
 @router.post("", response_class=FileResponse)
 @limiter.limit("5/minute")
 async def synthesize(
@@ -54,8 +62,10 @@ async def synthesize(
     db: Session = Depends(get_db),
 ):
     """Synthesize speech from text using a given voice profile."""
-    profile = (
-        db.query(VoiceProfile).filter(VoiceProfile.id == req.voice_profile_id).first()
+    profile = await asyncio.to_thread(
+        lambda: db.query(VoiceProfile)
+        .filter(VoiceProfile.id == req.voice_profile_id)
+        .first()
     )
 
     if not profile or profile.deleted_at is not None:
@@ -67,7 +77,7 @@ async def synthesize(
         )
 
     try:
-        embedding = np.load(profile.embedding_path)
+        embedding = await asyncio.to_thread(np.load, profile.embedding_path)
     except Exception:
         logger.exception("Failed to load embedding for profile_id=%s", profile.id)
         raise HTTPException(
@@ -91,7 +101,9 @@ async def synthesize(
             current_user.id,
             profile.id,
         )
-        _record_failed_generation(db, current_user.id, profile.id, req.text)
+        await asyncio.to_thread(
+            _record_failed_generation, db, current_user.id, profile.id, req.text
+        )
         free_gpu_memory()
         raise HTTPException(
             status_code=503,
@@ -103,7 +115,9 @@ async def synthesize(
             current_user.id,
             profile.id,
         )
-        _record_failed_generation(db, current_user.id, profile.id, req.text)
+        await asyncio.to_thread(
+            _record_failed_generation, db, current_user.id, profile.id, req.text
+        )
         free_gpu_memory()
         raise HTTPException(
             status_code=500,
@@ -125,9 +139,7 @@ async def synthesize(
         duration_seconds=duration,
         status="completed",
     )
-    db.add(generation)
-    db.commit()
-    db.refresh(generation)
+    await asyncio.to_thread(_persist_generation, db, generation)
 
     return FileResponse(
         out_path, media_type="audio/wav", filename=f"synthesized_{generation.id}.wav"
