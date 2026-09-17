@@ -125,6 +125,49 @@ def test_upload_embedding_failure_deletes_orphaned_file(
     assert failed[0]["status"] == "failed"
 
 
+def test_upload_extension_derived_from_magic_bytes_not_filename(
+    client: TestClient, auth_headers, tmp_path
+):
+    """A client filename extension that disagrees with the real audio format
+    (e.g. real WAV bytes under a ".mp3" name, or mixed-case ".WAV") must not
+    dictate the stored extension — the magic bytes must, so the saved file and
+    its embedding stay loadable via `np.load`."""
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)):
+        wav_data = create_dummy_wav()
+        files = {"file": ("voice.MP3", wav_data, "audio/wav")}
+        data = {"name": "Mismatched Voice"}
+        response = client.post(
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
+        )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "ready"
+
+    saved_files = list(tmp_path.rglob("*"))
+    audio_files = [f for f in saved_files if f.suffix == ".wav" and f.is_file()]
+    embed_files = [f for f in saved_files if f.name.endswith("_embed.npy")]
+    assert len(audio_files) == 1, f"Expected one .wav file, found: {saved_files}"
+    assert len(embed_files) == 1, f"Expected one _embed.npy file, found: {saved_files}"
+    assert embed_files[0].name == audio_files[0].stem + "_embed.npy"
+    assert not any(f.suffix == ".mp3" for f in saved_files)
+
+
+def test_validate_audio_file_returns_extension_from_magic_bytes():
+    """`validate_audio_file` must return the extension implied by the magic
+    bytes, ignoring the client-supplied filename entirely."""
+    from io import BytesIO
+
+    from starlette.datastructures import UploadFile as StarletteUploadFile
+
+    from backend.services.audio_processing import validate_audio_file
+
+    wav_bytes = create_dummy_wav()
+    upload = StarletteUploadFile(file=BytesIO(wav_bytes), filename="not_actually.mp3")
+    upload.headers = {"content-type": "audio/wav"}
+
+    assert validate_audio_file(upload) == ".wav"
+
+
 def test_upload_unauthenticated(client: TestClient):
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}

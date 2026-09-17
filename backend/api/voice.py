@@ -38,15 +38,13 @@ async def upload_audio(
     db: Session = Depends(get_db),
 ):
     """Validate, process, and embed an uploaded audio sample."""
-    validate_audio_file(file)
-    file_path = save_upload(file, str(current_user.id))
+    ext = validate_audio_file(file)
+    file_path = save_upload(file, str(current_user.id), ext)
     logger.info("Audio uploaded by user_id=%s — file=%s", current_user.id, file_path)
 
     y_processed = preprocess_audio(file_path)
 
-    embedding_path = file_path.replace(".wav", "_embed.npy").replace(
-        ".mp3", "_embed.npy"
-    )
+    embedding_path = os.path.splitext(file_path)[0] + "_embed.npy"
 
     try:
         logger.debug("Extracting speaker embedding for user_id=%s", current_user.id)
