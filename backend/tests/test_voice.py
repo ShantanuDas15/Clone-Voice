@@ -9,6 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.services.audio_processing import preprocess_audio
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError)
 
 
 @pytest.fixture
@@ -121,6 +123,58 @@ def test_upload_embedding_failure_deletes_orphaned_file(
 
     profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
     failed = [p for p in profiles if p["name"] == "Fail Voice"]
+    assert len(failed) == 1
+    assert failed[0]["status"] == "failed"
+
+
+def test_upload_queue_full_returns_429_and_deletes_orphaned_file(
+    client: TestClient, auth_headers, tmp_path
+):
+    """HARDENING_PLAN.md H6: a full inference queue during embedding
+    extraction maps to 429 and still cleans up the orphaned upload."""
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
+        "backend.api.voice.embed_speaker_async",
+        side_effect=InferenceQueueFullError("simulated full queue"),
+    ):
+        wav_data = create_dummy_wav()
+        files = {"file": ("busy.wav", wav_data, "audio/wav")}
+        data = {"name": "Busy Voice"}
+        response = client.post(
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
+        )
+
+    assert response.status_code == 429
+    remaining_files = list(tmp_path.rglob("*.wav"))
+    assert remaining_files == [], f"Orphaned upload(s) left on disk: {remaining_files}"
+
+    profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
+    failed = [p for p in profiles if p["name"] == "Busy Voice"]
+    assert len(failed) == 1
+    assert failed[0]["status"] == "failed"
+
+
+def test_upload_timeout_returns_503_and_deletes_orphaned_file(
+    client: TestClient, auth_headers, tmp_path
+):
+    """HARDENING_PLAN.md H6: an embedding-extraction timeout maps to 503
+    and still cleans up the orphaned upload."""
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
+        "backend.api.voice.embed_speaker_async",
+        side_effect=InferenceTimeoutError("simulated inference timeout"),
+    ):
+        wav_data = create_dummy_wav()
+        files = {"file": ("slow.wav", wav_data, "audio/wav")}
+        data = {"name": "Slow Voice"}
+        response = client.post(
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
+        )
+
+    assert response.status_code == 503
+    remaining_files = list(tmp_path.rglob("*.wav"))
+    assert remaining_files == [], f"Orphaned upload(s) left on disk: {remaining_files}"
+
+    profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
+    failed = [p for p in profiles if p["name"] == "Slow Voice"]
     assert len(failed) == 1
     assert failed[0]["status"] == "failed"
 

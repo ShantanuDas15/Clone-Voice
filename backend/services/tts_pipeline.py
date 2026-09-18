@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 
 import numpy as np
 import soundfile as sf
@@ -44,6 +45,69 @@ _vocoder_checksum_verified = False
 # Prevents concurrent GPU OOM / CPU thrash when multiple requests arrive
 # simultaneously. Replace with a Celery/ARQ task queue for multi-GPU scaling.
 _inference_semaphore = asyncio.Semaphore(1)
+
+# Count of requests currently waiting to acquire `_inference_semaphore`
+# (HARDENING_PLAN.md finding H6). Only ever mutated from
+# `_acquire_inference_slot()`, always between `await` points, so plain
+# increment/decrement is safe on asyncio's single-threaded event loop.
+_inference_waiters = 0
+
+
+class InferenceQueueFullError(RuntimeError):
+    """Raised when `settings.INFERENCE_MAX_WAITERS` requests are already
+    queued for the inference semaphore. Mapped to HTTP 429 by callers."""
+
+
+class InferenceTimeoutError(RuntimeError):
+    """Raised when a request waits longer than
+    `settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS` for a free inference slot,
+    or an acquired forward pass runs longer than
+    `settings.INFERENCE_CALL_TIMEOUT_SECONDS`. Mapped to HTTP 503 by
+    callers."""
+
+
+@asynccontextmanager
+async def _acquire_inference_slot():
+    """Acquire `_inference_semaphore` with a bounded wait queue and timeout.
+
+    Without this, every synthesis/embedding request funnels through the one
+    process-wide permit with unbounded waiting (HARDENING_PLAN.md finding
+    H6): under load, requests would queue silently until a client or proxy
+    timeout fires, while the queued work still ran afterward. This bounds
+    both the number of requests allowed to queue and how long any one of
+    them waits.
+
+    Raises:
+        InferenceQueueFullError: `settings.INFERENCE_MAX_WAITERS` requests
+            are already waiting — this one is rejected immediately without
+            joining the queue.
+        InferenceTimeoutError: This request waited but did not get a slot
+            within `settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS`.
+    """
+    global _inference_waiters
+    if _inference_waiters >= settings.INFERENCE_MAX_WAITERS:
+        raise InferenceQueueFullError(
+            f"Inference queue is full ({settings.INFERENCE_MAX_WAITERS} "
+            "requests already waiting for a slot)."
+        )
+    _inference_waiters += 1
+    try:
+        try:
+            await asyncio.wait_for(
+                _inference_semaphore.acquire(),
+                timeout=settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            raise InferenceTimeoutError(
+                "Timed out waiting for a free inference slot."
+            ) from None
+    finally:
+        _inference_waiters -= 1
+
+    try:
+        yield
+    finally:
+        _inference_semaphore.release()
 
 
 def _free_gpu_memory() -> None:
@@ -404,6 +468,11 @@ async def run_inference_pipeline(
     trigger simultaneous GPU/CPU inference.  File I/O (``save_output``) runs
     outside the semaphore because it is disk-bound and safe to parallelise.
 
+    The acquisition itself is bounded (queue-depth cap + wait timeout) and
+    the two forward passes together are bounded by a single per-call
+    timeout (HARDENING_PLAN.md finding H6), so a stuck or overloaded
+    inference run fails fast instead of blocking indefinitely.
+
     Args:
         text: Input text to synthesise.
         embedding: 256-dim speaker embedding produced by the encoder.
@@ -411,13 +480,29 @@ async def run_inference_pipeline(
 
     Returns:
         Tuple of (absolute output WAV path, duration in seconds).
+
+    Raises:
+        InferenceQueueFullError: The inference queue is already at capacity.
+        InferenceTimeoutError: The slot wait, or the forward passes
+            themselves, exceeded their configured timeout.
     """
-    async with _inference_semaphore:
+    async with _acquire_inference_slot():
         logger.debug(
             "Inference semaphore acquired — starting synthesizer forward pass."
         )
-        mel = await asyncio.to_thread(synthesize_speech, text, embedding)
-        wav = await asyncio.to_thread(vocode, mel)
+        try:
+            mel = await asyncio.wait_for(
+                asyncio.to_thread(synthesize_speech, text, embedding),
+                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+            )
+            wav = await asyncio.wait_for(
+                asyncio.to_thread(vocode, mel),
+                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            raise InferenceTimeoutError(
+                "Inference forward pass exceeded the per-call timeout."
+            ) from None
         logger.debug("Inference semaphore releasing — forward passes complete.")
 
     out_path, duration = await asyncio.to_thread(
@@ -431,16 +516,31 @@ async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
 
     The encoder forward pass shares the same hardware resources as the
     synthesizer and vocoder, so it is gated by the same semaphore to prevent
-    concurrent model execution during voice-profile upload.
+    concurrent model execution during voice-profile upload. Subject to the
+    same bounded queue and per-call timeout as ``run_inference_pipeline``
+    (HARDENING_PLAN.md finding H6).
 
     Args:
         audio: Preprocessed, normalised audio array at 16 kHz.
 
     Returns:
         256-dim float32 speaker embedding.
+
+    Raises:
+        InferenceQueueFullError: The inference queue is already at capacity.
+        InferenceTimeoutError: The slot wait, or the forward pass itself,
+            exceeded its configured timeout.
     """
-    async with _inference_semaphore:
-        return await asyncio.to_thread(embed_speaker, audio)
+    async with _acquire_inference_slot():
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(embed_speaker, audio),
+                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            raise InferenceTimeoutError(
+                "Embedding extraction exceeded the per-call timeout."
+            ) from None
 
 
 # ---------------------------------------------------------------------------

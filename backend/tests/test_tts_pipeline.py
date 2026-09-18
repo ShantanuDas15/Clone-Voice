@@ -139,6 +139,161 @@ def test_concurrent_inference_completes_without_error():
         os.remove(path)
 
 
+def _patch_fresh_inference_semaphore(monkeypatch):
+    """Swap in a brand-new, unbound `asyncio.Semaphore` for the duration of
+    a test.
+
+    `_inference_semaphore` is a process-wide module global, shared by every
+    test in this file. Contending on it (a waiter actually has to block)
+    binds it to the current test's event loop (an asyncio.Semaphore lazily
+    binds to whichever loop first has to queue a waiter on it); a later
+    test's own `asyncio.run()` call then gets a fresh loop and would crash
+    with "bound to a different event loop" trying to reuse it. Patching in a
+    fresh instance keeps each contention test's binding local to itself.
+    """
+    import asyncio
+
+    fresh_semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline._inference_semaphore", fresh_semaphore
+    )
+    return fresh_semaphore
+
+
+def test_acquire_inference_slot_rejects_when_max_waiters_reached(monkeypatch):
+    """HARDENING_PLAN.md H6: once `INFERENCE_MAX_WAITERS` requests are
+    already queued, a new request must be rejected with
+    InferenceQueueFullError immediately — never joining the queue."""
+    import asyncio
+
+    from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                               _acquire_inference_slot)
+
+    fresh_semaphore = _patch_fresh_inference_semaphore(monkeypatch)
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_MAX_WAITERS", 1
+    )
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS",
+        5.0,
+    )
+
+    async def _run():
+        async with fresh_semaphore:  # hold the only slot
+            waiter_entered = asyncio.Event()
+
+            async def _wait_for_slot():
+                async with _acquire_inference_slot():
+                    pass  # pragma: no cover - never reached, slot stays held
+
+            task = asyncio.ensure_future(_wait_for_slot())
+            # Let the waiter actually start awaiting the semaphore before we
+            # count it as "queued".
+            await asyncio.sleep(0.05)
+            waiter_entered.set()
+
+            with pytest.raises(InferenceQueueFullError):
+                async with _acquire_inference_slot():
+                    pass  # pragma: no cover - must raise before entering
+
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    asyncio.run(_run())
+
+
+def test_acquire_inference_slot_times_out_waiting_for_free_slot(monkeypatch):
+    """HARDENING_PLAN.md H6: a request must give up with
+    InferenceTimeoutError, not wait forever, when the semaphore stays held
+    past `INFERENCE_ACQUIRE_TIMEOUT_SECONDS`."""
+    import asyncio
+
+    from backend.services.tts_pipeline import (InferenceTimeoutError,
+                                               _acquire_inference_slot)
+
+    fresh_semaphore = _patch_fresh_inference_semaphore(monkeypatch)
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS",
+        0.05,
+    )
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_MAX_WAITERS", 10
+    )
+
+    async def _run():
+        async with fresh_semaphore:  # hold the only slot for the test
+            with pytest.raises(InferenceTimeoutError):
+                async with _acquire_inference_slot():
+                    pass  # pragma: no cover - must time out before entering
+
+    asyncio.run(_run())
+
+
+def test_acquire_inference_slot_decrements_waiters_after_timeout(monkeypatch):
+    """A timed-out waiter must not permanently occupy a queue slot — the
+    waiters counter must drop back down so later requests can still queue."""
+    import asyncio
+
+    import backend.services.tts_pipeline as tts_pipeline_module
+    from backend.services.tts_pipeline import (InferenceTimeoutError,
+                                               _acquire_inference_slot)
+
+    fresh_semaphore = _patch_fresh_inference_semaphore(monkeypatch)
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS",
+        0.05,
+    )
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_MAX_WAITERS", 10
+    )
+
+    async def _run():
+        async with fresh_semaphore:
+            with pytest.raises(InferenceTimeoutError):
+                async with _acquire_inference_slot():
+                    pass
+
+        assert tts_pipeline_module._inference_waiters == 0
+
+    asyncio.run(_run())
+
+
+def test_run_inference_pipeline_raises_timeout_on_slow_forward_pass(monkeypatch):
+    """HARDENING_PLAN.md H6: a forward pass slower than
+    `INFERENCE_CALL_TIMEOUT_SECONDS` must raise InferenceTimeoutError rather
+    than run unbounded."""
+    import asyncio
+    import time
+
+    from backend.services.tts_pipeline import (InferenceTimeoutError,
+                                               run_inference_pipeline)
+
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_CALL_TIMEOUT_SECONDS",
+        0.05,
+    )
+
+    def _slow_synthesize(text, embedding):
+        time.sleep(0.5)
+        return np.zeros((80, 10), dtype=np.float32)
+
+    with patch(
+        "backend.services.tts_pipeline.synthesize_speech",
+        side_effect=_slow_synthesize,
+    ):
+        with pytest.raises(InferenceTimeoutError):
+            asyncio.run(
+                run_inference_pipeline(
+                    "Hello world.",
+                    np.zeros(256, dtype=np.float32),
+                    "test_timeout_user",
+                )
+            )
+
+
 def test_embed_speaker_async_returns_correct_shape():
     """embed_speaker_async must return a 256-dim float32 embedding under the semaphore."""
     import asyncio

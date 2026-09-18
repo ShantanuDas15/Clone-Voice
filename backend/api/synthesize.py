@@ -18,7 +18,9 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import (free_gpu_memory,
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           free_gpu_memory,
                                            run_inference_pipeline)
 
 logger = logging.getLogger(__name__)
@@ -94,6 +96,31 @@ async def synthesize(
     try:
         out_path, duration = await run_inference_pipeline(
             req.text, embedding, str(current_user.id)
+        )
+    except InferenceQueueFullError:
+        logger.warning(
+            "Inference queue full — rejecting synthesis request — "
+            "user_id=%s, profile_id=%s",
+            current_user.id,
+            profile.id,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Synthesis service is busy. Please try again shortly.",
+        )
+    except InferenceTimeoutError:
+        logger.exception(
+            "Inference timed out — user_id=%s, profile_id=%s",
+            current_user.id,
+            profile.id,
+        )
+        await asyncio.to_thread(
+            _record_failed_generation, db, current_user.id, profile.id, req.text
+        )
+        free_gpu_memory()
+        raise HTTPException(
+            status_code=503,
+            detail="Synthesis service is temporarily overloaded. Please try again shortly.",
         )
     except torch.cuda.OutOfMemoryError:
         logger.exception(

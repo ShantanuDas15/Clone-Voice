@@ -31,6 +31,19 @@ class Settings(BaseSettings):
     # 16000, not the previously-guessed 22050.
     VOCODER_SAMPLE_RATE: int = 16000
     RATE_LIMIT_ENABLED: bool = True
+    # HARDENING_PLAN.md finding H6: bound the single process-wide inference
+    # semaphore so callers fail fast instead of queuing unbounded.
+    # INFERENCE_MAX_WAITERS: requests already queued for a slot beyond this
+    # are rejected immediately with 429, never counting the request(s)
+    # currently holding the semaphore.
+    INFERENCE_MAX_WAITERS: int = 10
+    # INFERENCE_ACQUIRE_TIMEOUT_SECONDS: max time a queued request waits for
+    # a free slot before giving up with 503.
+    INFERENCE_ACQUIRE_TIMEOUT_SECONDS: float = 10.0
+    # INFERENCE_CALL_TIMEOUT_SECONDS: max wall-clock time for one held
+    # inference call (embedding extraction, or the synthesizer+vocoder
+    # forward passes together) before it is abandoned with 503.
+    INFERENCE_CALL_TIMEOUT_SECONDS: float = 30.0
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
     SENTRY_DSN: str = ""
