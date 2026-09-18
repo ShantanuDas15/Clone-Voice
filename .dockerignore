@@ -1,0 +1,46 @@
+# Keep the backend build context small and never bake secrets, user data, or
+# large model weights into the image (HARDENING_PLAN.md findings C3, H7).
+
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+backend/.venv/
+**/*.egg-info/
+
+# Secrets — never baked into the image; docker-compose.yml injects these at
+# container-start time via `env_file`, not build time.
+**/.env
+
+# User data and model weights — provisioned separately (README.md "Model
+# Weights") and mounted as volumes, never shipped in the image.
+backend/uploads/
+backend/outputs/
+backend/weights/
+uploads/
+outputs/
+test_output.wav
+
+# Database files
+*.db
+clonevoice_test.db
+
+# OS / editor / VCS
+.DS_Store
+.vscode/
+.idea/
+.git/
+.gitignore
+
+# Top-level project docs not needed inside the image. Deliberately listed by
+# exact name rather than a `*.md` wildcard, so this can't accidentally also
+# match (and drop) backend/services/sv2tts/THIRD_PARTY_NOTICE.md, which the
+# vendored SV2TTS code's MIT license requires shipping alongside it.
+README.md
+CLAUDE.md
+HARDENING_PLAN.md
+DATABASE_DESIGN.md
+PHASE_1_BACKEND_PLAN.md
+PHASE_2_BACKEND_HARDENING_PLAN.md
+project_description.md
+backend-review.md
