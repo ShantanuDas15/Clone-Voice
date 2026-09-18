@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   db:
     image: postgres:15-alpine
@@ -16,5 +15,47 @@ services:
       timeout: 5s
       retries: 5
 
+  # HARDENING_PLAN.md finding H7: this service (plus backend/Dockerfile) was
+  # previously missing entirely — `docker-compose up --build` (the README's
+  # only documented start command) could bring up `db` but never the API.
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    # Secrets (JWT_SECRET_KEY, GOOGLE_CLIENT_SECRET, ...) come from your own
+    # backend/.env (gitignored, never baked into the image — see
+    # backend/.env.example and README.md "Environment Setup").
+    env_file:
+      - backend/.env
+    environment:
+      # Overrides whatever DATABASE_URL is in backend/.env: inside the
+      # compose network the DB is reachable at the `db` service name, not
+      # `localhost` (which .env.example defaults to for bare-metal/local use).
+      DATABASE_URL: postgresql://clonevoice:clonevoice_dev@db:5432/clonevoice
+    ports:
+      - "8000:8000"
+    volumes:
+      # Model checkpoints, uploads, and outputs are deliberately not baked
+      # into the image (see backend/Dockerfile, .dockerignore) — these
+      # volumes are what make them persist across container recreation.
+      # WEIGHTS_DIR resolves under backend/ (anchored to BASE_DIR), but
+      # UPLOAD_DIR/OUTPUT_DIR are bare relative paths resolved against the
+      # container's WORKDIR (/app) — see backend/Dockerfile's comment on
+      # HARDENING_PLAN.md finding M9 (not fixed here) for why these two
+      # mount points intentionally don't live under /app/backend too.
+      - backend_weights:/app/backend/weights
+      - backend_uploads:/app/uploads
+      - backend_outputs:/app/outputs
+    depends_on:
+      db:
+        condition: service_healthy
+    # Exactly one container, one uvicorn worker (set explicitly in
+    # backend/Dockerfile's CMD) — the inference semaphore (H6) and the rate
+    # limiter (M3) are both process-local state, so do not scale this via
+    # `--workers` or `deploy.replicas` without addressing those first.
+
 volumes:
   postgres_data:
+  backend_weights:
+  backend_uploads:
+  backend_outputs:

@@ -51,15 +51,23 @@ cp backend/.env.example backend/.env
 ```
 
 ### 4. Start Services
-The project uses Docker Compose to easily spin up the database and services.
+The project uses Docker Compose to spin up the database and the backend API
+(`docker-compose.yml` — `db` and `backend` services; see `backend/Dockerfile`
+and `HARDENING_PLAN.md` finding H7).
 ```bash
 docker-compose up --build
 ```
 
-- **Frontend:** http://localhost:3000
+- **Frontend:** http://localhost:3000 (not yet implemented — CLAUDE.md §2 requires the
+  backend to be fully hardened first)
 - **Backend API:** http://localhost:8000
 - **API Documentation:** http://localhost:8000/docs
 - **Database:** localhost:5432
+
+The `backend` container runs a single `uvicorn` worker on purpose — see "Resource
+Requirements" below and the comment on `CMD` in `backend/Dockerfile`. It will report
+`503`/`"degraded"` at `/health` until real model checkpoints are provisioned (next section);
+`docker-compose up` alone does not fetch them.
 
 ### 5. Model Weights
 
@@ -104,6 +112,39 @@ fall back to mock, placeholder, or unverified weights (see `HARDENING_PLAN.md`, 
   checkpoint; `false` for the test suite's mock models; `null` where it doesn't apply, e.g. the
   encoder) — diagnostic only, so it never flips a healthy mock-backed test deployment to
   `"degraded"`.
+- **Under Docker Compose:** the `backend` service stores `WEIGHTS_DIR` in the
+  `backend_weights` named volume, not the image, so it survives `docker-compose down` /
+  rebuilds. Run the same provisioning commands inside the running container instead of on
+  the host:
+  ```bash
+  docker-compose exec backend python -m backend.download_weights --fetch --verify-inference
+  ```
+
+### 6. Resource Requirements
+
+Sizing for the `backend` container (`backend/Dockerfile`), from the two real checkpoints
+being ~424 MB combined on disk (§5) plus the fixed cost of one held inference at a time —
+**not** per-concurrent-request, since the inference semaphore (`HARDENING_PLAN.md` finding
+H6) allows only one synthesizer+vocoder forward pass in the whole process at once, however
+many requests are queued behind it:
+
+- **CPU-only (`DEVICE=cpu`, the default):** 2+ cores, 4 GB RAM minimum. Works, but WaveRNN's
+  autoregressive sample-by-sample generation is slow on CPU — expect synthesis to take much
+  longer than real-time (`C2.3`'s smoke test measured ~8.6s for a 1.4s clip on GPU; CPU is
+  markedly slower still).
+- **GPU (`DEVICE=cuda`):** an NVIDIA GPU with **4 GB+ VRAM** is a reasonable baseline —
+  ~424 MB of fp32 parameters once loaded onto the device, plus a few hundred MB of fixed CUDA
+  context overhead, plus mel/waveform activation buffers for one in-flight request (the
+  semaphore keeps this from multiplying with request volume). This is an **estimate from
+  checkpoint size, not a benchmarked figure** — this session had no provisioned checkpoints to
+  load and measure against (`weights/` was empty), so treat it as a starting point and confirm
+  the real figure with `nvidia-smi` while `--verify-inference` (§5) is running. Also requires
+  `nvidia-container-toolkit` on the Docker host and a `deploy.resources.reservations.devices`
+  GPU block added to the `backend` service in `docker-compose.yml` — not included by default,
+  since a GPU is not guaranteed to be present on every host this compose file runs on.
+- **Disk:** ~424 MB for the two checkpoints, plus resemblyzer's own pretrained encoder cache
+  (~17 MB, downloaded automatically into the container user's home directory on first use —
+  persist `~appuser` if you don't want to re-download it on every container recreation).
 
 ## 🗺️ Roadmap
 
