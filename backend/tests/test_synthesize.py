@@ -9,7 +9,9 @@ import pytest
 import torch
 from fastapi.testclient import TestClient
 
-from backend.services.tts_pipeline import load_mock_models
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           load_mock_models)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -228,6 +230,57 @@ def test_synthesize_cuda_oom_returns_503_and_records_failed_generation(
 
     history = client.get("/api/v1/synthesize/history", headers=auth_headers_syn).json()
     failed = [g for g in history if g["input_text"] == "OOM test"]
+    assert len(failed) == 1
+    assert failed[0]["output_filename"] == ""
+    assert failed[0]["duration_seconds"] is None
+
+
+def test_synthesize_queue_full_returns_429_without_failed_generation(
+    client: TestClient, auth_headers_syn
+):
+    """HARDENING_PLAN.md H6: a full inference queue maps to 429, and — since
+    no inference was ever attempted — must not leave a failed audit row."""
+    profile_id = upload_profile(client, auth_headers_syn)
+
+    with patch(
+        "backend.api.synthesize.run_inference_pipeline",
+        side_effect=InferenceQueueFullError("simulated full queue"),
+    ):
+        res = client.post(
+            "/api/v1/synthesize",
+            headers=auth_headers_syn,
+            json={"voice_profile_id": profile_id, "text": "Queue full test"},
+        )
+
+    assert res.status_code == 429
+
+    history = client.get("/api/v1/synthesize/history", headers=auth_headers_syn).json()
+    failed = [g for g in history if g["input_text"] == "Queue full test"]
+    assert len(failed) == 0
+
+
+def test_synthesize_timeout_returns_503_and_records_failed_generation(
+    client: TestClient, auth_headers_syn
+):
+    """HARDENING_PLAN.md H6: an inference acquisition/forward-pass timeout
+    maps to 503 and leaves a `status="failed"` audit row, same as OOM."""
+    profile_id = upload_profile(client, auth_headers_syn)
+
+    with patch(
+        "backend.api.synthesize.run_inference_pipeline",
+        side_effect=InferenceTimeoutError("simulated inference timeout"),
+    ), patch("backend.api.synthesize.free_gpu_memory") as mock_free:
+        res = client.post(
+            "/api/v1/synthesize",
+            headers=auth_headers_syn,
+            json={"voice_profile_id": profile_id, "text": "Timeout test"},
+        )
+
+    assert res.status_code == 503
+    mock_free.assert_called_once()
+
+    history = client.get("/api/v1/synthesize/history", headers=auth_headers_syn).json()
+    failed = [g for g in history if g["input_text"] == "Timeout test"]
     assert len(failed) == 1
     assert failed[0]["output_filename"] == ""
     assert failed[0]["duration_seconds"] is None

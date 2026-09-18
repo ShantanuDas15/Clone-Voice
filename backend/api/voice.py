@@ -20,7 +20,9 @@ from backend.models.voice_profile import VoiceProfile
 from backend.schemas.voice import VoiceProfileOut
 from backend.services.audio_processing import (preprocess_audio, save_upload,
                                                validate_audio_file)
-from backend.services.tts_pipeline import embed_speaker_async
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           embed_speaker_async)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,29 @@ def _persist_profile(db: Session, profile: VoiceProfile) -> None:
     db.add(profile)
     db.commit()
     db.refresh(profile)
+
+
+async def _cleanup_failed_upload(
+    db: Session, file_path: str, current_user: User, name: str
+) -> None:
+    """Remove the orphaned upload and persist a `status="failed"` profile row.
+
+    Shared by every embedding-extraction failure path (generic error, queue
+    rejection, timeout) so each one leaves the same consistent audit trail.
+    """
+    try:
+        await asyncio.to_thread(os.remove, file_path)
+        logger.info("Removed orphaned upload after embedding failure: %s", file_path)
+    except OSError:
+        logger.exception("Failed to remove orphaned upload: %s", file_path)
+    profile = VoiceProfile(
+        user_id=current_user.id,
+        name=name,
+        audio_sample_path=file_path,
+        embedding_path="",
+        status="failed",
+    )
+    await asyncio.to_thread(_persist_profile, db, profile)
 
 
 @router.post(
@@ -61,26 +86,30 @@ async def upload_audio(
         logger.info(
             "Speaker embedding saved: %s (shape=%s)", embedding_path, embedding.shape
         )
+    except InferenceQueueFullError:
+        logger.warning(
+            "Inference queue full — rejecting upload for user_id=%s", current_user.id
+        )
+        await _cleanup_failed_upload(db, file_path, current_user, name)
+        raise HTTPException(
+            status_code=429,
+            detail="Voice profile service is busy. Please try again shortly.",
+        )
+    except InferenceTimeoutError:
+        logger.exception(
+            "Embedding extraction timed out for user_id=%s", current_user.id
+        )
+        await _cleanup_failed_upload(db, file_path, current_user, name)
+        raise HTTPException(
+            status_code=503,
+            detail="Voice profile service is temporarily overloaded. Please try again shortly.",
+        )
     except Exception:
         logger.exception(
             "Embedding extraction failed for user_id=%s — persisting failed profile",
             current_user.id,
         )
-        try:
-            await asyncio.to_thread(os.remove, file_path)
-            logger.info(
-                "Removed orphaned upload after embedding failure: %s", file_path
-            )
-        except OSError:
-            logger.exception("Failed to remove orphaned upload: %s", file_path)
-        profile = VoiceProfile(
-            user_id=current_user.id,
-            name=name,
-            audio_sample_path=file_path,
-            embedding_path="",
-            status="failed",
-        )
-        await asyncio.to_thread(_persist_profile, db, profile)
+        await _cleanup_failed_upload(db, file_path, current_user, name)
         raise HTTPException(
             status_code=500, detail="Failed to extract speaker embedding"
         )
