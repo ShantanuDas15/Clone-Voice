@@ -30,13 +30,16 @@ from backend.services.audio_processing import \
     validate_audio_file as real_validate_audio_file
 
 
-def _create_dummy_wav(size_bytes=1000) -> bytes:
+def _create_dummy_wav(seconds: float = 3.0) -> bytes:
+    """Build a voiced (3 s, 220 Hz tone) 16 kHz mono WAV that passes M4's duration checks."""
+    t = np.arange(int(16000 * seconds)) / 16000
+    samples = (0.5 * np.sin(2 * np.pi * 220 * t) * 32767).astype("<i2")
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
         wav.setframerate(16000)
-        wav.writeframes(b"\x00" * size_bytes)
+        wav.writeframes(samples.tobytes())
     buf.seek(0)
     return buf.read()
 

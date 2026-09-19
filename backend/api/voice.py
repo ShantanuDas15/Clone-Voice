@@ -36,6 +36,24 @@ def _persist_profile(db: Session, profile: VoiceProfile) -> None:
     db.refresh(profile)
 
 
+def _remove_quietly(path: str) -> None:
+    """Delete a file, logging (not raising) on failure."""
+    try:
+        os.remove(path)
+    except OSError:
+        logger.exception("Failed to remove rejected upload: %s", path)
+
+
+def _is_usable_embedding(embedding: np.ndarray) -> bool:
+    """Return True only for a finite, non-zero embedding (never persist a blank one)."""
+    return (
+        embedding is not None
+        and embedding.size > 0
+        and bool(np.all(np.isfinite(embedding)))
+        and bool(np.any(embedding != 0))
+    )
+
+
 async def _cleanup_failed_upload(
     db: Session, file_path: str, current_user: User, name: str
 ) -> None:
@@ -75,17 +93,36 @@ async def upload_audio(
     file_path = await asyncio.to_thread(save_upload, file, str(current_user.id), ext)
     logger.info("Audio uploaded by user_id=%s — file=%s", current_user.id, file_path)
 
-    y_processed = await asyncio.to_thread(preprocess_audio, file_path)
+    try:
+        y_processed = await asyncio.to_thread(preprocess_audio, file_path)
+    except HTTPException:
+        # Unusable input (too short/silent/long/undecodable): don't keep the
+        # user's audio on disk for a profile that will never exist.
+        await asyncio.to_thread(_remove_quietly, file_path)
+        raise
 
     embedding_path = os.path.splitext(file_path)[0] + "_embed.npy"
 
     try:
         logger.debug("Extracting speaker embedding for user_id=%s", current_user.id)
         embedding = await embed_speaker_async(y_processed)
+        if not _is_usable_embedding(embedding):
+            logger.warning(
+                "Blank/invalid speaker embedding for user_id=%s — rejecting",
+                current_user.id,
+            )
+            await asyncio.to_thread(_remove_quietly, file_path)
+            raise HTTPException(
+                status_code=422,
+                detail="Could not extract a voice from this audio. "
+                "Please upload a clearer sample.",
+            )
         await asyncio.to_thread(np.save, embedding_path, embedding)
         logger.info(
             "Speaker embedding saved: %s (shape=%s)", embedding_path, embedding.shape
         )
+    except HTTPException:
+        raise
     except InferenceQueueFullError:
         logger.warning(
             "Inference queue full — rejecting upload for user_id=%s", current_user.id

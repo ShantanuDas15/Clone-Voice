@@ -31,14 +31,16 @@ def auth_headers(client: TestClient):
     return {"Authorization": f"Bearer {token}"}
 
 
-def create_dummy_wav(size_bytes=1000):
-
+def create_dummy_wav(seconds: float = 3.0) -> bytes:
+    """Build a voiced (3 s, 220 Hz tone) 16 kHz mono WAV that passes M4's duration checks."""
+    t = np.arange(int(16000 * seconds)) / 16000
+    samples = (0.5 * np.sin(2 * np.pi * 220 * t) * 32767).astype("<i2")
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
         wav.setframerate(16000)
-        wav.writeframes(b"\x00" * size_bytes)
+        wav.writeframes(samples.tobytes())
     buf.seek(0)
     return buf.read()
 
@@ -61,7 +63,7 @@ def test_upload_valid_wav(client: TestClient, auth_headers):
 def test_upload_valid_mp3(client: TestClient, auth_headers):
 
     with patch("backend.api.voice.preprocess_audio") as mock_pre:
-        mock_pre.return_value = None
+        mock_pre.return_value = np.random.randn(32000).astype(np.float32)
         files = {"file": ("test.mp3", b"ID3 dummy mp3 data", "audio/mp3")}
         data = {"name": "MP3 Voice"}
         response = client.post(
@@ -83,7 +85,7 @@ def test_upload_invalid_format_txt(client: TestClient, auth_headers):
 def test_upload_oversized_file(client: TestClient, auth_headers):
 
     with patch("backend.core.config.settings.MAX_AUDIO_SIZE_MB", 0.0001):
-        wav_data = create_dummy_wav(size_bytes=500)
+        wav_data = create_dummy_wav()
         files = {"file": ("test.wav", wav_data, "audio/wav")}
         data = {"name": "Big Voice"}
         response = client.post(
@@ -340,3 +342,114 @@ def test_librosa_preprocess_shape():
     assert audio.ndim == 1, f"Expected 1D array, got {audio.ndim}D"
     assert audio.dtype == np.float32, f"Expected float32, got {audio.dtype}"
     assert np.max(np.abs(audio)) <= 1.0, "Audio samples exceed normalized [-1, 1] range"
+
+
+# ---------------------------------------------------------------------------
+# HARDENING_PLAN.md finding M4: duration bounds and blank-embedding rejection
+# ---------------------------------------------------------------------------
+
+
+def _wav_file(tmp_path, tone_seconds: float, silence_seconds: float = 0.0) -> str:
+    """Write a 16 kHz mono WAV (tone then silence) and return its path."""
+    t = np.arange(int(16000 * tone_seconds)) / 16000
+    tone = (0.5 * np.sin(2 * np.pi * 220 * t) * 32767).astype("<i2")
+    silence = np.zeros(int(16000 * silence_seconds), dtype="<i2")
+    path = tmp_path / f"{uuid.uuid4()}.wav"
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(np.concatenate([tone, silence]).tobytes())
+    return str(path)
+
+
+@pytest.mark.parametrize(
+    "tone, silence",
+    [
+        (0.5, 0.0),  # too short
+        (0.0, 5.0),  # entirely silent → trims to nothing
+        (1.0, 10.0),  # long file, but under 2 s of actual speech
+    ],
+)
+def test_preprocess_rejects_too_little_voiced_audio(tmp_path, tone, silence):
+    """Audio with < MIN_VOICED_DURATION_SECONDS after trimming is a 422."""
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        preprocess_audio(_wav_file(tmp_path, tone, silence))
+    assert exc.value.status_code == 422
+    assert "too little speech" in exc.value.detail
+
+
+def test_preprocess_accepts_audio_at_minimum_voiced_duration(tmp_path):
+    """Just over the minimum passes, and comes back peak-normalised."""
+    audio = preprocess_audio(_wav_file(tmp_path, 2.5, 3.0))
+    assert audio.ndim == 1 and len(audio) >= 2.0 * 16000
+    assert np.isclose(np.max(np.abs(audio)), 1.0)
+
+
+def test_preprocess_rejects_over_max_duration_before_decoding(tmp_path):
+    """The cap uses the cheap header duration and never decodes an over-long file."""
+    from fastapi import HTTPException
+
+    path = _wav_file(tmp_path, 3.0)
+    with patch("backend.core.config.settings.MAX_AUDIO_DURATION_SECONDS", 1.0), patch(
+        "backend.services.audio_processing.librosa.load"
+    ) as load:
+        with pytest.raises(HTTPException) as exc:
+            preprocess_audio(path)
+    assert exc.value.status_code == 422
+    assert "too long" in exc.value.detail
+    load.assert_not_called()
+
+
+@pytest.mark.parametrize("tone, silence", [(0.5, 0.0), (0.0, 5.0)])
+def test_upload_rejects_unusable_audio_and_leaves_no_trace(
+    client: TestClient, auth_headers, tmp_path, tone, silence
+):
+    """Short/silent uploads: 422, no profile row, and no audio kept on disk."""
+    wav = open(_wav_file(tmp_path, tone, silence), "rb").read()
+    upload_dir = tmp_path / "uploads"
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(upload_dir)):
+        response = client.post(
+            "/api/v1/voice/upload",
+            headers=auth_headers,
+            data={"name": "Bad"},
+            files={"file": ("v.wav", wav, "audio/wav")},
+        )
+    assert response.status_code == 422
+    assert "too little speech" in response.json()["detail"]
+    assert [p for p in upload_dir.rglob("*") if p.is_file()] == []
+    profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
+    assert profiles == []
+
+
+@pytest.mark.parametrize(
+    "bad_embedding",
+    [
+        np.zeros(256, dtype=np.float32),
+        np.full(256, np.nan, dtype=np.float32),
+        np.array([], dtype=np.float32),
+    ],
+    ids=["zeros", "nan", "empty"],
+)
+def test_upload_never_persists_blank_embedding_as_ready(
+    client: TestClient, auth_headers, tmp_path, bad_embedding
+):
+    """A zero/NaN/empty embedding is a 422: no ready profile, no files kept."""
+    upload_dir = tmp_path / "uploads"
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(upload_dir)), patch(
+        "backend.api.voice.embed_speaker_async", return_value=bad_embedding
+    ):
+        response = client.post(
+            "/api/v1/voice/upload",
+            headers=auth_headers,
+            data={"name": "Blank"},
+            files={"file": ("v.wav", create_dummy_wav(), "audio/wav")},
+        )
+    assert response.status_code == 422
+    assert "Could not extract a voice" in response.json()["detail"]
+    assert [p for p in upload_dir.rglob("*") if p.is_file()] == []
+    profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
+    assert all(p["status"] != "ready" for p in profiles)
+    assert profiles == []
