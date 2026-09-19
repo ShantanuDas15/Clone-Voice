@@ -157,6 +157,10 @@ async def google_callback(
     if not email:
         raise HTTPException(status_code=400, detail="No email provided by Google")
 
+    if user_info.get("email_verified") is not True:
+        logger.warning("Google sign-in rejected: email not verified by provider")
+        raise HTTPException(status_code=400, detail="Google email is not verified")
+
     user = db.query(User).filter(User.email == email).first()
     if user:
         if user.provider == "local":

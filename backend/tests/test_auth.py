@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -170,6 +171,7 @@ def test_google_callback_new_user(client: TestClient):
     mock_token = {"access_token": "mock", "id_token": "mock"}
     mock_user_info = {
         "email": "newgoogleuser@example.com",
+        "email_verified": True,
         "name": "Google User",
         "picture": "http://example.com/pic.jpg",
     }
@@ -218,6 +220,7 @@ def test_google_callback_existing_local(client: TestClient):
     mock_token = {"access_token": "mock", "id_token": "mock"}
     mock_user_info = {
         "email": "localgoogle@example.com",
+        "email_verified": True,
         "name": "Google User",
         "picture": "http://example.com/pic.jpg",
     }
@@ -247,6 +250,50 @@ def test_google_callback_existing_local(client: TestClient):
             me_data = me_resp.json()
             assert me_data["provider"] == "google"
             assert me_data["avatar_url"] == "http://example.com/pic.jpg"
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"email_verified": False},
+        {},
+        {"email_verified": "true"},
+        {"email_verified": None},
+    ],
+)
+def test_google_callback_rejects_unverified_email(client: TestClient, claims):
+    """Unverified/missing/non-boolean email_verified must not create or link."""
+    client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": "victim@example.com",
+            "password": "Password123!",
+            "name": "Victim",
+        },
+    )
+    for email in ("victim@example.com", "brandnew@example.com"):
+        user_info = {"email": email, "name": "Attacker", **claims}
+        with patch(
+            "backend.api.auth.oauth.google.authorize_access_token",
+            new_callable=AsyncMock,
+        ) as mock_auth:
+            mock_auth.return_value = {"userinfo": user_info}
+            response = client.get("/api/v1/auth/google/callback?code=c&state=s")
+        assert response.status_code == 400
+        assert "not verified" in response.json()["detail"]
+        assert "refresh_token" not in response.cookies
+
+    # Victim's local account untouched, and login with password still works.
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "victim@example.com", "password": "Password123!"},
+    )
+    assert login.status_code == 200
+    me = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+    )
+    assert me.json()["provider"] == "local"
 
 
 def test_google_callback_invalid_code(client: TestClient):
