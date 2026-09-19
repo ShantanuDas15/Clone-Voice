@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.core.database import get_db
-from backend.core.security import (create_access_token, create_refresh_token,
-                                   decode_token, get_current_user,
-                                   hash_password, verify_password)
+from backend.core.security import (REFRESH_TOKEN_TYPE, create_access_token,
+                                   create_refresh_token, decode_token,
+                                   get_current_user, hash_password,
+                                   verify_password)
 from backend.models.user import User
 from backend.schemas.auth import (LoginRequest, SignupRequest, TokenResponse,
                                   UpdateUserRequest, UserOut)
@@ -90,7 +91,7 @@ def refresh(
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
 
-    payload = decode_token(refresh_token)
+    payload = decode_token(refresh_token, expected_type=REFRESH_TOKEN_TYPE)
     user_id_str = payload.get("sub")
     if not user_id_str:
         raise HTTPException(status_code=401, detail="Invalid token")
