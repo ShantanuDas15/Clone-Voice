@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     # 16000, not the previously-guessed 22050.
     VOCODER_SAMPLE_RATE: int = 16000
     RATE_LIMIT_ENABLED: bool = True
+    # HARDENING_PLAN.md finding M3: slowapi/limits storage backend. The
+    # default is per-process memory (fine for one worker in dev/tests); set a
+    # shared store such as ``redis://redis:6379/0`` so limits hold across
+    # workers/replicas and survive restarts.
+    RATE_LIMIT_STORAGE_URI: str = "memory://"
+    # Number of trusted reverse proxies in front of the app. 0 (default) means
+    # the socket peer is the client and X-Forwarded-For is ignored, since it
+    # is attacker-controlled when no proxy overwrites it.
+    TRUSTED_PROXY_COUNT: int = 0
+    AUTH_LOGIN_RATE_LIMIT: str = "10/minute"
+    AUTH_SIGNUP_RATE_LIMIT: str = "5/minute"
     # HARDENING_PLAN.md finding H6: bound the single process-wide inference
     # semaphore so callers fail fast instead of queuing unbounded.
     # INFERENCE_MAX_WAITERS: requests already queued for a slot beyond this
