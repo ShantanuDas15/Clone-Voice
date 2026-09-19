@@ -15,6 +15,17 @@ services:
       timeout: 5s
       retries: 5
 
+  # HARDENING_PLAN.md finding M3: shared rate-limit storage, so limits hold
+  # across restarts and (later) multiple workers/replicas. Not published to
+  # the host — only the compose network can reach it.
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # HARDENING_PLAN.md finding H7: this service (plus backend/Dockerfile) was
   # previously missing entirely — `docker-compose up --build` (the README's
   # only documented start command) could bring up `db` but never the API.
@@ -32,6 +43,7 @@ services:
       # compose network the DB is reachable at the `db` service name, not
       # `localhost` (which .env.example defaults to for bare-metal/local use).
       DATABASE_URL: postgresql://clonevoice:clonevoice_dev@db:5432/clonevoice
+      RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
     ports:
       - "8000:8000"
     volumes:
@@ -49,10 +61,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     # Exactly one container, one uvicorn worker (set explicitly in
-    # backend/Dockerfile's CMD) — the inference semaphore (H6) and the rate
-    # limiter (M3) are both process-local state, so do not scale this via
-    # `--workers` or `deploy.replicas` without addressing those first.
+    # backend/Dockerfile's CMD) — the inference semaphore (H6) is process-local
+    # state, so do not scale this via `--workers` or `deploy.replicas` without
+    # addressing that first (rate limits are shared via redis, see M3).
 
 volumes:
   postgres_data:

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.rate_limit import limiter
 from backend.core.security import (REFRESH_TOKEN_TYPE, create_access_token,
                                    create_refresh_token, decode_token,
                                    get_current_user, hash_password,
@@ -35,7 +36,8 @@ oauth.register(
 @router.post(
     "/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
 )
-def signup(user_in: SignupRequest, db: Session = Depends(get_db)):
+@limiter.limit(settings.AUTH_SIGNUP_RATE_LIMIT)
+def signup(request: Request, user_in: SignupRequest, db: Session = Depends(get_db)):
     """Register a new local user and return an access token."""
     if db.query(User).filter(User.email == user_in.email).first():
         logger.warning("Signup rejected: email already registered — %s", user_in.email)
@@ -57,7 +59,13 @@ def signup(user_in: SignupRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(user_in: LoginRequest, response: Response, db: Session = Depends(get_db)):
+@limiter.limit(settings.AUTH_LOGIN_RATE_LIMIT)
+def login(
+    request: Request,
+    user_in: LoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     """Authenticate a local user and return access + refresh tokens."""
     user = db.query(User).filter(User.email == user_in.email).first()
     if (
