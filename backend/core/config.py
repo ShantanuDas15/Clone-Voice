@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEVICE: str = "cpu"
     MAX_AUDIO_SIZE_MB: int = 25
+    # HARDENING_PLAN.md finding M4: duration bounds for voice samples.
+    # MIN_VOICED_DURATION_SECONDS applies AFTER silence trimming, so a long
+    # file that is mostly silence is rejected; MAX_AUDIO_DURATION_SECONDS
+    # applies to the raw upload, checked before the expensive decode.
+    MIN_VOICED_DURATION_SECONDS: float = 2.0
+    MAX_AUDIO_DURATION_SECONDS: float = 300.0
     UPLOAD_DIR: str = "uploads"
     OUTPUT_DIR: str = "outputs"
     WEIGHTS_DIR: str = str(BASE_DIR / "weights")

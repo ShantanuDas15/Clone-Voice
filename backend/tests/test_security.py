@@ -4,6 +4,7 @@ import io
 import uuid
 import wave
 
+import numpy as np
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy.sql import func
@@ -98,7 +99,10 @@ def test_path_not_in_generation_response(client: TestClient):
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(16000)
-        wav_file.writeframes(b"\x00" * 1000)
+        t = np.arange(48000) / 16000  # 3 s voiced tone (passes M4 duration checks)
+        wav_file.writeframes(
+            (0.5 * np.sin(2 * np.pi * 220 * t) * 32767).astype("<i2").tobytes()
+        )
     buf.seek(0)
     wav_bytes = buf.read()
 

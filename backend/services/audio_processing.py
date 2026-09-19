@@ -10,6 +10,8 @@ from fastapi import HTTPException, UploadFile
 
 from backend.core.config import settings
 
+SAMPLE_RATE = 16000
+
 
 def validate_audio_file(file: UploadFile) -> str:
     """Validate MIME type, size, and magic bytes; return the extension the magic bytes imply."""
@@ -74,18 +76,36 @@ def save_upload(file: UploadFile, user_id: str, ext: str) -> str:
 
 
 def preprocess_audio(file_path: str) -> np.ndarray:
-    """Load, trim silence, and normalize an audio file for TTS embedding."""
+    """Load, trim silence, and normalize audio; reject too-long or too-quiet/short input."""
     try:
-        y, sr = librosa.load(file_path, sr=16000)
+        raw_duration = librosa.get_duration(path=file_path)
+        if raw_duration > settings.MAX_AUDIO_DURATION_SECONDS:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Audio too long. Max allowed duration is "
+                    f"{settings.MAX_AUDIO_DURATION_SECONDS:g} seconds."
+                ),
+            )
+
+        y, sr = librosa.load(file_path, sr=SAMPLE_RATE)
         y_trimmed, _ = librosa.effects.trim(y, top_db=30)
 
-        max_val = np.max(np.abs(y_trimmed))
-        if max_val > 0:
-            y_normalized = y_trimmed / max_val
-        else:
-            y_normalized = y_trimmed
+        voiced_seconds = len(y_trimmed) / SAMPLE_RATE
+        max_val = float(np.max(np.abs(y_trimmed))) if len(y_trimmed) else 0.0
+        if max_val <= 0.0 or voiced_seconds < settings.MIN_VOICED_DURATION_SECONDS:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Audio has too little speech after removing silence. "
+                    f"At least {settings.MIN_VOICED_DURATION_SECONDS:g} seconds "
+                    "of speech is required."
+                ),
+            )
 
-        return y_normalized
+        return y_trimmed / max_val
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=422, detail=f"Error processing audio file: {str(e)}"
