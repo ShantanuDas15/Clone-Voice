@@ -16,6 +16,9 @@ from backend.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
+ACCESS_TOKEN_TYPE = "access"
+REFRESH_TOKEN_TYPE = "refresh"
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -32,7 +35,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire, "jti": str(uuid.uuid4())})
+    to_encode.update(
+        {"exp": expire, "jti": str(uuid.uuid4()), "type": ACCESS_TOKEN_TYPE}
+    )
     return jwt.encode(
         to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
     )
@@ -43,24 +48,33 @@ def create_refresh_token(data: dict) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
-    to_encode.update({"exp": expire, "jti": str(uuid.uuid4())})
+    to_encode.update(
+        {"exp": expire, "jti": str(uuid.uuid4()), "type": REFRESH_TOKEN_TYPE}
+    )
     return jwt.encode(
         to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
     )
 
 
-def decode_token(token: str) -> dict:
+def decode_token(token: str, expected_type: str = ACCESS_TOKEN_TYPE) -> dict:
+    """Decode a JWT and reject it unless its `type` claim matches `expected_type`."""
     try:
         payload = jwt.decode(
             token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
-        return payload
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if payload.get("type") != expected_type:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
 
 
 def get_current_user(

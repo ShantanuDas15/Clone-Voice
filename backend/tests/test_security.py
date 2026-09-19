@@ -130,3 +130,74 @@ def test_path_not_in_generation_response(client: TestClient):
         assert (
             "\\" not in filename
         ), f"OS path separator found in output_filename: {filename}"
+
+
+def _signup_and_login(client: TestClient, email: str) -> tuple[str, str]:
+    """Register and log in a user, returning (access_token, refresh_cookie)."""
+    client.post(
+        "/api/v1/auth/signup",
+        json={"email": email, "password": "Password123!", "name": "Type User"},
+    )
+    resp = client.post(
+        "/api/v1/auth/login", json={"email": email, "password": "Password123!"}
+    )
+    return resp.json()["access_token"], resp.cookies.get("refresh_token")
+
+
+def test_token_type_claims():
+    """Access and refresh tokens carry distinct `type` claims."""
+    from jose import jwt
+
+    from backend.core.config import settings
+    from backend.core.security import create_refresh_token
+
+    claims = {"sub": "abc"}
+    keys = (settings.JWT_SECRET_KEY, [settings.JWT_ALGORITHM])
+    access = jwt.decode(create_access_token(claims), keys[0], algorithms=keys[1])
+    refresh = jwt.decode(create_refresh_token(claims), keys[0], algorithms=keys[1])
+    assert access["type"] == "access"
+    assert refresh["type"] == "refresh"
+
+
+def test_caller_cannot_override_type_claim():
+    """A `type` key in the caller-supplied data must not win over the real type."""
+    from jose import jwt
+
+    from backend.core.config import settings
+
+    token = create_access_token({"sub": "abc", "type": "refresh"})
+    payload = jwt.decode(
+        token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+    )
+    assert payload["type"] == "access"
+
+
+def test_refresh_token_rejected_as_access_token(client: TestClient):
+    """A refresh token presented as a bearer token must get 401 on /me."""
+    _, refresh = _signup_and_login(client, "type1@example.com")
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {refresh}"})
+    assert resp.status_code == 401
+
+
+def test_access_token_rejected_at_refresh(client: TestClient):
+    """An access token presented in the refresh cookie must get 401."""
+    access, _ = _signup_and_login(client, "type2@example.com")
+    resp = client.post("/api/v1/auth/refresh", cookies={"refresh_token": access})
+    assert resp.status_code == 401
+
+
+def test_untyped_legacy_token_rejected(client: TestClient):
+    """A validly signed token with no `type` claim is rejected on /me."""
+    from jose import jwt
+
+    from backend.core.config import settings
+
+    access, _ = _signup_and_login(client, "type3@example.com")
+    sub = jwt.get_unverified_claims(access)["sub"]
+    legacy = jwt.encode(
+        {"sub": sub, "exp": 9999999999},
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {legacy}"})
+    assert resp.status_code == 401
