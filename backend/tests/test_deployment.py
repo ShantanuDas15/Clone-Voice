@@ -64,7 +64,9 @@ def test_dockerfile_exposes_port_8000():
 def test_dockerfile_declares_a_healthcheck():
     dockerfile = _read("backend/Dockerfile")
     assert "HEALTHCHECK" in dockerfile
-    assert "/health" in dockerfile
+    # Liveness, not readiness: a DB/model blip must not mark the container
+    # unhealthy and trigger restarts (HARDENING_PLAN.md finding M7).
+    assert "/health/live" in dockerfile
 
 
 def test_dockerfile_runs_as_non_root_user():

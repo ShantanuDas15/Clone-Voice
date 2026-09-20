@@ -61,6 +61,11 @@ _inflight_tasks: Set["asyncio.Future[Any]"] = set()
 
 _T = TypeVar("_T")
 
+# Outcome of the one-time startup warm-up forward pass (HARDENING_PLAN.md
+# finding M7): "disabled" | "pending" | "ok" | "failed". Cached so readiness
+# probes never take the inference permit themselves.
+_warmup_status = "disabled"
+
 
 class InferenceQueueFullError(RuntimeError):
     """Raised when `settings.INFERENCE_MAX_WAITERS` requests are already
@@ -117,6 +122,39 @@ def _release_after(task: "asyncio.Future[Any]") -> None:
         _inference_semaphore.release()
 
     task.add_done_callback(_on_done)
+
+
+def get_warmup_status() -> str:
+    """Return the cached warm-up outcome: disabled, pending, ok or failed."""
+    return _warmup_status
+
+
+def _warmup_forward_pass() -> None:
+    """Run one tiny synthesizer + vocoder pass, discarding the output."""
+    mel = synthesize_speech("Ready.", np.zeros(256, dtype=np.float32))
+    vocode(mel)
+
+
+async def warmup_inference() -> bool:
+    """Run a single warm-up forward pass under the inference permit.
+
+    Records the outcome for ``get_warmup_status()`` (HARDENING_PLAN.md finding
+    M7). Never raises: a failure just leaves readiness reporting not-ready.
+    """
+    global _warmup_status
+    _warmup_status = "pending"
+    try:
+        async with _acquire_inference_slot() as slot:
+            await slot.run(
+                _warmup_forward_pass, timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS
+            )
+    except Exception:
+        logger.exception("Inference warm-up failed; service will report not ready.")
+        _warmup_status = "failed"
+        return False
+    logger.info("Inference warm-up forward pass succeeded.")
+    _warmup_status = "ok"
+    return True
 
 
 async def drain_inflight_inference(timeout: float) -> bool:

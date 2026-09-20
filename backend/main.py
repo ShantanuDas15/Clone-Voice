@@ -4,11 +4,13 @@ import logging.config
 from contextlib import asynccontextmanager
 
 from asgi_correlation_id import CorrelationIdFilter, CorrelationIdMiddleware
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.api.auth import router as auth_router
@@ -16,12 +18,13 @@ from backend.api.synthesize import router as synthesize_router
 from backend.api.voice import router as voice_router
 from backend.core.body_limit import BodySizeLimitMiddleware
 from backend.core.config import settings
-from backend.core.database import SessionLocal
+from backend.core.database import SessionLocal, get_db
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
 from backend.services.tts_pipeline import (drain_inflight_inference,
-                                           get_model_health, load_models)
+                                           get_model_health, get_warmup_status,
+                                           load_models, warmup_inference)
 
 
 def configure_logging() -> None:
@@ -80,6 +83,8 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan events."""
     logger.info("Starting CloneVoice API — loading SV2TTS models...")
     load_models(device=settings.DEVICE)
+    if settings.READINESS_WARMUP_ENABLED:
+        await warmup_inference()
 
     cleanup_task = asyncio.create_task(
         periodic_cleanup(
@@ -151,17 +156,54 @@ app.include_router(
 )
 
 
+def _check_database(db: Session) -> None:
+    """Run ``SELECT 1`` to prove the DB connection is usable."""
+    db.execute(text("SELECT 1"))
+
+
+@app.get("/health/live")
+def liveness() -> dict:
+    """Liveness probe: the process is up and serving. Checks no dependencies.
+
+    Deliberately never touches the DB or models, so an orchestrator only
+    restarts the container when the process itself is wedged — not during a
+    DB outage or model problem (HARDENING_PLAN.md finding M7).
+    """
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
 @app.get("/health")
-def health():
-    """Report application health, verifying the SV2TTS models are actually
-    loaded and placed on the configured device rather than trusting a
-    static "ok" — so a load balancer never routes traffic to an instance
-    whose models failed to load or crashed after startup."""
+async def readiness(db: Session = Depends(get_db)) -> JSONResponse:
+    """Readiness probe: 200 only when the app can actually serve requests.
+
+    Requires (1) a working DB connection (``SELECT 1``, bounded by
+    ``READINESS_DB_TIMEOUT_SECONDS``), (2) every SV2TTS model loaded on the
+    configured device, and (3) when ``READINESS_WARMUP_ENABLED`` is set, a
+    successful startup warm-up forward pass. ``/health`` is kept as an alias
+    for backward compatibility. Errors are logged, never returned.
+    """
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(_check_database, db),
+            timeout=settings.READINESS_DB_TIMEOUT_SECONDS,
+        )
+        database_ok = True
+    except Exception:
+        logger.exception("Readiness DB check failed.")
+        database_ok = False
+
     model_status = get_model_health(settings.DEVICE)
-    ready = model_status.pop("ready")
+    models_ready = model_status.pop("ready")
+    warmup = get_warmup_status()
+    warmup_ok = warmup in ("disabled", "ok")
+
+    ready = database_ok and models_ready and warmup_ok
     payload = {
         "status": "ok" if ready else "degraded",
         "version": "1.0.0",
+        "database": {"ok": database_ok},
         "models": model_status,
+        "warmup": warmup,
     }
     return JSONResponse(status_code=200 if ready else 503, content=payload)

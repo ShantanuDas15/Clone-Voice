@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     # HARDENING_PLAN.md finding M6: on shutdown, wait up to this long for
     # in-flight forward passes (worker threads) to finish before exiting.
     INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS: float = 30.0
+    # HARDENING_PLAN.md finding M7 (readiness probe).
+    # READINESS_DB_TIMEOUT_SECONDS: max time the `SELECT 1` DB check may take
+    # before /health/ready reports the database as down.
+    READINESS_DB_TIMEOUT_SECONDS: float = 2.0
+    # READINESS_WARMUP_ENABLED: run one tiny synthesizer+vocoder forward pass
+    # at startup and require it to succeed before reporting ready. Off by
+    # default (adds startup time; the result is cached, never re-run per probe).
+    READINESS_WARMUP_ENABLED: bool = False
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
     SENTRY_DSN: str = ""

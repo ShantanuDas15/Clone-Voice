@@ -66,7 +66,7 @@ docker-compose up --build
 
 The `backend` container runs a single `uvicorn` worker on purpose — see "Resource
 Requirements" below and the comment on `CMD` in `backend/Dockerfile`. It will report
-`503`/`"degraded"` at `/health` until real model checkpoints are provisioned (next section);
+`503`/`"degraded"` at `/health/ready` (alias: `/health`) until real model checkpoints are provisioned (next section);
 `docker-compose up` alone does not fetch them.
 
 ### 5. Model Weights
@@ -108,7 +108,7 @@ fall back to mock, placeholder, or unverified weights (see `HARDENING_PLAN.md`, 
   ```bash
   python -m backend.download_weights --fetch --verify-inference
   ```
-  `/health` also reports a `checksum_verified` field per model (`true` for a real, verified
+  `/health/ready` also reports a `checksum_verified` field per model (`true` for a real, verified
   checkpoint; `false` for the test suite's mock models; `null` where it doesn't apply, e.g. the
   encoder) — diagnostic only, so it never flips a healthy mock-backed test deployment to
   `"degraded"`.

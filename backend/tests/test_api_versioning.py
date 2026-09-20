@@ -14,7 +14,15 @@ def test_all_routers_mounted_under_api_v1() -> None:
     """Every application route (other than `/health` and docs) must live under
     `/api/v1`, so future breaking changes can be shipped as `/api/v2` without
     disturbing existing clients."""
-    exempt = {"/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+    exempt = {
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/openapi.json",
+        "/docs",
+        "/docs/oauth2-redirect",
+        "/redoc",
+    }
     for route in app.routes:
         path = getattr(route, "path", "")
         if not path or path in exempt:
