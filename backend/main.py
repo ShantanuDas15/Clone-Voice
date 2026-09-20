@@ -1,12 +1,14 @@
 import asyncio
+import hmac
 import logging
 import logging.config
 from contextlib import asynccontextmanager
 
 from asgi_correlation_id import CorrelationIdFilter, CorrelationIdMiddleware
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -16,6 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from backend.api.auth import router as auth_router
 from backend.api.synthesize import router as synthesize_router
 from backend.api.voice import router as voice_router
+from backend.core import metrics
 from backend.core.body_limit import BodySizeLimitMiddleware
 from backend.core.config import settings
 from backend.core.database import SessionLocal, get_db
@@ -159,6 +162,21 @@ app.include_router(
 def _check_database(db: Session) -> None:
     """Run ``SELECT 1`` to prove the DB connection is usable."""
     db.execute(text("SELECT 1"))
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics(authorization: str = Header(default="")) -> Response:
+    """Expose inference metrics in Prometheus text format (finding M8).
+
+    404 when ``METRICS_ENABLED`` is false; when ``METRICS_AUTH_TOKEN`` is set
+    the caller must send it as ``Authorization: Bearer <token>``.
+    """
+    if not settings.METRICS_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    token = settings.METRICS_AUTH_TOKEN
+    if token and not hmac.compare_digest(authorization, f"Bearer {token}"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return Response(generate_latest(metrics.registry), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/health/live")

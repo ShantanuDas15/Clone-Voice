@@ -18,6 +18,7 @@ def test_all_routers_mounted_under_api_v1() -> None:
         "/health",
         "/health/live",
         "/health/ready",
+        "/metrics",
         "/openapi.json",
         "/docs",
         "/docs/oauth2-redirect",

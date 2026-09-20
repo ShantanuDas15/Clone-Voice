@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Callable, Optional, Set, TypeVar
@@ -11,6 +12,7 @@ import numpy as np
 import soundfile as sf
 import torch
 
+from backend.core import metrics
 from backend.core.config import settings
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
 from backend.services.sv2tts.synthesizer.hparams import \
@@ -67,6 +69,14 @@ _T = TypeVar("_T")
 _warmup_status = "disabled"
 
 
+# Gauges read live state at scrape time (HARDENING_PLAN.md finding M8). The
+# lambdas look the names up on each call, so a test-swapped semaphore is seen.
+metrics.bind_gauges(
+    queue_depth=lambda: _inference_waiters,
+    in_flight=lambda: 1 if _inference_semaphore.locked() else 0,
+)
+
+
 class InferenceQueueFullError(RuntimeError):
     """Raised when `settings.INFERENCE_MAX_WAITERS` requests are already
     queued for the inference semaphore. Mapped to HTTP 429 by callers."""
@@ -94,13 +104,30 @@ class _InferenceSlot:
         """Start with no worker call in flight."""
         self._pending: Optional["asyncio.Future[Any]"] = None
 
-    async def run(self, fn: Callable[..., _T], *args: Any, timeout: float) -> _T:
-        """Run ``fn(*args)`` in a worker thread, raising TimeoutError past ``timeout``."""
-        task = asyncio.ensure_future(asyncio.to_thread(fn, *args))
+    async def run(
+        self, fn: Callable[..., _T], *args: Any, timeout: float, stage: str = "other"
+    ) -> _T:
+        """Run ``fn(*args)`` in a worker thread, raising TimeoutError past ``timeout``.
+
+        ``stage`` labels the latency metric (HARDENING_PLAN.md finding M8);
+        it is timed inside the worker thread so an abandoned call still
+        records its true compute time when it eventually finishes.
+        """
+
+        def _timed() -> _T:
+            """Run ``fn`` and record its duration under ``stage``."""
+            with metrics.observe_stage(stage):
+                return fn(*args)
+
+        task = asyncio.ensure_future(asyncio.to_thread(_timed))
         self._pending = task
         _inflight_tasks.add(task)
         task.add_done_callback(_inflight_tasks.discard)
-        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+        try:
+            return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+        except asyncio.TimeoutError:
+            metrics.INFERENCE_REJECTIONS.labels(reason="call_timeout").inc()
+            raise
 
     def unfinished_task(self) -> Optional["asyncio.Future[Any]"]:
         """Return the worker task if its thread has not yet returned."""
@@ -197,11 +224,13 @@ async def _acquire_inference_slot():
     """
     global _inference_waiters
     if _inference_waiters >= settings.INFERENCE_MAX_WAITERS:
+        metrics.INFERENCE_REJECTIONS.labels(reason="queue_full").inc()
         raise InferenceQueueFullError(
             f"Inference queue is full ({settings.INFERENCE_MAX_WAITERS} "
             "requests already waiting for a slot)."
         )
     _inference_waiters += 1
+    wait_started = time.perf_counter()
     try:
         try:
             await asyncio.wait_for(
@@ -209,11 +238,13 @@ async def _acquire_inference_slot():
                 timeout=settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
+            metrics.INFERENCE_REJECTIONS.labels(reason="acquire_timeout").inc()
             raise InferenceTimeoutError(
                 "Timed out waiting for a free inference slot."
             ) from None
     finally:
         _inference_waiters -= 1
+        metrics.INFERENCE_WAIT_SECONDS.observe(time.perf_counter() - wait_started)
 
     slot = _InferenceSlot()
     try:
@@ -614,9 +645,13 @@ async def run_inference_pipeline(
                 text,
                 embedding,
                 timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+                stage="synthesizer",
             )
             wav = await slot.run(
-                vocode, mel, timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS
+                vocode,
+                mel,
+                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+                stage="vocoder",
             )
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
@@ -624,9 +659,10 @@ async def run_inference_pipeline(
             ) from None
         logger.debug("Inference semaphore releasing — forward passes complete.")
 
-    out_path, duration = await asyncio.to_thread(
-        save_output, wav, settings.VOCODER_SAMPLE_RATE, user_id
-    )
+    with metrics.observe_stage("save_output"):
+        out_path, duration = await asyncio.to_thread(
+            save_output, wav, settings.VOCODER_SAMPLE_RATE, user_id
+        )
     return out_path, duration
 
 
@@ -656,6 +692,7 @@ async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
                 embed_speaker,
                 audio,
                 timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+                stage="encoder",
             )
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
