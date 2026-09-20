@@ -20,7 +20,8 @@ from backend.core.database import SessionLocal
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
-from backend.services.tts_pipeline import get_model_health, load_models
+from backend.services.tts_pipeline import (drain_inflight_inference,
+                                           get_model_health, load_models)
 
 
 def configure_logging() -> None:
@@ -102,6 +103,9 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    # Let running forward passes finish instead of abandoning worker threads
+    # mid-inference (HARDENING_PLAN.md finding M6).
+    await drain_inflight_inference(settings.INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS)
     logger.info("Application shutting down.")
 
 

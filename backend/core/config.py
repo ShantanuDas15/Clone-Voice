@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # inference call (embedding extraction, or the synthesizer+vocoder
     # forward passes together) before it is abandoned with 503.
     INFERENCE_CALL_TIMEOUT_SECONDS: float = 30.0
+    # HARDENING_PLAN.md finding M6: on shutdown, wait up to this long for
+    # in-flight forward passes (worker threads) to finish before exiting.
+    INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS: float = 30.0
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
     SENTRY_DSN: str = ""
