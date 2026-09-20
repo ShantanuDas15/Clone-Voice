@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEVICE: str = "cpu"
     MAX_AUDIO_SIZE_MB: int = 25
+    # HARDENING_PLAN.md finding M5: extra bytes allowed on top of
+    # MAX_AUDIO_SIZE_MB for multipart boundaries and form fields. The ASGI
+    # body-size limit is MAX_AUDIO_SIZE_MB + this, enforced before parsing.
+    REQUEST_BODY_OVERHEAD_KB: int = 256
     # HARDENING_PLAN.md finding M4: duration bounds for voice samples.
     # MIN_VOICED_DURATION_SECONDS applies AFTER silence trimming, so a long
     # file that is mostly silence is rejected; MAX_AUDIO_DURATION_SECONDS
