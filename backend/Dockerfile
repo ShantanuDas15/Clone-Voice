@@ -20,7 +20,7 @@ FROM python:3.11-slim
 # - ffmpeg: required by librosa/audioread to decode the MP3 and WEBM upload
 #   formats `validate_audio_file()` accepts (services/audio_processing.py).
 #   WAV decodes fine without it, but MP3/WEBM uploads would fail.
-# - curl: used by the HEALTHCHECK below to probe `/health`.
+# - curl: used by the HEALTHCHECK below to probe `/health/live` (liveness only).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libsndfile1 \
@@ -68,7 +68,7 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
+    CMD curl -fsS http://localhost:8000/health/live || exit 1
 
 # --workers 1 is load-bearing, not a placeholder default (HARDENING_PLAN.md
 # finding H7). Both the inference semaphore (services/tts_pipeline.py
