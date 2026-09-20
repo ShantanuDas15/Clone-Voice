@@ -5,6 +5,7 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
+from typing import Any, Callable, Optional, Set, TypeVar
 
 import numpy as np
 import soundfile as sf
@@ -52,6 +53,14 @@ _inference_semaphore = asyncio.Semaphore(1)
 # increment/decrement is safe on asyncio's single-threaded event loop.
 _inference_waiters = 0
 
+# Worker-thread tasks that are still executing a model forward pass
+# (HARDENING_PLAN.md finding M6). A task stays here until its thread actually
+# returns — even if the awaiting request was cancelled or timed out — so the
+# shutdown drain can wait on real work rather than on request handlers.
+_inflight_tasks: Set["asyncio.Future[Any]"] = set()
+
+_T = TypeVar("_T")
+
 
 class InferenceQueueFullError(RuntimeError):
     """Raised when `settings.INFERENCE_MAX_WAITERS` requests are already
@@ -64,6 +73,70 @@ class InferenceTimeoutError(RuntimeError):
     or an acquired forward pass runs longer than
     `settings.INFERENCE_CALL_TIMEOUT_SECONDS`. Mapped to HTTP 503 by
     callers."""
+
+
+class _InferenceSlot:
+    """Handle for one held inference permit (HARDENING_PLAN.md finding M6).
+
+    ``run()`` executes a blocking call on a worker thread but *shields* the
+    thread's future from cancellation/timeout of the awaiting request. If the
+    request gives up while the thread is still running, the permit is not
+    released until the thread finishes (see ``_acquire_inference_slot``), so
+    a second forward pass can never overlap an abandoned one.
+    """
+
+    def __init__(self) -> None:
+        """Start with no worker call in flight."""
+        self._pending: Optional["asyncio.Future[Any]"] = None
+
+    async def run(self, fn: Callable[..., _T], *args: Any, timeout: float) -> _T:
+        """Run ``fn(*args)`` in a worker thread, raising TimeoutError past ``timeout``."""
+        task = asyncio.ensure_future(asyncio.to_thread(fn, *args))
+        self._pending = task
+        _inflight_tasks.add(task)
+        task.add_done_callback(_inflight_tasks.discard)
+        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+
+    def unfinished_task(self) -> Optional["asyncio.Future[Any]"]:
+        """Return the worker task if its thread has not yet returned."""
+        if self._pending is not None and not self._pending.done():
+            return self._pending
+        return None
+
+
+def _release_after(task: "asyncio.Future[Any]") -> None:
+    """Release the inference permit once an abandoned worker task finishes."""
+
+    def _on_done(done: "asyncio.Future[Any]") -> None:
+        """Consume the result (nobody awaits it) and free the permit."""
+        if not done.cancelled() and done.exception() is not None:
+            logger.warning(
+                "Abandoned inference call failed after its request gave up: %r",
+                done.exception(),
+            )
+        _inference_semaphore.release()
+
+    task.add_done_callback(_on_done)
+
+
+async def drain_inflight_inference(timeout: float) -> bool:
+    """Wait up to ``timeout`` seconds for running forward passes to finish.
+
+    Called at shutdown (HARDENING_PLAN.md finding M6) so worker threads are
+    not killed mid-forward-pass. Returns True if nothing is left running.
+    """
+    pending = {t for t in _inflight_tasks if not t.done()}
+    if not pending:
+        return True
+    logger.info("Draining %d in-flight inference call(s)...", len(pending))
+    _, still_running = await asyncio.wait(pending, timeout=timeout)
+    if still_running:
+        logger.warning(
+            "Shutdown drain timed out with %d inference call(s) still running.",
+            len(still_running),
+        )
+        return False
+    return True
 
 
 @asynccontextmanager
@@ -104,10 +177,17 @@ async def _acquire_inference_slot():
     finally:
         _inference_waiters -= 1
 
+    slot = _InferenceSlot()
     try:
-        yield
+        yield slot
     finally:
-        _inference_semaphore.release()
+        unfinished = slot.unfinished_task()
+        if unfinished is None:
+            _inference_semaphore.release()
+        else:
+            # The request was cancelled or timed out while its thread is
+            # still inside a forward pass: keep the permit until it returns.
+            _release_after(unfinished)
 
 
 def _free_gpu_memory() -> None:
@@ -486,18 +566,19 @@ async def run_inference_pipeline(
         InferenceTimeoutError: The slot wait, or the forward passes
             themselves, exceeded their configured timeout.
     """
-    async with _acquire_inference_slot():
+    async with _acquire_inference_slot() as slot:
         logger.debug(
             "Inference semaphore acquired — starting synthesizer forward pass."
         )
         try:
-            mel = await asyncio.wait_for(
-                asyncio.to_thread(synthesize_speech, text, embedding),
+            mel = await slot.run(
+                synthesize_speech,
+                text,
+                embedding,
                 timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
             )
-            wav = await asyncio.wait_for(
-                asyncio.to_thread(vocode, mel),
-                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+            wav = await slot.run(
+                vocode, mel, timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS
             )
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
@@ -531,10 +612,11 @@ async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
         InferenceTimeoutError: The slot wait, or the forward pass itself,
             exceeded its configured timeout.
     """
-    async with _acquire_inference_slot():
+    async with _acquire_inference_slot() as slot:
         try:
-            return await asyncio.wait_for(
-                asyncio.to_thread(embed_speaker, audio),
+            return await slot.run(
+                embed_speaker,
+                audio,
                 timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
