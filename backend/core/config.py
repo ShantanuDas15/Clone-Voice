@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     # at startup and require it to succeed before reporting ready. Off by
     # default (adds startup time; the result is cached, never re-run per probe).
     READINESS_WARMUP_ENABLED: bool = False
+    # HARDENING_PLAN.md finding M8: Prometheus metrics at GET /metrics.
+    # METRICS_ENABLED=False makes the endpoint return 404. When
+    # METRICS_AUTH_TOKEN is non-empty, scrapers must send it as a bearer token.
+    METRICS_ENABLED: bool = True
+    METRICS_AUTH_TOKEN: str = ""
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
     SENTRY_DSN: str = ""
