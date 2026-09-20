@@ -14,6 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from backend.api.auth import router as auth_router
 from backend.api.synthesize import router as synthesize_router
 from backend.api.voice import router as voice_router
+from backend.core.body_limit import BodySizeLimitMiddleware
 from backend.core.config import settings
 from backend.core.database import SessionLocal
 from backend.core.rate_limit import limiter
@@ -114,6 +115,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # -----------------------------------------------------------------------------
 
 app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET_KEY)
+
+# Reject oversized bodies before multipart parsing spools them to disk (M5).
+# Added before CORS so the 413 still passes through CORS and gets its headers.
+app.add_middleware(
+    BodySizeLimitMiddleware,
+    max_body_bytes=settings.MAX_AUDIO_SIZE_MB * 1024 * 1024
+    + settings.REQUEST_BODY_OVERHEAD_KB * 1024,
+)
 
 app.add_middleware(
     CORSMiddleware,
