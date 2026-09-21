@@ -50,14 +50,11 @@ services:
       # Model checkpoints, uploads, and outputs are deliberately not baked
       # into the image (see backend/Dockerfile, .dockerignore) — these
       # volumes are what make them persist across container recreation.
-      # WEIGHTS_DIR resolves under backend/ (anchored to BASE_DIR), but
-      # UPLOAD_DIR/OUTPUT_DIR are bare relative paths resolved against the
-      # container's WORKDIR (/app) — see backend/Dockerfile's comment on
-      # HARDENING_PLAN.md finding M9 (not fixed here) for why these two
-      # mount points intentionally don't live under /app/backend too.
+      # WEIGHTS_DIR, UPLOAD_DIR and OUTPUT_DIR are all anchored to BASE_DIR
+      # (/app/backend), independent of the container's working directory.
       - backend_weights:/app/backend/weights
-      - backend_uploads:/app/uploads
-      - backend_outputs:/app/outputs
+      - backend_uploads:/app/backend/uploads
+      - backend_outputs:/app/backend/outputs
     depends_on:
       db:
         condition: service_healthy

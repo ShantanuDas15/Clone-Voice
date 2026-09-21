@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.core.config import settings
 from backend.core.database import Base, get_db
 from backend.main import app
 from backend.services.tts_pipeline import load_mock_models
@@ -76,3 +77,14 @@ def client(db_session):
     app.dependency_overrides[get_db] = override_get_db
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def isolated_storage_dirs(monkeypatch, tmp_path):
+    """Point UPLOAD_DIR/OUTPUT_DIR at per-test temp dirs (HARDENING_PLAN.md M9).
+
+    Guarantees no test writes user-style files into the real backend/uploads
+    or backend/outputs; pytest removes ``tmp_path`` automatically.
+    """
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setattr(settings, "OUTPUT_DIR", str(tmp_path / "outputs"))

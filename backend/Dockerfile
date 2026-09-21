@@ -50,17 +50,11 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # sensitive to ship in a built image.
 COPY backend/ backend/
 
-# WEIGHTS_DIR (core/config.py) is anchored to BASE_DIR (backend/), so it
-# resolves to /app/backend/weights regardless of CWD. UPLOAD_DIR/OUTPUT_DIR
-# are NOT anchored the same way (HARDENING_PLAN.md finding M9, not fixed
-# here) — they're bare relative strings ("uploads"/"outputs") joined against
-# the process's current working directory, which is this image's WORKDIR
-# (/app) since uvicorn is launched from there. They therefore resolve to
-# /app/uploads and /app/outputs, not /app/backend/uploads — the directories
-# (and docker-compose.yml's volume mounts) below intentionally match that
-# real (M9-affected) runtime behavior rather than the "tidier" backend/-
-# nested path M9's eventual fix would produce.
-RUN mkdir -p backend/weights uploads outputs \
+# WEIGHTS_DIR, UPLOAD_DIR and OUTPUT_DIR (core/config.py) are all anchored to
+# BASE_DIR (backend/), so they resolve to /app/backend/{weights,uploads,outputs}
+# regardless of the process CWD (HARDENING_PLAN.md finding M9). The volume
+# mounts in docker-compose.yml match these paths.
+RUN mkdir -p backend/weights backend/uploads backend/outputs \
     && chown -R appuser:appuser /app
 
 USER appuser
