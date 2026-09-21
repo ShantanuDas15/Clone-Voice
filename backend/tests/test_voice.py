@@ -453,3 +453,42 @@ def test_upload_never_persists_blank_embedding_as_ready(
     profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
     assert all(p["status"] != "ready" for p in profiles)
     assert profiles == []
+
+
+def test_preprocess_failure_returns_generic_detail(tmp_path):
+    """Undecodable audio: 422 with a generic detail, never the raw library error."""
+    from fastapi import HTTPException
+
+    secret = "/internal/path/codec-secret-xyz"
+    with patch(
+        "backend.services.audio_processing.librosa.get_duration",
+        side_effect=RuntimeError(secret),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            preprocess_audio(str(tmp_path / "x.wav"))
+    assert exc.value.status_code == 422
+    assert secret not in exc.value.detail
+    assert "RuntimeError" not in exc.value.detail
+
+
+def test_upload_decode_failure_leaks_nothing_and_leaves_no_orphan(
+    client: TestClient, auth_headers, tmp_path
+):
+    """API level: decode error -> generic 422, upload deleted, no profile row."""
+    secret = "libsndfile-secret-error-abc"
+    wav = open(_wav_file(tmp_path, 3.0, 0.0), "rb").read()
+    upload_dir = tmp_path / "uploads"
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(upload_dir)), patch(
+        "backend.services.audio_processing.librosa.load",
+        side_effect=RuntimeError(secret),
+    ):
+        response = client.post(
+            "/api/v1/voice/upload",
+            headers=auth_headers,
+            data={"name": "Broken"},
+            files={"file": ("v.wav", wav, "audio/wav")},
+        )
+    assert response.status_code == 422
+    assert secret not in response.text
+    assert [p for p in upload_dir.rglob("*") if p.is_file()] == []
+    assert client.get("/api/v1/voice/profiles", headers=auth_headers).json() == []

@@ -1,5 +1,6 @@
 """Audio file validation and preprocessing utilities."""
 
+import logging
 import os
 import shutil
 import uuid
@@ -9,6 +10,8 @@ import numpy as np
 from fastapi import HTTPException, UploadFile
 
 from backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 
@@ -106,7 +109,12 @@ def preprocess_audio(file_path: str) -> np.ndarray:
         return y_trimmed / max_val
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        # Library error text can leak internals (paths, codec details): log it
+        # server-side and return a generic detail (HARDENING_PLAN.md L1).
+        logger.exception("Audio preprocessing failed for %s", file_path)
         raise HTTPException(
-            status_code=422, detail=f"Error processing audio file: {str(e)}"
+            status_code=422,
+            detail="Could not process this audio file. "
+            "Please upload a valid, uncorrupted recording.",
         )
