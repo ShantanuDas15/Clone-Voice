@@ -314,3 +314,58 @@ def test_synthesize_model_error_returns_500_and_records_failed_generation(
     assert len(failed) == 1
     assert failed[0]["output_filename"] == ""
     assert failed[0]["duration_seconds"] is None
+
+
+@pytest.mark.parametrize("profile_status", ["failed", "processing"])
+def test_synthesize_non_ready_profile_returns_409(
+    client: TestClient, auth_headers_syn, db_session, profile_status
+):
+    """A non-`ready` profile is a 409 (not a 500), runs no inference, adds no row."""
+    from backend.models.voice_profile import VoiceProfile
+
+    profile_id = upload_profile(client, auth_headers_syn)
+    profile = db_session.query(VoiceProfile).filter_by(id=uuid.UUID(profile_id)).one()
+    profile.status = profile_status
+    profile.embedding_path = ""
+    db_session.commit()
+
+    with patch("backend.api.synthesize.run_inference_pipeline") as mock_run:
+        res = client.post(
+            "/api/v1/synthesize",
+            headers=auth_headers_syn,
+            json={"voice_profile_id": profile_id, "text": "Hello"},
+        )
+
+    assert res.status_code == 409
+    assert "not ready" in res.json()["detail"]
+    mock_run.assert_not_called()
+    history = client.get("/api/v1/synthesize/history", headers=auth_headers_syn)
+    assert history.json() == []
+
+
+def test_synthesize_other_users_non_ready_profile_still_403(
+    client: TestClient, auth_headers_syn, db_session
+):
+    """Ownership is checked before status, so a foreign failed profile stays a 403."""
+    from backend.models.user import User
+    from backend.models.voice_profile import VoiceProfile
+
+    other = User(email="own2@example.com", name="Own", provider="local")
+    db_session.add(other)
+    db_session.commit()
+    profile = VoiceProfile(
+        user_id=other.id,
+        name="x",
+        audio_sample_path="",
+        embedding_path="",
+        status="failed",
+    )
+    db_session.add(profile)
+    db_session.commit()
+
+    res = client.post(
+        "/api/v1/synthesize",
+        headers=auth_headers_syn,
+        json={"voice_profile_id": str(profile.id), "text": "Hello"},
+    )
+    assert res.status_code == 403
