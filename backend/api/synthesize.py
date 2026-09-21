@@ -78,6 +78,13 @@ async def synthesize(
             status_code=403, detail="Not authorized to use this voice profile"
         )
 
+    if profile.status != "ready":
+        # e.g. a "failed" profile has no embedding; a 4xx beats np.load("") -> 500.
+        raise HTTPException(
+            status_code=409,
+            detail="Voice profile is not ready for synthesis",
+        )
+
     try:
         embedding = await asyncio.to_thread(np.load, profile.embedding_path)
     except Exception:
