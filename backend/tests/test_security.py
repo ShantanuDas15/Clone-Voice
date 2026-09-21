@@ -150,7 +150,7 @@ def _signup_and_login(client: TestClient, email: str) -> tuple[str, str]:
 
 def test_token_type_claims():
     """Access and refresh tokens carry distinct `type` claims."""
-    from jose import jwt
+    import jwt
 
     from backend.core.config import settings
     from backend.core.security import create_refresh_token
@@ -165,7 +165,7 @@ def test_token_type_claims():
 
 def test_caller_cannot_override_type_claim():
     """A `type` key in the caller-supplied data must not win over the real type."""
-    from jose import jwt
+    import jwt
 
     from backend.core.config import settings
 
@@ -192,12 +192,12 @@ def test_access_token_rejected_at_refresh(client: TestClient):
 
 def test_untyped_legacy_token_rejected(client: TestClient):
     """A validly signed token with no `type` claim is rejected on /me."""
-    from jose import jwt
+    import jwt
 
     from backend.core.config import settings
 
     access, _ = _signup_and_login(client, "type3@example.com")
-    sub = jwt.get_unverified_claims(access)["sub"]
+    sub = jwt.decode(access, options={"verify_signature": False})["sub"]
     legacy = jwt.encode(
         {"sub": sub, "exp": 9999999999},
         settings.JWT_SECRET_KEY,
@@ -205,3 +205,66 @@ def test_untyped_legacy_token_rejected(client: TestClient):
     )
     resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {legacy}"})
     assert resp.status_code == 401
+
+
+def test_expired_token_rejected(client: TestClient):
+    """A validly signed but expired access token gets 401."""
+    from datetime import timedelta
+
+    access, _ = _signup_and_login(client, "exp1@example.com")
+    sub = _decode_unverified(access)["sub"]
+    expired = create_access_token({"sub": sub}, expires_delta=timedelta(seconds=-5))
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {expired}"})
+    assert resp.status_code == 401
+
+
+def test_alg_none_token_rejected(client: TestClient):
+    """An unsigned `alg: none` token (algorithm-confusion attack) gets 401."""
+    import jwt
+
+    access, _ = _signup_and_login(client, "none1@example.com")
+    claims = _decode_unverified(access)
+    forged = jwt.encode(claims, key=None, algorithm="none")
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})
+    assert resp.status_code == 401
+
+
+def test_token_signed_with_other_algorithm_or_key_rejected(client: TestClient):
+    """Tokens signed with a different key or HS512 instead of HS256 get 401."""
+    import jwt
+
+    access, _ = _signup_and_login(client, "alg1@example.com")
+    claims = _decode_unverified(access)
+    wrong_key = jwt.encode(claims, "k" * 40, algorithm="HS256")
+    wrong_alg = jwt.encode(claims, _settings().JWT_SECRET_KEY, algorithm="HS512")
+    for token in (wrong_key, wrong_alg):
+        resp = client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp.status_code == 401
+
+
+def test_tampered_token_rejected(client: TestClient):
+    """Altering the payload of a signed token invalidates the signature."""
+    access, _ = _signup_and_login(client, "tamper1@example.com")
+    header, payload, sig = access.split(".")
+    flipped = payload[:-2] + ("AA" if not payload.endswith("AA") else "BB")
+    resp = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {header}.{flipped}.{sig}"},
+    )
+    assert resp.status_code == 401
+
+
+def _settings():
+    """Return the live settings object."""
+    from backend.core.config import settings
+
+    return settings
+
+
+def _decode_unverified(token: str) -> dict:
+    """Decode a token's claims without verifying its signature."""
+    import jwt
+
+    return jwt.decode(token, options={"verify_signature": False})
