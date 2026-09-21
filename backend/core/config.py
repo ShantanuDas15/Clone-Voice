@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     # applies to the raw upload, checked before the expensive decode.
     MIN_VOICED_DURATION_SECONDS: float = 2.0
     MAX_AUDIO_DURATION_SECONDS: float = 300.0
-    UPLOAD_DIR: str = "uploads"
-    OUTPUT_DIR: str = "outputs"
+    # HARDENING_PLAN.md finding M9: relative values are anchored to BASE_DIR
+    # (backend/) by ``anchor_storage_dir``, never the process CWD; absolute
+    # values are used as-is.
+    UPLOAD_DIR: str = str(BASE_DIR / "uploads")
+    OUTPUT_DIR: str = str(BASE_DIR / "outputs")
     WEIGHTS_DIR: str = str(BASE_DIR / "weights")
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
     # Must match backend/services/sv2tts/vocoder/hparams.py's `sample_rate`
@@ -85,6 +88,15 @@ class Settings(BaseSettings):
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+
+    @field_validator("UPLOAD_DIR", "OUTPUT_DIR")
+    @classmethod
+    def anchor_storage_dir(cls, v: str) -> str:
+        """Resolve a relative storage path against BASE_DIR, not the CWD."""
+        if not v.strip():
+            raise ValueError("storage directory must not be empty")
+        path = Path(v).expanduser()
+        return str(path if path.is_absolute() else BASE_DIR / path)
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod
