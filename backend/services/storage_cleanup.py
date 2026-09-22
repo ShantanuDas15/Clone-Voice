@@ -76,6 +76,39 @@ def get_protected_paths(db: Session) -> Set[str]:
     return protected
 
 
+def _run_cleanup_pass(
+    directories: Iterable[str],
+    max_age_hours: float,
+    session_factory: Optional[Callable[[], Session]],
+) -> int:
+    """Compute protected paths and run one cleanup pass, synchronously.
+
+    Bundles the DB query (`get_protected_paths`) and the directory walk
+    (`cleanup_stale_files`) into a single blocking call so `periodic_cleanup`
+    can offload the whole pass to a worker thread in one `asyncio.to_thread`
+    call (HARDENING_PLAN.md, Low finding L4) instead of running either part
+    directly on the event loop.
+
+    Args:
+        directories: Root directories to scan.
+        max_age_hours: Age threshold passed through to `cleanup_stale_files`.
+        session_factory: See `periodic_cleanup`.
+
+    Returns:
+        The number of files deleted.
+    """
+    protected_paths: Set[str] = set()
+    if session_factory is not None:
+        db = session_factory()
+        try:
+            protected_paths = get_protected_paths(db)
+        finally:
+            db.close()
+    return cleanup_stale_files(
+        directories, max_age_hours, protected_paths=protected_paths
+    )
+
+
 def cleanup_stale_files(
     directories: Iterable[str],
     max_age_hours: float,
@@ -177,15 +210,8 @@ async def periodic_cleanup(
     try:
         while True:
             try:
-                protected_paths: Set[str] = set()
-                if session_factory is not None:
-                    db = session_factory()
-                    try:
-                        protected_paths = get_protected_paths(db)
-                    finally:
-                        db.close()
-                cleanup_stale_files(
-                    directories, max_age_hours, protected_paths=protected_paths
+                await asyncio.to_thread(
+                    _run_cleanup_pass, directories, max_age_hours, session_factory
                 )
             except Exception:
                 logger.exception("Storage cleanup pass failed unexpectedly.")

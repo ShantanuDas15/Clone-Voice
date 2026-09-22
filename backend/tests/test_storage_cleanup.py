@@ -3,6 +3,7 @@ Critical finding C1)."""
 
 import asyncio
 import os
+import threading
 import time
 import uuid
 
@@ -289,3 +290,45 @@ def test_periodic_cleanup_protects_files_referenced_via_session_factory(
 
     assert protected_file.exists()
     assert not orphan_file.exists()
+
+
+def test_periodic_cleanup_offloads_pass_to_worker_thread(
+    tmp_path, db_session, monkeypatch
+):
+    """L4: the DB query and directory walk must not run on the event-loop
+    thread — `periodic_cleanup` offloads the whole pass via `asyncio.to_thread`."""
+    recorded_thread_ids = []
+    real_cleanup_stale_files = cleanup_stale_files
+
+    def spying_cleanup(directories, max_age_hours, protected_paths=()):
+        recorded_thread_ids.append(threading.get_ident())
+        return real_cleanup_stale_files(
+            directories, max_age_hours, protected_paths=protected_paths
+        )
+
+    monkeypatch.setattr(
+        "backend.services.storage_cleanup.cleanup_stale_files", spying_cleanup
+    )
+
+    event_loop_thread_id = threading.get_ident()
+
+    async def runner():
+        task = asyncio.create_task(
+            periodic_cleanup(
+                directories=[str(tmp_path)],
+                interval_seconds=0.01,
+                max_age_hours=24,
+                session_factory=lambda: db_session,
+            )
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(runner())
+
+    assert recorded_thread_ids, "cleanup pass never ran"
+    assert all(tid != event_loop_thread_id for tid in recorded_thread_ids)
