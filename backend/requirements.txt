@@ -21,13 +21,13 @@ resemblyzer==0.1.4
 Unidecode==1.3.8
 inflect==7.3.1
 huggingface_hub==0.26.5
-pytest==8.2.2
-pytest-asyncio==0.23.7
-black==24.4.2
-isort==5.13.2
 python-dotenv==1.0.1
 itsdangerous==2.2.0
-bcrypt<4.0.0
+# Exact-pinned (HARDENING_PLAN.md finding L7): passlib 1.7.4 can't detect
+# bcrypt's version on bcrypt>=4.0.0 (missing the old __about__ module it
+# reads), so the range pin previously here resolved unpredictably rather
+# than reproducibly to the one version (3.2.2) actually validated.
+bcrypt==3.2.2
 slowapi==0.1.9
 redis==5.2.1
 asgi-correlation-id==5.0.1

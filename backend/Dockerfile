@@ -37,9 +37,9 @@ WORKDIR /app
 
 # Install Python dependencies before copying the rest of the source so this
 # (multi-hundred-MB, torch-heavy) layer is cached across ordinary code
-# changes. requirements.txt still ships dev/test tooling (pytest, black,
-# isort) into the runtime image per HARDENING_PLAN.md finding L7 — tracked
-# there as a separate not-yet-fixed item, not addressed by this Dockerfile.
+# changes. Only requirements.txt (runtime deps) is installed here — dev/test
+# tooling (pytest, black, isort) lives in requirements-dev.txt and never
+# ships into this image (HARDENING_PLAN.md finding L7).
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
