@@ -190,6 +190,25 @@ def test_history_pagination(client: TestClient, auth_headers_syn):
     assert len(res.json()) <= 50
 
 
+@pytest.mark.parametrize("query", ["limit=-1", "limit=0", "offset=-1"])
+def test_history_rejects_out_of_bounds_pagination(
+    client: TestClient, auth_headers_syn, query
+):
+    """L3: negative limit/offset (or limit=0) is a 422, not a 500 from the DB layer."""
+    res = client.get(f"/api/v1/synthesize/history?{query}", headers=auth_headers_syn)
+    assert res.status_code == 422
+
+
+def test_history_accepts_boundary_pagination_values(
+    client: TestClient, auth_headers_syn
+):
+    """limit=1 and offset=0 are the lowest valid values and must still succeed."""
+    res = client.get(
+        "/api/v1/synthesize/history?limit=1&offset=0", headers=auth_headers_syn
+    )
+    assert res.status_code == 200
+
+
 def test_history_excludes_soft_deleted(client: TestClient, auth_headers_syn):
     profile_id = upload_profile(client, auth_headers_syn)
     client.post(
