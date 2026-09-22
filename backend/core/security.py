@@ -1,5 +1,6 @@
 """Password hashing and JWT token management."""
 
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -30,6 +31,31 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def hash_email_for_logging(email: str) -> str:
+    """Return a short, non-reversible stand-in for an email address, safe to
+    write to logs in place of the raw address (HARDENING_PLAN.md finding L10).
+
+    Salted with JWT_SECRET_KEY (a secret already required to be strong — see
+    `validate_jwt_secret_key`) so it can't be reversed via a rainbow table of
+    common/guessable email addresses. Deterministic, so repeated attempts on
+    the same address correlate in log review without the address itself ever
+    being written anywhere. Not a security primitive — a normal user id is
+    preferred wherever one already exists (e.g. a successful login); this is
+    only for the paths (a failed login, in particular) where no row is ever
+    looked up and an id isn't available.
+
+    Args:
+        email: The raw email address to identify.
+
+    Returns:
+        A 16-character hex digest.
+    """
+    digest = hashlib.sha256(
+        f"{email.strip().lower()}:{settings.JWT_SECRET_KEY}".encode()
+    ).hexdigest()
+    return digest[:16]
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

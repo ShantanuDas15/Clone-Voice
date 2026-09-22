@@ -13,8 +13,8 @@ from backend.core.database import get_db
 from backend.core.rate_limit import limiter
 from backend.core.security import (REFRESH_TOKEN_TYPE, create_access_token,
                                    create_refresh_token, decode_token,
-                                   get_current_user, hash_password,
-                                   verify_password)
+                                   get_current_user, hash_email_for_logging,
+                                   hash_password, verify_password)
 from backend.models.user import User
 from backend.schemas.auth import (LoginRequest, SignupRequest, TokenResponse,
                                   UpdateUserRequest, UserOut)
@@ -39,8 +39,14 @@ oauth.register(
 @limiter.limit(settings.AUTH_SIGNUP_RATE_LIMIT)
 def signup(request: Request, user_in: SignupRequest, db: Session = Depends(get_db)):
     """Register a new local user and return an access token."""
-    if db.query(User).filter(User.email == user_in.email).first():
-        logger.warning("Signup rejected: email already registered — %s", user_in.email)
+    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    if existing_user:
+        # HARDENING_PLAN.md finding L10: log the existing row's id, never the
+        # raw email (PII).
+        logger.warning(
+            "Signup rejected: email already registered — user_id=%s",
+            existing_user.id,
+        )
         raise HTTPException(status_code=409, detail="Email already registered")
 
     new_user = User(
@@ -53,7 +59,7 @@ def signup(request: Request, user_in: SignupRequest, db: Session = Depends(get_d
     db.commit()
     db.refresh(new_user)
 
-    logger.info("New user registered: %s (id=%s)", new_user.email, new_user.id)
+    logger.info("New user registered: user_id=%s", new_user.id)
     access_token = create_access_token(data={"sub": str(new_user.id)})
     return TokenResponse(access_token=access_token)
 
@@ -73,10 +79,17 @@ def login(
         or not user.hashed_password
         or not verify_password(user_in.password, user.hashed_password)
     ):
-        logger.warning("Failed login attempt for email: %s", user_in.email)
+        # HARDENING_PLAN.md finding L10: no DB row here on an unknown email,
+        # so there's no user_id to log — a salted, non-reversible hash lets
+        # repeated attempts on the same address still correlate in logs
+        # without ever writing the raw address.
+        logger.warning(
+            "Failed login attempt for email_hash=%s",
+            hash_email_for_logging(user_in.email),
+        )
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
-    logger.info("User logged in: %s (id=%s)", user.email, user.id)
+    logger.info("User logged in: user_id=%s", user.id)
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
@@ -177,7 +190,7 @@ async def google_callback(
                 user.avatar_url = user_info.get("picture")
             db.commit()
             db.refresh(user)
-        logger.info("Existing user signed in via Google: %s", email)
+        logger.info("Existing user signed in via Google: user_id=%s", user.id)
     else:
         user = User(
             email=email,
@@ -188,7 +201,7 @@ async def google_callback(
         db.add(user)
         db.commit()
         db.refresh(user)
-        logger.info("New user created via Google OAuth: %s", email)
+        logger.info("New user created via Google OAuth: user_id=%s", user.id)
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
