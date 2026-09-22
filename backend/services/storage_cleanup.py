@@ -33,9 +33,13 @@ def get_protected_paths(db: Session) -> Set[str]:
     A file is protected from age-based pruning when it is:
       - the audio sample or speaker embedding of a voice profile that has not
         been soft-deleted (``deleted_at IS NULL``), or
-      - the synthesized output of any generation (generations have no
-        soft-delete column — CLAUDE.md §6 requires audit trails are never
-        hard-deleted, so their outputs are never age-pruned).
+      - the synthesized output of any generation. `Generation` has a
+        `deleted_at` column (HARDENING_PLAN.md finding L11), but no route
+        ever sets it — it's an append-only audit trail per CLAUDE.md §6
+        ("audit trails are never hard-deleted"), so unlike voice profiles,
+        every generation's output stays protected regardless of that column
+        until a future feature actually defines what soft-deleting one
+        means for pruning.
 
     A soft-deleted voice profile's files fall out of this set and become
     eligible for ordinary age-based pruning, which is the intended way to
