@@ -7,7 +7,7 @@ from typing import List
 
 import numpy as np
 import torch
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -182,8 +182,8 @@ async def synthesize(
 
 @router.get("/history", response_model=List[GenerationOut])
 def get_history(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
