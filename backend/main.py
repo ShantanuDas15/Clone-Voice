@@ -126,7 +126,40 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # -----------------------------------------------------------------------------
 
-app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET_KEY)
+
+def resolve_session_secret_key(session_secret_key: str, jwt_secret_key: str) -> str:
+    """Pick the secret that signs the session cookie (HARDENING_PLAN.md L6).
+
+    The session cookie (authlib's OAuth flow uses it to hold Google login
+    state/nonce — see api/auth.py) must not sign with the same secret as JWT
+    access/refresh tokens, so a leak of one purpose's secret doesn't
+    compromise the other. Falls back to `jwt_secret_key` with a logged
+    warning when `session_secret_key` is unset, so existing single-secret
+    deployments keep working.
+
+    Args:
+        session_secret_key: `settings.SESSION_SECRET_KEY`, blank if unset.
+        jwt_secret_key: `settings.JWT_SECRET_KEY`, used as the fallback.
+
+    Returns:
+        The secret to pass to `SessionMiddleware`.
+    """
+    if session_secret_key:
+        return session_secret_key
+    logger.warning(
+        "SESSION_SECRET_KEY is not set — falling back to JWT_SECRET_KEY for the "
+        "session cookie. Set a separate SESSION_SECRET_KEY in production "
+        "(HARDENING_PLAN.md finding L6)."
+    )
+    return jwt_secret_key
+
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=resolve_session_secret_key(
+        settings.SESSION_SECRET_KEY, settings.JWT_SECRET_KEY
+    ),
+)
 
 # Reject oversized bodies before multipart parsing spools them to disk (M5).
 # Added before CORS so the 413 still passes through CORS and gets its headers.
