@@ -1,16 +1,21 @@
 services:
+  # HARDENING_PLAN.md finding L12: credentials come from the environment
+  # (this project's own root .env, gitignored like backend/.env — see
+  # .env.example here for the variables and their dev-only defaults) instead
+  # of being hardcoded in this file, and the port is bound to localhost only
+  # instead of every interface on the host.
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: clonevoice
-      POSTGRES_PASSWORD: clonevoice_dev
-      POSTGRES_DB: clonevoice
+      POSTGRES_USER: ${POSTGRES_USER:-clonevoice}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clonevoice_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-clonevoice}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U clonevoice"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clonevoice}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,8 +46,10 @@ services:
     environment:
       # Overrides whatever DATABASE_URL is in backend/.env: inside the
       # compose network the DB is reachable at the `db` service name, not
-      # `localhost` (which .env.example defaults to for bare-metal/local use).
-      DATABASE_URL: postgresql://clonevoice:clonevoice_dev@db:5432/clonevoice
+      # `localhost` (which .env.example defaults to for bare-metal/local
+      # use), and it's built from the same POSTGRES_* variables as the `db`
+      # service above (finding L12) so the two can never drift apart.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clonevoice}:${POSTGRES_PASSWORD:-clonevoice_dev}@db:5432/${POSTGRES_DB:-clonevoice}
       RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
     ports:
       - "8000:8000"

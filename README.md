@@ -49,6 +49,14 @@ Copy the example environment files and fill in the required keys (e.g., Google O
 ```bash
 cp backend/.env.example backend/.env
 ```
+Optionally, also copy the root `.env.example` to override the Postgres
+credentials `docker-compose.yml` uses (`POSTGRES_USER`/`POSTGRES_PASSWORD`/
+`POSTGRES_DB`/`POSTGRES_PORT`) — it works with no `.env` here at all, since
+each has a dev-only default, but set at least `POSTGRES_PASSWORD` for
+anything beyond local dev (`HARDENING_PLAN.md` finding L12).
+```bash
+cp .env.example .env
+```
 
 ### 4. Start Services
 The project uses Docker Compose to spin up the database and the backend API
@@ -62,7 +70,8 @@ docker-compose up --build
   backend to be fully hardened first)
 - **Backend API:** http://localhost:8000
 - **API Documentation:** http://localhost:8000/docs
-- **Database:** localhost:5432
+- **Database:** localhost:5432 (bound to `127.0.0.1` only — not reachable from outside
+  the host; see `HARDENING_PLAN.md` finding L12)
 
 The `backend` container runs a single `uvicorn` worker on purpose — see "Resource
 Requirements" below and the comment on `CMD` in `backend/Dockerfile`. It will report
