@@ -1,15 +1,15 @@
 # CloneVoice Backend — Production-Hardening Audit
 
 **Audit date:** 2026-09-15 · **Audited commit:** `367d671` (main) · **Status:** COMPLETE for backend application code; tests and Alembic migrations NOT reviewed (see §1)
-**Last reviewed:** 2026-09-22 (L3 landed; M9, M10, L1, L2 landed 2026-09-21; M5–M8 landed 2026-09-20; M1–M4 landed 2026-09-19)
+**Last reviewed:** 2026-09-22 (L3, L4 landed; M9, M10, L1, L2 landed 2026-09-21; M5–M8 landed 2026-09-20; M1–M4 landed 2026-09-19)
 
 ## Progress Overview
 
-**32 findings total — 24 Fixed · 0 Partial · 8 Not Started** (as of 2026-09-22). This is the
+**32 findings total — 25 Fixed · 0 Partial · 7 Not Started** (as of 2026-09-22). This is the
 current-state dashboard; the **Task Status Log** below it is the commit-by-commit history of how
 each fix landed, and **§3 Fix Plan** has the fuller action description for every not-started item.
 
-### ✅ Completed (24)
+### ✅ Completed (25)
 
 | # | Finding | Commit(s) |
 |---|---------|-----------|
@@ -36,17 +36,17 @@ each fix landed, and **§3 Fix Plan** has the fuller action description for ever
 | L1 | Preprocessing failures return a generic 422 detail (raw library error logged server-side only); orphaned upload deleted (orphan half landed with M4) | `d9aed57`, `ca08ad1` |
 | L2 | Synthesis rejects a non-`ready` voice profile with 409 instead of failing in `np.load` with a 500 | `b4119ab` |
 | L3 | `/history` `limit`/`offset` now validated with `Query(ge=1)`/`Query(ge=0)` — negative values (or `limit=0`) are a 422, not a 500 | `1a8a374` |
+| L4 | Storage cleanup's DB query and directory walk now run via `asyncio.to_thread`, not on the event loop | `ed9cd92` |
 | L8 | `download_weights.py` ignored `settings.WEIGHTS_DIR` (resolved incidentally by the C2 rewrite) | `f253d3d` |
 
 ### ⚠️ Partial / In Progress (0)
 
 None currently — every finding below is either fully fixed above or not started yet.
 
-### ❌ Not Started (8)
+### ❌ Not Started (7)
 
 | # | Sev. | Finding | Planned fix (§3 has detail) |
 |---|------|---------|------------------------------|
-| L4 | Low | Storage cleanup's directory walk runs synchronously inside the async task | Run `cleanup_stale_files` via `asyncio.to_thread` |
 | L5 | Low | DB engine has no `pool_pre_ping`, pool sizing, or connect timeout | Set `pool_pre_ping=True`, pool size, connect timeout |
 | L6 | Low | JWT signing secret reused as the session-cookie secret | Use a separate `SESSION_SECRET_KEY` |
 | L7 | Low | Dev/test tools (`pytest`, `black`, `isort`) in runtime `requirements.txt` | Split into `requirements-dev.txt`; pin `bcrypt` exactly |
@@ -84,7 +84,8 @@ None currently — every finding below is either fully fixed above or not starte
 | L1 — Orphaned upload + raw exception text on preprocessing failure | ✅ Fixed | `d9aed57` (orphan half: `ca08ad1`) | The orphaned-file half was already fixed by M4 (`upload_audio()` deletes the saved file when `preprocess_audio` raises). This change closes the leak: the catch-all in `services/audio_processing.py` `preprocess_audio()` no longer returns `Error processing audio file: <exception>`; it logs the full exception server-side (`logger.exception`, with the file path) and returns 422 `Could not process this audio file. Please upload a valid, uncorrupted recording.` The deliberate user-facing 422s (too long / too little speech) are unchanged. Validated: 2 new tests in `test_voice.py` — a unit test where `librosa.get_duration` raises with a sentinel string and the `HTTPException` detail must not contain it (or the exception class name), and an API-level test where `librosa.load` raises: 422, sentinel absent from the whole response body, no file left in the upload dir, no profile row. Confirmed non-vacuous: with the original `audio_processing.py`, both fail. Full suite: 278 passed, 1 pre-existing opt-in skip, zero failures/errors; only third-party/pre-existing warnings. No curl gateway specified. **Caveat:** L1's wording covered preprocessing failures only; a DB failure in the final profile commit after the embedding is saved would still leave the audio and `_embed.npy` on disk (not addressed). |
 | L2 — Non-`ready` profile fell through to `np.load("")` → 500 | ✅ Fixed | `b4119ab` | `api/synthesize.py` `synthesize()`: after the 404 (missing/soft-deleted) and 403 (not owner) checks, `profile.status != "ready"` returns 409 `Voice profile is not ready for synthesis` before any embedding load, inference, or `Generation` row. Ownership is checked first, so another user's failed profile still reveals nothing beyond the existing 403. Validated: 3 new tests in `test_synthesize.py` — parametrized `failed` and `processing` profiles (embedding path blanked) → 409, `run_inference_pipeline` never called, empty history; and a foreign `failed` profile → 403. Confirmed non-vacuous: with the original `synthesize.py` both 409 cases fail. Full suite: 281 passed, 1 pre-existing opt-in skip, zero failures/errors; only third-party/pre-existing warnings. No curl gateway specified. **Caveat:** 409 was chosen over 422 because the request is well-formed and the conflict is with the resource's state; the `status` column is a free string, so any value other than `ready` is rejected. |
 | L3 — `/history` `limit`/`offset` unvalidated at the lower bound | ✅ Fixed | `1a8a374` | `api/synthesize.py` `get_history()`: `limit: int = Query(50, ge=1)`, `offset: int = Query(0, ge=0)` — FastAPI/Pydantic now rejects negative `offset`, negative `limit`, and `limit=0` with 422 before the query ever reaches SQLAlchemy/the DB, closing the path to a driver-level 500 on a malformed `LIMIT`/`OFFSET`. The existing top-end behavior (`limit > 50` silently clamped to 50, not rejected) is unchanged — `test_history_pagination` (`limit=100` → 200, ≤50 rows) still passes unmodified. Validated: 4 new tests in `test_synthesize.py` — parametrized `limit=-1`, `limit=0`, `offset=-1` all → 422; a boundary case (`limit=1&offset=0`) → 200. Confirmed non-vacuous: with the original `int = 50`/`int = 0` signature restored, the 3 new out-of-bounds tests fail (200 instead of 422); reapplied the fix and re-verified all pass. Full suite: 285 passed, 1 pre-existing opt-in skip, zero failures/errors; only pre-existing third-party `DeprecationWarning`s (`crypt`, `scipy.ndimage.morphology`, `pkg_resources`, `importlib.resources.path`, `aifc`, `audioop`, `sunau`) plus one pre-existing `InsecureKeyLengthWarning` from `test_security.py`, none introduced by this change. No curl gateway specified for L3 in the plan; covered by TestClient tests. |
-| L4–L12 | ❌ Open | — | Unchanged. L8 (download_weights.py ignoring `settings.WEIGHTS_DIR`) incidentally resolved by `f253d3d` as a side effect of the C2 rewrite. |
+| L4 — Storage cleanup pass ran on the event loop | ✅ Fixed | `ed9cd92` | New `_run_cleanup_pass(directories, max_age_hours, session_factory)` in `storage_cleanup.py` bundles the previously-inline `get_protected_paths` DB query and `cleanup_stale_files` directory walk into one synchronous function; `periodic_cleanup()` now calls it via `await asyncio.to_thread(...)` each pass instead of awaiting the DB query and calling the walk directly on the event loop. Behavior is otherwise unchanged — same protected-paths semantics (C1), same age-based pruning, same per-pass exception swallowing. Validated: new `test_periodic_cleanup_offloads_pass_to_worker_thread` in `test_storage_cleanup.py` patches `cleanup_stale_files` to record the OS thread id it ran on and asserts it differs from the event-loop thread (the thread `asyncio.run()` itself executes on, captured before the loop starts) — the same reference-thread technique H5's `test_event_loop_offload.py` uses. Confirmed non-vacuous: with the `asyncio.to_thread` wrapping reverted, the new test fails (same thread id on both sides). Full suite: 286 passed, 1 pre-existing opt-in skip, zero failures/errors; only pre-existing third-party `DeprecationWarning`s. No curl gateway specified for L4 in the plan (background-task timing, covered by the test above). |
+| L5–L12 | ❌ Open | — | Unchanged. L8 (download_weights.py ignoring `settings.WEIGHTS_DIR`) incidentally resolved by `f253d3d` as a side effect of the C2 rewrite. |
 
 > This file replaces the previous hardening tracker (last version at commit `07299f1`, recoverable with `git show 07299f1:HARDENING_PLAN.md`).
 > That tracker marked "Resource Cleanup Guarantees" as ✅ Fixed (`a596055`). This audit finds that the fix itself deletes live user data (finding **C1**).
@@ -153,7 +154,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 | L1 | Request handling | ✅ **Fixed** (`d9aed57`). Was: when preprocessing fails, the already-saved upload is orphaned, and the raw exception text is returned to the client. | `api/voice.py:42`, `:45` (outside try); `services/audio_processing.py:89-91` | **Low.** Orphans are pruned by cleanup; the leak is limited to library error strings. | Observed. |
 | L2 | Request handling | ✅ **Fixed** (`b4119ab`). Was: synthesis does not check `profile.status`. A `failed` profile has `embedding_path=""` and falls through to `np.load("")` → 500 instead of a 4xx. | `api/synthesize.py:39`; `api/voice.py:74` | **Low.** Wrong status code only. | Observed. |
 | L3 | Request handling | ✅ **Fixed** (`1a8a374`). Was: `/history` capped `limit` at the top but not the bottom, and did not validate `offset`. | `api/synthesize.py:184-186` | **Low.** Wrong status code only (a well-formed-looking request would 500 instead of 422). | Observed. |
-| L4 | Event loop | The cleanup pass (`os.walk` + deletes) runs synchronously inside the async task. | `services/storage_cleanup.py:86` | **Low.** Runs hourly by default (`core/config.py:31`). | Inferred: stalls the loop in proportion to file count. |
+| L4 | Event loop | ✅ **Fixed** (`ed9cd92`). Was: the cleanup pass (`get_protected_paths` DB query plus `os.walk` + deletes) ran synchronously inside the async task. | `services/storage_cleanup.py` `periodic_cleanup()`, new `_run_cleanup_pass()` | **Low.** Ran hourly by default (`core/config.py:31`). | Observed. |
 | L5 | DB | The engine is created with no `pool_pre_ping`, pool sizing, or connect timeout. | `core/database.py:8` | **Low.** | Inferred: stale pooled connections error after a DB restart. |
 | L6 | Config | The JWT signing secret is reused as the session-cookie secret. | `main.py:114` | **Low.** Key reuse across two purposes. | Observed. |
 | L7 | Dependencies | Test and format tools are in the runtime requirements, and `bcrypt` is range-pinned instead of exact. | `requirements.txt:21-24`, `:27` | **Low.** They ship into any runtime image; `bcrypt` currently resolves to 3.2.2. | Observed. |
@@ -197,7 +198,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 - **L1:** ✅ Done (`d9aed57`, orphan half `ca08ad1`) — generic 422 detail, exception logged server-side only.
 - **L2:** ✅ Done (`b4119ab`) — 409 when `profile.status != "ready"`, checked after ownership.
 - **L3:** ✅ Done (`1a8a374`) — `limit`/`offset` on `/history` now use `Query(ge=1)`/`Query(ge=0)`.
-- **L4:** Run `cleanup_stale_files` via `asyncio.to_thread`.
+- **L4:** ✅ Done (`ed9cd92`) — New `_run_cleanup_pass()` bundles `get_protected_paths` and `cleanup_stale_files` into one blocking call; `periodic_cleanup` runs it via `asyncio.to_thread` instead of awaiting inline.
 - **L5:** Set `pool_pre_ping=True`, pool size, and a connect timeout on the engine.
 - **L6:** Use a separate `SESSION_SECRET_KEY` setting.
 - **L7:** Split `requirements-dev.txt` and pin `bcrypt` exactly.
