@@ -136,9 +136,86 @@ def _backend_service_block() -> str:
     return match.group(1)
 
 
+def _db_service_block() -> str:
+    """Return the `db:` service's YAML block from docker-compose.yml, using
+    the same text-slicing approach as `_backend_service_block` (see its
+    docstring). Runs from its own header to the next top-level (`redis:`)
+    service key."""
+    compose = _read("docker-compose.yml")
+    match = re.search(r"\n  db:\n(.*?)\n  redis:\n", compose, re.DOTALL)
+    assert match, "Could not locate a `db:` service block in docker-compose.yml"
+    return match.group(1)
+
+
 def test_compose_defines_backend_service():
     compose = _read("docker-compose.yml")
     assert re.search(r"^  backend:$", compose, re.MULTILINE)
+
+
+def test_compose_db_password_is_not_hardcoded():
+    """HARDENING_PLAN.md finding L12: the DB password must come from the
+    environment via `${POSTGRES_PASSWORD:-...}` substitution, not assigned
+    as a bare literal — even a documented dev-only default shouldn't be a
+    fixed literal that's identical across every clone of this repo."""
+    db = _db_service_block()
+    password_line = next(
+        line
+        for line in db.splitlines()
+        if line.strip().startswith("POSTGRES_PASSWORD:")
+    )
+    assert re.search(r"POSTGRES_PASSWORD:\s*\$\{POSTGRES_PASSWORD\b", password_line)
+
+
+def test_compose_db_port_bound_to_localhost_only():
+    """The published port must not be reachable from outside the host —
+    `"5432:5432"` (binds 0.0.0.0) must become `"127.0.0.1:5432:5432"`."""
+    db = _db_service_block()
+    port_line = next(line for line in db.splitlines() if "5432" in line)
+    assert "127.0.0.1" in port_line
+
+
+def test_compose_backend_database_url_shares_the_same_postgres_vars():
+    """The `backend` service's DATABASE_URL override must be built from the
+    same `POSTGRES_*` variables as the `db` service, not a second hardcoded
+    copy of the credentials that could silently drift out of sync."""
+    backend = _backend_service_block()
+    database_url_line = next(
+        line for line in backend.splitlines() if "DATABASE_URL:" in line
+    )
+    assert "${POSTGRES_USER" in database_url_line
+    assert "${POSTGRES_PASSWORD" in database_url_line
+    assert "${POSTGRES_DB" in database_url_line
+
+
+def test_root_env_example_documents_postgres_variables():
+    """A root `.env.example` (distinct from `backend/.env.example`) must
+    document the compose-level variables and their dev-only defaults."""
+    root_env_example = _read(".env.example")
+    for key in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "POSTGRES_PORT"):
+        assert key in root_env_example
+
+
+@pytest.mark.skipif(
+    shutil.which("docker") is None,
+    reason="docker CLI not available in this environment",
+)
+def test_compose_config_resolves_db_port_to_localhost_only():
+    """Beyond static text checks, confirm `docker compose config` actually
+    resolves the port mapping's `host_ip` to `127.0.0.1` (no daemon needed —
+    see `test_compose_config_is_valid`)."""
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            f"{REPO_ROOT}/docker-compose.yml",
+            "config",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "host_ip: 127.0.0.1" in result.stdout
 
 
 def test_compose_backend_builds_from_repo_root_with_backend_dockerfile():
