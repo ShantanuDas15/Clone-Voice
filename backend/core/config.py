@@ -86,6 +86,19 @@ class Settings(BaseSettings):
     METRICS_AUTH_TOKEN: str = ""
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
+    # HARDENING_PLAN.md finding L5: the engine previously had no
+    # pool_pre_ping, pool sizing, or connect timeout, so a stale pooled
+    # connection (e.g. after a DB restart or an idle-connection reap by the
+    # DB server/proxy) surfaced as a request-time error instead of being
+    # transparently recycled. Only meaningful for a real DBAPI (Postgres in
+    # production); harmless no-ops are skipped for SQLite in `database.py`,
+    # since SQLite has no server-side connection or pool sizing concept.
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT_SECONDS: float = 30.0
+    # How long a new connection attempt may take before failing, passed as
+    # the DBAPI's own `connect_timeout` (psycopg2/Postgres).
+    DB_CONNECT_TIMEOUT_SECONDS: float = 10.0
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
 
