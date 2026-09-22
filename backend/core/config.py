@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     JWT_SECRET_KEY: str = "secret"
     JWT_ALGORITHM: str = "HS256"
+    # HARDENING_PLAN.md finding L6: the session cookie (used by authlib's
+    # OAuth flow to hold Google login state/nonce, see api/auth.py) must not
+    # sign with the same secret as JWT access/refresh tokens — a leak of one
+    # purpose's secret would otherwise compromise the other too. Left blank
+    # by default so existing single-secret deployments keep working; main.py
+    # falls back to JWT_SECRET_KEY and logs a warning when this is unset.
+    SESSION_SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     GOOGLE_CLIENT_ID: str = ""
@@ -117,6 +124,18 @@ class Settings(BaseSettings):
         if v == "secret" or len(v) < 32:
             raise ValueError(
                 "JWT_SECRET_KEY must be at least 32 characters and cannot be 'secret'"
+            )
+        return v
+
+    @field_validator("SESSION_SECRET_KEY")
+    @classmethod
+    def validate_session_secret_key(cls, v: str) -> str:
+        """Blank (fall back to JWT_SECRET_KEY, see below) or >=32 chars — never
+        the literal 'secret', matching JWT_SECRET_KEY's own bar."""
+        if v and (v == "secret" or len(v) < 32):
+            raise ValueError(
+                "SESSION_SECRET_KEY must be at least 32 characters and cannot be "
+                "'secret' (or leave it blank to fall back to JWT_SECRET_KEY)"
             )
         return v
 

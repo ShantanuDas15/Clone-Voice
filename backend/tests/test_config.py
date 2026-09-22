@@ -88,3 +88,34 @@ def test_tests_never_write_into_real_storage_dirs(tmp_path) -> None:
     """The autouse fixture redirects storage into the per-test temp dir."""
     assert settings.UPLOAD_DIR == str(tmp_path / "uploads")
     assert settings.OUTPUT_DIR == str(tmp_path / "outputs")
+
+
+def test_session_secret_key_blank_by_default_is_accepted(monkeypatch) -> None:
+    """L6: blank is a valid value — it signals 'fall back to JWT_SECRET_KEY',
+    not an unset/invalid field, so existing deployments aren't broken."""
+    monkeypatch.delenv("SESSION_SECRET_KEY", raising=False)
+    cfg = Settings(_env_file=None, DATABASE_URL="sqlite://", JWT_SECRET_KEY="x" * 40)
+
+    assert cfg.SESSION_SECRET_KEY == ""
+
+
+def test_session_secret_key_accepts_a_strong_value(monkeypatch) -> None:
+    cfg = _settings_with(monkeypatch, SESSION_SECRET_KEY="y" * 40)
+
+    assert cfg.SESSION_SECRET_KEY == "y" * 40
+
+
+def test_session_secret_key_rejects_short_value(monkeypatch) -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _settings_with(monkeypatch, SESSION_SECRET_KEY="too-short")
+
+
+def test_session_secret_key_rejects_literal_secret(monkeypatch) -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _settings_with(monkeypatch, SESSION_SECRET_KEY="secret")
