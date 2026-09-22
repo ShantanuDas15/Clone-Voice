@@ -14,7 +14,13 @@ from backend.core.config import settings
 from backend.core.database import get_db
 from backend.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+# HARDENING_PLAN.md finding L9: must match the actual mounted path
+# (main.py: API_V1_PREFIX + auth_router's prefix = "/api/v1/auth/login"),
+# not the pre-versioning "api/auth/login" — only affects the OpenAPI docs'
+# auth flow (Swagger UI's "Authorize" button), not token verification
+# itself, since a bearer token is checked on its contents regardless of
+# where the client fetched it from.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 ACCESS_TOKEN_TYPE = "access"
 REFRESH_TOKEN_TYPE = "refresh"
