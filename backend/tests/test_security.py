@@ -10,7 +10,8 @@ from pydantic import ValidationError
 from sqlalchemy.sql import func
 
 from backend.core.config import Settings
-from backend.core.security import create_access_token, hash_password
+from backend.core.security import (create_access_token, hash_email_for_logging,
+                                   hash_password)
 from backend.models.user import User
 
 
@@ -254,6 +255,34 @@ def test_tampered_token_rejected(client: TestClient):
         headers={"Authorization": f"Bearer {header}.{flipped}.{sig}"},
     )
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# hash_email_for_logging (HARDENING_PLAN.md finding L10)
+# ---------------------------------------------------------------------------
+
+
+def test_hash_email_for_logging_is_deterministic() -> None:
+    assert hash_email_for_logging("user@example.com") == hash_email_for_logging(
+        "user@example.com"
+    )
+
+
+def test_hash_email_for_logging_is_case_and_whitespace_insensitive() -> None:
+    assert hash_email_for_logging("User@Example.com") == hash_email_for_logging(
+        "  user@example.com  "
+    )
+
+
+def test_hash_email_for_logging_differs_for_different_emails() -> None:
+    assert hash_email_for_logging("a@example.com") != hash_email_for_logging(
+        "b@example.com"
+    )
+
+
+def test_hash_email_for_logging_never_contains_the_raw_email() -> None:
+    email = "user@example.com"
+    assert email not in hash_email_for_logging(email)
 
 
 def _settings():
