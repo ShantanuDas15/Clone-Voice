@@ -31,3 +31,15 @@ class Generation(Base):
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
+    # HARDENING_PLAN.md finding L11 (CLAUDE.md §6: every table carries
+    # created_at + updated_at, and deleted_at for soft deletes). No route
+    # deletes a Generation today (it's an append-only audit trail — see
+    # storage_cleanup.py), so deleted_at stays NULL in practice; the column
+    # exists for schema consistency and any future soft-delete feature.
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
