@@ -58,3 +58,26 @@ def test_health_endpoint_remains_unversioned(client: TestClient) -> None:
     """Health checks are infrastructure-level and stay outside API versioning."""
     response = client.get("/health")
     assert response.status_code in (200, 503)
+
+
+def test_openapi_token_url_matches_the_actual_versioned_login_path(
+    client: TestClient,
+) -> None:
+    """HARDENING_PLAN.md finding L9: the OpenAPI security scheme's
+    `tokenUrl` (what Swagger UI's "Authorize" button POSTs to) must match
+    the real mounted `/login` path, not the pre-versioning one."""
+    openapi = client.get("/openapi.json").json()
+    flows = openapi["components"]["securitySchemes"]["OAuth2PasswordBearer"]["flows"]
+
+    assert flows["password"]["tokenUrl"] == "api/v1/auth/login"
+
+
+def test_openapi_token_url_is_reachable_at_the_versioned_prefix(
+    client: TestClient,
+) -> None:
+    """The `tokenUrl` FastAPI advertises must actually resolve, not 404."""
+    response = client.post(
+        f"{API_V1_PREFIX}/auth/login",
+        json={"email": "nonexistent@example.com", "password": "wrong"},
+    )
+    assert response.status_code != 404
