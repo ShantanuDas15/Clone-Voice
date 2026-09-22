@@ -1,15 +1,15 @@
 # CloneVoice Backend — Production-Hardening Audit
 
 **Audit date:** 2026-09-15 · **Audited commit:** `367d671` (main) · **Status:** COMPLETE for backend application code; tests and Alembic migrations NOT reviewed (see §1)
-**Last reviewed:** 2026-09-22 (L3, L4 landed; M9, M10, L1, L2 landed 2026-09-21; M5–M8 landed 2026-09-20; M1–M4 landed 2026-09-19)
+**Last reviewed:** 2026-09-22 (L3, L4, L5 landed; M9, M10, L1, L2 landed 2026-09-21; M5–M8 landed 2026-09-20; M1–M4 landed 2026-09-19)
 
 ## Progress Overview
 
-**32 findings total — 25 Fixed · 0 Partial · 7 Not Started** (as of 2026-09-22). This is the
+**32 findings total — 26 Fixed · 0 Partial · 6 Not Started** (as of 2026-09-22). This is the
 current-state dashboard; the **Task Status Log** below it is the commit-by-commit history of how
 each fix landed, and **§3 Fix Plan** has the fuller action description for every not-started item.
 
-### ✅ Completed (25)
+### ✅ Completed (26)
 
 | # | Finding | Commit(s) |
 |---|---------|-----------|
@@ -37,17 +37,17 @@ each fix landed, and **§3 Fix Plan** has the fuller action description for ever
 | L2 | Synthesis rejects a non-`ready` voice profile with 409 instead of failing in `np.load` with a 500 | `b4119ab` |
 | L3 | `/history` `limit`/`offset` now validated with `Query(ge=1)`/`Query(ge=0)` — negative values (or `limit=0`) are a 422, not a 500 | `1a8a374` |
 | L4 | Storage cleanup's DB query and directory walk now run via `asyncio.to_thread`, not on the event loop | `ed9cd92` |
+| L5 | DB engine now built with `pool_pre_ping=True`, pool sizing, and a connect timeout (Postgres-only; skipped for SQLite) | `5667cca` |
 | L8 | `download_weights.py` ignored `settings.WEIGHTS_DIR` (resolved incidentally by the C2 rewrite) | `f253d3d` |
 
 ### ⚠️ Partial / In Progress (0)
 
 None currently — every finding below is either fully fixed above or not started yet.
 
-### ❌ Not Started (7)
+### ❌ Not Started (6)
 
 | # | Sev. | Finding | Planned fix (§3 has detail) |
 |---|------|---------|------------------------------|
-| L5 | Low | DB engine has no `pool_pre_ping`, pool sizing, or connect timeout | Set `pool_pre_ping=True`, pool size, connect timeout |
 | L6 | Low | JWT signing secret reused as the session-cookie secret | Use a separate `SESSION_SECRET_KEY` |
 | L7 | Low | Dev/test tools (`pytest`, `black`, `isort`) in runtime `requirements.txt` | Split into `requirements-dev.txt`; pin `bcrypt` exactly |
 | L9 | Low | OAuth2 `tokenUrl` still points to the pre-versioning path | Set `tokenUrl` to `api/v1/auth/login` |
@@ -85,7 +85,8 @@ None currently — every finding below is either fully fixed above or not starte
 | L2 — Non-`ready` profile fell through to `np.load("")` → 500 | ✅ Fixed | `b4119ab` | `api/synthesize.py` `synthesize()`: after the 404 (missing/soft-deleted) and 403 (not owner) checks, `profile.status != "ready"` returns 409 `Voice profile is not ready for synthesis` before any embedding load, inference, or `Generation` row. Ownership is checked first, so another user's failed profile still reveals nothing beyond the existing 403. Validated: 3 new tests in `test_synthesize.py` — parametrized `failed` and `processing` profiles (embedding path blanked) → 409, `run_inference_pipeline` never called, empty history; and a foreign `failed` profile → 403. Confirmed non-vacuous: with the original `synthesize.py` both 409 cases fail. Full suite: 281 passed, 1 pre-existing opt-in skip, zero failures/errors; only third-party/pre-existing warnings. No curl gateway specified. **Caveat:** 409 was chosen over 422 because the request is well-formed and the conflict is with the resource's state; the `status` column is a free string, so any value other than `ready` is rejected. |
 | L3 — `/history` `limit`/`offset` unvalidated at the lower bound | ✅ Fixed | `1a8a374` | `api/synthesize.py` `get_history()`: `limit: int = Query(50, ge=1)`, `offset: int = Query(0, ge=0)` — FastAPI/Pydantic now rejects negative `offset`, negative `limit`, and `limit=0` with 422 before the query ever reaches SQLAlchemy/the DB, closing the path to a driver-level 500 on a malformed `LIMIT`/`OFFSET`. The existing top-end behavior (`limit > 50` silently clamped to 50, not rejected) is unchanged — `test_history_pagination` (`limit=100` → 200, ≤50 rows) still passes unmodified. Validated: 4 new tests in `test_synthesize.py` — parametrized `limit=-1`, `limit=0`, `offset=-1` all → 422; a boundary case (`limit=1&offset=0`) → 200. Confirmed non-vacuous: with the original `int = 50`/`int = 0` signature restored, the 3 new out-of-bounds tests fail (200 instead of 422); reapplied the fix and re-verified all pass. Full suite: 285 passed, 1 pre-existing opt-in skip, zero failures/errors; only pre-existing third-party `DeprecationWarning`s (`crypt`, `scipy.ndimage.morphology`, `pkg_resources`, `importlib.resources.path`, `aifc`, `audioop`, `sunau`) plus one pre-existing `InsecureKeyLengthWarning` from `test_security.py`, none introduced by this change. No curl gateway specified for L3 in the plan; covered by TestClient tests. |
 | L4 — Storage cleanup pass ran on the event loop | ✅ Fixed | `ed9cd92` | New `_run_cleanup_pass(directories, max_age_hours, session_factory)` in `storage_cleanup.py` bundles the previously-inline `get_protected_paths` DB query and `cleanup_stale_files` directory walk into one synchronous function; `periodic_cleanup()` now calls it via `await asyncio.to_thread(...)` each pass instead of awaiting the DB query and calling the walk directly on the event loop. Behavior is otherwise unchanged — same protected-paths semantics (C1), same age-based pruning, same per-pass exception swallowing. Validated: new `test_periodic_cleanup_offloads_pass_to_worker_thread` in `test_storage_cleanup.py` patches `cleanup_stale_files` to record the OS thread id it ran on and asserts it differs from the event-loop thread (the thread `asyncio.run()` itself executes on, captured before the loop starts) — the same reference-thread technique H5's `test_event_loop_offload.py` uses. Confirmed non-vacuous: with the `asyncio.to_thread` wrapping reverted, the new test fails (same thread id on both sides). Full suite: 286 passed, 1 pre-existing opt-in skip, zero failures/errors; only pre-existing third-party `DeprecationWarning`s. No curl gateway specified for L4 in the plan (background-task timing, covered by the test above). |
-| L5–L12 | ❌ Open | — | Unchanged. L8 (download_weights.py ignoring `settings.WEIGHTS_DIR`) incidentally resolved by `f253d3d` as a side effect of the C2 rewrite. |
+| L5 — DB engine had no pool_pre_ping, pool sizing, or connect timeout | ✅ Fixed | `5667cca` | New `_build_engine_kwargs()` in `core/database.py` always sets `pool_pre_ping=True` (recycles a dead/stale pooled connection transparently instead of surfacing it as a request-time error, e.g. after a DB restart or an idle-connection reap by the DB server or a proxy in front of it). When `settings.DATABASE_URL`'s backend is not `sqlite`, it additionally passes `pool_size`/`max_overflow`/`pool_timeout` and a psycopg2 `connect_args={"connect_timeout": ...}`, all newly configurable via `DB_POOL_SIZE` (default 5), `DB_MAX_OVERFLOW` (10), `DB_POOL_TIMEOUT_SECONDS` (30), `DB_CONNECT_TIMEOUT_SECONDS` (10) — documented in `.env.example`. SQLite (the test suite's in-memory DB) gets only `pool_pre_ping`, since it has no server-side connections or pool-of-connections concept and passing `connect_args={"connect_timeout": ...}` would error against the `sqlite3` DBAPI. Validated: 4 new tests in `test_database.py` — the real module-level `engine` has `pool._pre_ping is True`; a Postgres URL gets the full kwargs set with the configured values; a SQLite URL gets only `pool_pre_ping`; a SQLite engine built with those kwargs still connects and runs a real `SELECT 1` (proves the kwargs are valid for the `sqlite3` DBAPI, not just computed correctly). Confirmed non-vacuous: with the original `database.py` restored, the test module fails to collect (`ImportError` on `_build_engine_kwargs`). Full suite: 290 passed, 1 pre-existing opt-in skip, zero failures/errors; only pre-existing third-party `DeprecationWarning`s and the pre-existing `InsecureKeyLengthWarning`. No curl gateway specified for L5 in the plan (pool/connection behavior under a real Postgres restart isn't exercisable here — no live Postgres in this sandbox; covered by the unit tests above). **Caveat:** `DB_CONNECT_TIMEOUT_SECONDS` is cast to `int()` for psycopg2's `connect_timeout`, which only accepts whole seconds — a sub-second value would silently round down; not a concern at the 10s default. |
+| L6–L12 | ❌ Open | — | Unchanged. L8 (download_weights.py ignoring `settings.WEIGHTS_DIR`) incidentally resolved by `f253d3d` as a side effect of the C2 rewrite. |
 
 > This file replaces the previous hardening tracker (last version at commit `07299f1`, recoverable with `git show 07299f1:HARDENING_PLAN.md`).
 > That tracker marked "Resource Cleanup Guarantees" as ✅ Fixed (`a596055`). This audit finds that the fix itself deletes live user data (finding **C1**).
@@ -155,7 +156,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 | L2 | Request handling | ✅ **Fixed** (`b4119ab`). Was: synthesis does not check `profile.status`. A `failed` profile has `embedding_path=""` and falls through to `np.load("")` → 500 instead of a 4xx. | `api/synthesize.py:39`; `api/voice.py:74` | **Low.** Wrong status code only. | Observed. |
 | L3 | Request handling | ✅ **Fixed** (`1a8a374`). Was: `/history` capped `limit` at the top but not the bottom, and did not validate `offset`. | `api/synthesize.py:184-186` | **Low.** Wrong status code only (a well-formed-looking request would 500 instead of 422). | Observed. |
 | L4 | Event loop | ✅ **Fixed** (`ed9cd92`). Was: the cleanup pass (`get_protected_paths` DB query plus `os.walk` + deletes) ran synchronously inside the async task. | `services/storage_cleanup.py` `periodic_cleanup()`, new `_run_cleanup_pass()` | **Low.** Ran hourly by default (`core/config.py:31`). | Observed. |
-| L5 | DB | The engine is created with no `pool_pre_ping`, pool sizing, or connect timeout. | `core/database.py:8` | **Low.** | Inferred: stale pooled connections error after a DB restart. |
+| L5 | DB | ✅ **Fixed** (`5667cca`). Was: the engine was created with no `pool_pre_ping`, pool sizing, or connect timeout. | `core/database.py` `_build_engine_kwargs()` | **Low.** | Observed. |
 | L6 | Config | The JWT signing secret is reused as the session-cookie secret. | `main.py:114` | **Low.** Key reuse across two purposes. | Observed. |
 | L7 | Dependencies | Test and format tools are in the runtime requirements, and `bcrypt` is range-pinned instead of exact. | `requirements.txt:21-24`, `:27` | **Low.** They ship into any runtime image; `bcrypt` currently resolves to 3.2.2. | Observed. |
 | L8 | Config | `download_weights.py` ignores `settings.WEIGHTS_DIR` and swallows encoder download failure. | `download_weights.py:23`; `:17-21` | **Low.** It can populate a different directory than `load_models()` reads (`tts_pipeline.py:116`). | Observed. |
@@ -199,7 +200,7 @@ Severity key: **C** Critical · **H** High · **M** Medium · **L** Low.
 - **L2:** ✅ Done (`b4119ab`) — 409 when `profile.status != "ready"`, checked after ownership.
 - **L3:** ✅ Done (`1a8a374`) — `limit`/`offset` on `/history` now use `Query(ge=1)`/`Query(ge=0)`.
 - **L4:** ✅ Done (`ed9cd92`) — New `_run_cleanup_pass()` bundles `get_protected_paths` and `cleanup_stale_files` into one blocking call; `periodic_cleanup` runs it via `asyncio.to_thread` instead of awaiting inline.
-- **L5:** Set `pool_pre_ping=True`, pool size, and a connect timeout on the engine.
+- **L5:** ✅ Done (`5667cca`) — `pool_pre_ping=True` always; pool size/overflow/timeout and a psycopg2 connect timeout added for non-SQLite URLs.
 - **L6:** Use a separate `SESSION_SECRET_KEY` setting.
 - **L7:** Split `requirements-dev.txt` and pin `bcrypt` exactly.
 - **L8:** Use `settings.WEIGHTS_DIR` in `download_weights.py` and exit non-zero on failure.
