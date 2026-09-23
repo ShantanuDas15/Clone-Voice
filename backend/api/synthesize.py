@@ -85,31 +85,41 @@ async def synthesize(
             detail="Voice profile is not ready for synthesis",
         )
 
+    # HARDENING_PLAN.md finding P2-M1: the auth lookup and profile query left a
+    # transaction (and its pooled connection) open on this session. Copy what
+    # inference needs into plain locals and release the connection now, so a
+    # request queued for or running inference doesn't hold one "idle in
+    # transaction". The session reconnects lazily for the persist below.
+    user_id = current_user.id
+    profile_id = profile.id
+    embedding_path = profile.embedding_path
+    await asyncio.to_thread(db.close)
+
     try:
-        embedding = await asyncio.to_thread(np.load, profile.embedding_path)
+        embedding = await asyncio.to_thread(np.load, embedding_path)
     except Exception:
-        logger.exception("Failed to load embedding for profile_id=%s", profile.id)
+        logger.exception("Failed to load embedding for profile_id=%s", profile_id)
         raise HTTPException(
             status_code=500, detail="Failed to load voice profile embedding"
         )
 
     logger.info(
         "Synthesis started — user_id=%s, profile_id=%s, text_len=%d",
-        current_user.id,
-        profile.id,
+        user_id,
+        profile_id,
         len(req.text),
     )
 
     try:
         out_path, duration = await run_inference_pipeline(
-            req.text, embedding, str(current_user.id)
+            req.text, embedding, str(user_id)
         )
     except InferenceQueueFullError:
         logger.warning(
             "Inference queue full — rejecting synthesis request — "
             "user_id=%s, profile_id=%s",
-            current_user.id,
-            profile.id,
+            user_id,
+            profile_id,
         )
         raise HTTPException(
             status_code=429,
@@ -118,11 +128,11 @@ async def synthesize(
     except InferenceTimeoutError:
         logger.exception(
             "Inference timed out — user_id=%s, profile_id=%s",
-            current_user.id,
-            profile.id,
+            user_id,
+            profile_id,
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, current_user.id, profile.id, req.text
+            _record_failed_generation, db, user_id, profile_id, req.text
         )
         free_gpu_memory()
         raise HTTPException(
@@ -132,11 +142,11 @@ async def synthesize(
     except torch.cuda.OutOfMemoryError:
         logger.exception(
             "GPU OOM during synthesis — user_id=%s, profile_id=%s",
-            current_user.id,
-            profile.id,
+            user_id,
+            profile_id,
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, current_user.id, profile.id, req.text
+            _record_failed_generation, db, user_id, profile_id, req.text
         )
         free_gpu_memory()
         raise HTTPException(
@@ -146,11 +156,11 @@ async def synthesize(
     except Exception:
         logger.exception(
             "Synthesis pipeline failed — user_id=%s, profile_id=%s",
-            current_user.id,
-            profile.id,
+            user_id,
+            profile_id,
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, current_user.id, profile.id, req.text
+            _record_failed_generation, db, user_id, profile_id, req.text
         )
         free_gpu_memory()
         raise HTTPException(
@@ -160,14 +170,14 @@ async def synthesize(
 
     logger.info(
         "Synthesis complete — user_id=%s, duration=%.2fs, out=%s",
-        current_user.id,
+        user_id,
         duration,
         out_path,
     )
 
     generation = Generation(
-        user_id=current_user.id,
-        voice_profile_id=profile.id,
+        user_id=user_id,
+        voice_profile_id=profile_id,
         input_text=req.text,
         output_audio_path=out_path,
         duration_seconds=duration,

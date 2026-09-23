@@ -55,7 +55,7 @@ def _is_usable_embedding(embedding: np.ndarray) -> bool:
 
 
 async def _cleanup_failed_upload(
-    db: Session, file_path: str, current_user: User, name: str
+    db: Session, file_path: str, user_id: uuid.UUID, name: str
 ) -> None:
     """Remove the orphaned upload and persist a `status="failed"` profile row.
 
@@ -68,7 +68,7 @@ async def _cleanup_failed_upload(
     except OSError:
         logger.exception("Failed to remove orphaned upload: %s", file_path)
     profile = VoiceProfile(
-        user_id=current_user.id,
+        user_id=user_id,
         name=name,
         audio_sample_path=file_path,
         embedding_path="",
@@ -89,9 +89,15 @@ async def upload_audio(
     db: Session = Depends(get_db),
 ):
     """Validate, process, and embed an uploaded audio sample."""
+    # HARDENING_PLAN.md finding P2-M1: release the connection the auth lookup
+    # left open in a transaction before the slow decode/embedding work. The
+    # session reconnects lazily when the profile row is persisted.
+    user_id = current_user.id
+    await asyncio.to_thread(db.close)
+
     ext = await asyncio.to_thread(validate_audio_file, file)
-    file_path = await asyncio.to_thread(save_upload, file, str(current_user.id), ext)
-    logger.info("Audio uploaded by user_id=%s — file=%s", current_user.id, file_path)
+    file_path = await asyncio.to_thread(save_upload, file, str(user_id), ext)
+    logger.info("Audio uploaded by user_id=%s — file=%s", user_id, file_path)
 
     try:
         y_processed = await asyncio.to_thread(preprocess_audio, file_path)
@@ -104,12 +110,12 @@ async def upload_audio(
     embedding_path = os.path.splitext(file_path)[0] + "_embed.npy"
 
     try:
-        logger.debug("Extracting speaker embedding for user_id=%s", current_user.id)
+        logger.debug("Extracting speaker embedding for user_id=%s", user_id)
         embedding = await embed_speaker_async(y_processed)
         if not _is_usable_embedding(embedding):
             logger.warning(
                 "Blank/invalid speaker embedding for user_id=%s — rejecting",
-                current_user.id,
+                user_id,
             )
             await asyncio.to_thread(_remove_quietly, file_path)
             raise HTTPException(
@@ -125,18 +131,16 @@ async def upload_audio(
         raise
     except InferenceQueueFullError:
         logger.warning(
-            "Inference queue full — rejecting upload for user_id=%s", current_user.id
+            "Inference queue full — rejecting upload for user_id=%s", user_id
         )
-        await _cleanup_failed_upload(db, file_path, current_user, name)
+        await _cleanup_failed_upload(db, file_path, user_id, name)
         raise HTTPException(
             status_code=429,
             detail="Voice profile service is busy. Please try again shortly.",
         )
     except InferenceTimeoutError:
-        logger.exception(
-            "Embedding extraction timed out for user_id=%s", current_user.id
-        )
-        await _cleanup_failed_upload(db, file_path, current_user, name)
+        logger.exception("Embedding extraction timed out for user_id=%s", user_id)
+        await _cleanup_failed_upload(db, file_path, user_id, name)
         raise HTTPException(
             status_code=503,
             detail="Voice profile service is temporarily overloaded. Please try again shortly.",
@@ -144,15 +148,15 @@ async def upload_audio(
     except Exception:
         logger.exception(
             "Embedding extraction failed for user_id=%s — persisting failed profile",
-            current_user.id,
+            user_id,
         )
-        await _cleanup_failed_upload(db, file_path, current_user, name)
+        await _cleanup_failed_upload(db, file_path, user_id, name)
         raise HTTPException(
             status_code=500, detail="Failed to extract speaker embedding"
         )
 
     profile = VoiceProfile(
-        user_id=current_user.id,
+        user_id=user_id,
         name=name,
         audio_sample_path=file_path,
         embedding_path=embedding_path,
@@ -164,7 +168,7 @@ async def upload_audio(
         "Voice profile created: id=%s, name=%s, user_id=%s",
         profile.id,
         profile.name,
-        current_user.id,
+        user_id,
     )
     return profile
 
