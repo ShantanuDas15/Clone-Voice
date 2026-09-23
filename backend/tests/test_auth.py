@@ -332,6 +332,37 @@ def test_google_callback_existing_local(client: TestClient):
             assert me_data["avatar_url"] == "http://example.com/pic.jpg"
 
 
+def test_google_link_revokes_local_password(client: TestClient):
+    """P2-H1: linking Google to a local account must kill password login."""
+    email = "squatted@example.com"
+    password = "Password123!"
+    client.post(
+        "/api/v1/auth/signup",
+        json={"email": email, "password": password, "name": "Squatter"},
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/login", json={"email": email, "password": password}
+        ).status_code
+        == 200
+    )
+
+    claims = {"email": email, "email_verified": True, "name": "Real Owner"}
+    with patch(
+        "backend.api.auth.oauth.google.authorize_access_token",
+        new_callable=AsyncMock,
+        return_value={"userinfo": claims},
+    ):
+        assert (
+            client.get("/api/v1/auth/google/callback?code=c&state=s").status_code == 200
+        )
+
+    resp = client.post(
+        "/api/v1/auth/login", json={"email": email, "password": password}
+    )
+    assert resp.status_code == 401
+
+
 @pytest.mark.parametrize(
     "email,pre_existing_local",
     [
