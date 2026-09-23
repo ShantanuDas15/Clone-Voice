@@ -1,18 +1,18 @@
 # CloneVoice Backend — Production-Hardening Audit (Pass 2)
 
 **Audit date:** 2026-09-22 · **Audited commit:** `f69ab71` (main) · **Status:** COMPLETE for backend application code, deploy files and dependencies. Tests, Alembic revision files and parts of the vendored SV2TTS package were NOT reviewed (see §1).
-**Last reviewed:** 2026-09-23 (P2-H1 fixed in `b86ea44` — Google link now clears the local password; email verification still open; audit written 2026-09-22)
+**Last reviewed:** 2026-09-23 (P2-H2 fixed in `ebf92a3`; P2-H1 fixed in `b86ea44` — Google link now clears the local password; email verification still open; audit written 2026-09-22)
 
 This is a fresh pass over the code as it stands after all 32 Pass-1 findings were fixed. Pass 1 (2026-09-15) is kept unchanged below the line at the end of this section, for its commit-by-commit tracker. Pass-2 IDs have a `P2-` prefix so they can't collide with Pass-1 IDs (`C1`, `H1`, …). No code was changed in this pass.
 
 ## Progress Overview (Pass 2)
 
-**19 findings — 0 Fixed · 1 Partial · 18 Not Started** (3 High · 6 Medium · 10 Low)
+**19 findings — 1 Fixed · 1 Partial · 17 Not Started** (3 High · 6 Medium · 10 Low)
 
 | # | Finding | Status | Commit(s) |
 |---|---------|--------|-----------|
 | P2-H1 | A local signup that claims someone else's email keeps password access after that person signs in with Google | 🟡 Partial — takeover chain closed; email verification open | `b86ea44` |
-| P2-H2 | Pinned dependencies with published advisories sit on the unauthenticated request path | ❌ Not Started | — |
+| P2-H2 | Pinned dependencies with published advisories sit on the unauthenticated request path | ✅ Fixed | `ebf92a3` |
 | P2-H3 | Container build probably fails: `webrtcvad` must be compiled, but the image has no C compiler | ❌ Not Started (unverified) | — |
 | P2-M1 | Request DB connection held open in a transaction for the whole inference call | ❌ Not Started | — |
 | P2-M2 | No schema-migration step in the deploy path, and readiness can't detect a missing schema | ❌ Not Started | — |
@@ -36,6 +36,7 @@ This is a fresh pass over the code as it stands after all 32 Pass-1 findings wer
 | Finding | Status | Commit | Notes |
 |---------|--------|--------|-------|
 | P2-H1 — local password survives Google link | 🟡 Partial | `b86ea44` | `google_callback` now sets `hashed_password = None` when it links Google to an existing `provider == "local"` account (Google has just verified the email, so the Google user is the rightful owner; the squatter's password stops working). New test `test_google_link_revokes_local_password`: signs up, confirms password login works, links via a mocked Google callback, then asserts password login returns 401. Confirmed non-vacuous: with the `auth.py` change stashed it fails. Full suite: 329 passed, 1 pre-existing skip, zero failures; only pre-existing third-party warnings. No live curl gateway — the flow needs a real Google callback, which tests must not call. **Still open:** (a) email verification on local signup, the "longer term" half of the fix, needs an email-sending path and a schema change and is a product decision (§4 item 2); (b) refresh tokens the squatter already holds stay valid until expiry, because they can't be revoked (P2-M4); (c) a squatter's pre-link voice profiles stay on the account. |
+| P2-H2 — advisory-affected pins | ✅ Fixed | `ebf92a3` | `requirements.txt`: python-multipart 0.0.9→0.0.32, authlib 1.3.1→1.6.12, torch 2.3.0→2.13.0, python-dotenv 1.0.1→1.2.3, fastapi 0.111.0→0.141.1, pydantic 2.7.1→2.9.2 (required by the new fastapi). **starlette is now pinned explicitly at 1.3.1:** fastapi's own range is only `>=0.46.0`, so bumping fastapi alone would not have forced the fix. torch went to 2.13.0, not the 2.6.0 floor, because 2.13.0 is the release that clears every torch advisory that has a fix. `torchaudio` was removed: nothing imports it, and no release exists that pairs with torch 2.13. `httpx2==2.13.1` added to `requirements-dev.txt` (new starlette warns when its TestClient uses `httpx`). `pip-audit -r backend/requirements.txt --no-deps` went from 56 vulnerabilities to **none**. New CI gate `.github/workflows/backend-audit.yml` runs that command on requirements changes, on PRs and weekly. New `backend/tests/test_dependencies.py` (11 tests) checks each pin and the installed version against its advisory floor; the pin tests fail on the old requirements. Full suite: 340 passed, 1 pre-existing skip, zero failures, same 11 pre-existing third-party warnings. **Checkpoints:** downloaded the real `synthesizer.pt`/`vocoder.pt` (SHA256-verified) and ran `python -m backend.download_weights --fetch --verify-inference` on torch 2.13.0: both load with `weights_only=True` and synthesis produced 20400 samples (1.27 s at 16 kHz), exit OK. **Caveats:** the audit covers exact pins only. Transitive packages aren't resolved until P2-L9 adds a lock file. A full `pip-audit --local` of the dev venv still lists `pytest`, `black`, `pip` and `setuptools`. Those are dev/tooling packages outside the runtime image, and were not bumped. The CI workflow was not run on GitHub here. The Docker image was not rebuilt (P2-H3 is still unverified). CPU-only wheel size/latency of torch 2.13 wasn't benchmarked. |
 
 ---
 
