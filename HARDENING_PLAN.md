@@ -1,17 +1,17 @@
 # CloneVoice Backend — Production-Hardening Audit (Pass 2)
 
 **Audit date:** 2026-09-22 · **Audited commit:** `f69ab71` (main) · **Status:** COMPLETE for backend application code, deploy files and dependencies. Tests, Alembic revision files and parts of the vendored SV2TTS package were NOT reviewed (see §1).
-**Last reviewed:** 2026-09-22 (audit written; no fixes started)
+**Last reviewed:** 2026-09-23 (P2-H1 fixed in `b86ea44` — Google link now clears the local password; email verification still open; audit written 2026-09-22)
 
 This is a fresh pass over the code as it stands after all 32 Pass-1 findings were fixed. Pass 1 (2026-09-15) is kept unchanged below the line at the end of this section, for its commit-by-commit tracker. Pass-2 IDs have a `P2-` prefix so they can't collide with Pass-1 IDs (`C1`, `H1`, …). No code was changed in this pass.
 
 ## Progress Overview (Pass 2)
 
-**19 findings — 0 Fixed · 0 Partial · 19 Not Started** (3 High · 6 Medium · 10 Low)
+**19 findings — 0 Fixed · 1 Partial · 18 Not Started** (3 High · 6 Medium · 10 Low)
 
 | # | Finding | Status | Commit(s) |
 |---|---------|--------|-----------|
-| P2-H1 | A local signup that claims someone else's email keeps password access after that person signs in with Google | ❌ Not Started | — |
+| P2-H1 | A local signup that claims someone else's email keeps password access after that person signs in with Google | 🟡 Partial — takeover chain closed; email verification open | `b86ea44` |
 | P2-H2 | Pinned dependencies with published advisories sit on the unauthenticated request path | ❌ Not Started | — |
 | P2-H3 | Container build probably fails: `webrtcvad` must be compiled, but the image has no C compiler | ❌ Not Started (unverified) | — |
 | P2-M1 | Request DB connection held open in a transaction for the whole inference call | ❌ Not Started | — |
@@ -30,6 +30,12 @@ This is a fresh pass over the code as it stands after all 32 Pass-1 findings wer
 | P2-L8 | When the readiness DB check times out, its thread keeps using a session that `get_db` is closing | ❌ Not Started | — |
 | P2-L9 | Transitive dependencies unpinned (no lock file or hashes) | ❌ Not Started | — |
 | P2-L10 | Upload decode/resample runs outside the inference semaphore, with no concurrency bound | ❌ Not Started | — |
+
+### Task Status Log (Pass 2)
+
+| Finding | Status | Commit | Notes |
+|---------|--------|--------|-------|
+| P2-H1 — local password survives Google link | 🟡 Partial | `b86ea44` | `google_callback` now sets `hashed_password = None` when it links Google to an existing `provider == "local"` account (Google has just verified the email, so the Google user is the rightful owner; the squatter's password stops working). New test `test_google_link_revokes_local_password`: signs up, confirms password login works, links via a mocked Google callback, then asserts password login returns 401. Confirmed non-vacuous: with the `auth.py` change stashed it fails. Full suite: 329 passed, 1 pre-existing skip, zero failures; only pre-existing third-party warnings. No live curl gateway — the flow needs a real Google callback, which tests must not call. **Still open:** (a) email verification on local signup, the "longer term" half of the fix, needs an email-sending path and a schema change and is a product decision (§4 item 2); (b) refresh tokens the squatter already holds stay valid until expiry, because they can't be revoked (P2-M4); (c) a squatter's pre-link voice profiles stay on the account. |
 
 ---
 
