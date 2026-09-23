@@ -1,3 +1,149 @@
+# CloneVoice Backend — Production-Hardening Audit (Pass 2)
+
+**Audit date:** 2026-09-22 · **Audited commit:** `f69ab71` (main) · **Status:** COMPLETE for backend application code, deploy files and dependencies. Tests, Alembic revision files and parts of the vendored SV2TTS package were NOT reviewed (see §1).
+**Last reviewed:** 2026-09-22 (audit written; no fixes started)
+
+This is a fresh pass over the code as it stands after all 32 Pass-1 findings were fixed. Pass 1 (2026-09-15) is kept unchanged below the line at the end of this section, for its commit-by-commit tracker. Pass-2 IDs have a `P2-` prefix so they can't collide with Pass-1 IDs (`C1`, `H1`, …). No code was changed in this pass.
+
+## Progress Overview (Pass 2)
+
+**19 findings — 0 Fixed · 0 Partial · 19 Not Started** (3 High · 6 Medium · 10 Low)
+
+| # | Finding | Status | Commit(s) |
+|---|---------|--------|-----------|
+| P2-H1 | A local signup that claims someone else's email keeps password access after that person signs in with Google | ❌ Not Started | — |
+| P2-H2 | Pinned dependencies with published advisories sit on the unauthenticated request path | ❌ Not Started | — |
+| P2-H3 | Container build probably fails: `webrtcvad` must be compiled, but the image has no C compiler | ❌ Not Started (unverified) | — |
+| P2-M1 | Request DB connection held open in a transaction for the whole inference call | ❌ Not Started | — |
+| P2-M2 | No schema-migration step in the deploy path, and readiness can't detect a missing schema | ❌ Not Started | — |
+| P2-M3 | The full 500-character text goes through one Tacotron decode, with no sentence chunking | ❌ Not Started | — |
+| P2-M4 | Refresh tokens can't be revoked; "rotation" doesn't invalidate the old token | ❌ Not Started | — |
+| P2-M5 | `outputs/` is never pruned: every generation's file is protected forever | ❌ Not Started | — |
+| P2-M6 | WaveRNN's per-sample Python loop runs in the API process, competing with the event loop for the GIL | ❌ Not Started | — |
+| P2-L1 | Unbounded `name` inputs vs `String(255)` columns | ❌ Not Started | — |
+| P2-L2 | DB writes after inference (success and error paths) are unguarded | ❌ Not Started | — |
+| P2-L3 | The inference timeout is applied per stage, not across the whole call as config and docs say | ❌ Not Started | — |
+| P2-L4 | Shutdown drain window (30 s) longer than any configured container stop grace | ❌ Not Started | — |
+| P2-L5 | `google_callback` is `async def` but runs sync DB calls on the event loop | ❌ Not Started | — |
+| P2-L6 | `/metrics` unauthenticated by default, and the API port is published on all interfaces | ❌ Not Started | — |
+| P2-L7 | `APP_ENV` defaults to `development`, which means DEBUG logging, and compose never overrides it | ❌ Not Started | — |
+| P2-L8 | When the readiness DB check times out, its thread keeps using a session that `get_db` is closing | ❌ Not Started | — |
+| P2-L9 | Transitive dependencies unpinned (no lock file or hashes) | ❌ Not Started | — |
+| P2-L10 | Upload decode/resample runs outside the inference semaphore, with no concurrency bound | ❌ Not Started | — |
+
+---
+
+## 1. Coverage Note (Pass 2)
+
+**Opened and read in full:**
+
+| Area | Files |
+|------|-------|
+| Entrypoint | `backend/main.py` |
+| Inference / model loading | `backend/services/tts_pipeline.py`, `backend/services/sv2tts/checksum.py`, `backend/weights_manifest.json`, `backend/download_weights.py` |
+| Routers | `backend/api/synthesize.py`, `backend/api/voice.py`, `backend/api/auth.py` |
+| Services | `backend/services/audio_processing.py`, `backend/services/storage_cleanup.py` |
+| Core | `backend/core/config.py`, `core/database.py`, `core/security.py`, `core/rate_limit.py`, `core/body_limit.py`, `core/metrics.py`, `core/sentry.py` |
+| Schemas / ORM | `backend/schemas/{auth,synthesize,voice}.py`, `backend/models/{__init__,user,voice_profile,generation}.py` |
+| Deploy / deps | `backend/Dockerfile`, `docker-compose.yml`, `backend/requirements.txt`, `backend/requirements-dev.txt`, `backend/.env.example`, `.env.example`, `.gitignore`, `.dockerignore`, `backend/alembic/env.py` |
+
+**Opened in part only:**
+- `backend/services/sv2tts/synthesizer/models/tacotron.py`: `generate()` (lines 502–572) plus a grep for loops, `print` and `stop`.
+- `backend/services/sv2tts/vocoder/models/fatchord_version.py`: `generate()` (lines 176–276) plus the same grep.
+- `backend/services/sv2tts/synthesizer/hparams.py`, `backend/services/sv2tts/vocoder/hparams.py`: grep for sample-rate, hop, stop-threshold, `max_mel_frames`, mode and overlap keys only.
+- `README.md`: grep for `alembic|migrat` only (one hit, line 28).
+- `backend/tests/test_deployment.py`: lines 9–13 plus a grep for `docker build|subprocess|def test`.
+- `backend/.venv/.../fastapi/routing.py`: grep only, to confirm whether form parsing happens before dependency resolution (lines 225 and 269).
+- `HARDENING_PLAN.md` Pass 1 §1 and §4, used only to avoid re-reporting fixed items.
+
+**Runtime checks executed (read-only):**
+- `pip-audit -r backend/requirements.txt` (in `backend/.venv`, Python 3.11.15): advisories for python-multipart 0.0.9 (7), starlette 0.37.2 (7), authlib 1.3.1 (10), torch 2.3.0 (20) and python-dotenv 1.0.1 (1). Descriptions were read only for the torch, python-multipart and starlette entries.
+- `importlib.metadata.requires('resemblyzer')` → `['librosa >=0.9.1', 'numpy >=1.20.0', 'webrtcvad >=2.0.10', 'torch >=1.0.1', 'scipy >=1.2.1', 'typing']`.
+- `pip download --only-binary=:all: --python-version 3.11 --platform manylinux2014_x86_64 webrtcvad==2.0.10` → `No matching distribution found` (no binary wheel exists).
+- `docker run python:3.11-slim …` → `permission denied` on the Docker socket. The image could not be built or inspected.
+- `grep "print("` over `backend/{api,core,services/*.py,models,schemas,main.py,download_weights.py}` → no matches. `grep set_num_threads|create_all|alembic` over app code, `Dockerfile` and compose → no matches.
+
+**NOT reviewed:**
+- `backend/tests/**`, apart from the `test_deployment.py` excerpt above.
+- `backend/alembic/versions/*.py`, `backend/alembic.ini`.
+- `backend/services/sv2tts/synthesizer/utils/*` (`text.py`, `cleaners.py`, `numbers.py`, `symbols.py`), `vocoder/audio.py`, `vocoder/display.py`, `vocoder/distribution.py`, and the parts of `tacotron.py` and `fatchord_version.py` outside the ranges above.
+- The advisory descriptions for authlib and python-dotenv.
+- `frontend/`, `DATABASE_DESIGN.md`, `PHASE_*_PLAN.md`, `project_description.md`, and `README.md` beyond the grep.
+- `backend/.env`, deliberately not opened because it holds secrets.
+
+---
+
+## 2. Findings Table (Pass 2)
+
+| ID | Area | Issue | Evidence (file:line) | Severity + justification | Observed / Inferred |
+|----|------|-------|----------------------|--------------------------|---------------------|
+| P2-H1 | Auth | Local signup never verifies that the email is owned. When a Google sign-in matches an existing local account, it only flips `provider` to `"google"` and keeps `hashed_password`. Password login accepts any row with a `hashed_password`, whatever its provider. | `backend/api/auth.py:52-57` (signup, no verification), `backend/api/auth.py:186-192` (link keeps password), `backend/api/auth.py:76-80` (login checks password only) | **High.** All three steps of the chain are in the code: an attacker signs up with a victim's address, the victim later signs in with Google, and the attacker's password still opens the same account. That account holds the victim's voice samples and embeddings. | Code path: Observed. Takeover consequence: Inferred. |
+| P2-H2 | Deps | Pinned versions have published advisories with fixes available. Among them: python-multipart 0.0.9 DoS in multipart preamble/epilogue and part-header parsing (CVE-2026-40347, CVE-2026-42561); starlette 0.37.2 (pulled in by fastapi 0.111.0) unbounded buffering of non-file form fields (CVE-2024-47874); torch 2.3.0 `torch.load(weights_only=True)` RCE (CVE-2025-32434). FastAPI parses the form body **before** resolving the auth dependency, so the multipart parser on `/voice/upload` is reachable without a token. | `backend/requirements.txt:1,3,12,14,24`; `.venv/.../fastapi/routing.py:225` (form parsed) vs `:269` (dependencies solved); `backend/api/voice.py:84-89`; torch load at `backend/services/tts_pipeline.py:419,458` | **High.** pip-audit reports 45 advisories across 5 packages that are imported or used at runtime, and the multipart DoS advisories apply to a parser any unauthenticated request can reach. The torch RCE is mitigated because the SHA256 is verified before `torch.load` (`tts_pipeline.py:402,443`). It stays exploitable only if the manifest or weights volume is tampered with. (Pass 1 §4 item 7 flagged this but gave it no milestone.) | Advisories: Observed (pip-audit output). Unauthenticated reach: Observed (routing.py order). Whether the 25 MB body cap (`main.py:166-170`) blunts each DoS: Inferred / unverified. |
+| P2-H3 | Deploy | resemblyzer requires `webrtcvad>=2.0.10`, which has no py3.11 manylinux wheel, so pip has to compile it from source. The Dockerfile installs only `libsndfile1 ffmpeg curl`, with no compiler. The repo's own tests note that a real `docker build` was never run. | `backend/Dockerfile:24-29`, `backend/Dockerfile:44`; `backend/requirements.txt:20`; `backend/tests/test_deployment.py:9-13` | **High, if confirmed.** A failed `pip install` means the image cannot be built, and compose is the only documented start path. | Dependency and wheel facts: Observed. "python:3.11-slim has no gcc", and therefore a build failure: **Inferred.** The build could not be run here. |
+| P2-M1 | Concurrency / DB | `get_current_user` and the profile lookup run queries on the request's session. That opens a transaction and checks out a pooled connection. Nothing commits or closes the session until after inference. Upload behaves the same way. With a pool of 5+10, up to 10 waiters plus 1 running request can hold connections just by sitting in the inference queue. | `backend/core/security.py:127`; `backend/api/synthesize.py:67-71` → `:104-106` (inference) → `:176` (first commit); `backend/api/voice.py:108` → `:161`; `backend/core/config.py:70,103-104`; `backend/core/database.py:41-46` | **Medium.** Each synthesis request holds a Postgres connection "idle in transaction" for up to 10 s of queueing plus 2×30 s of compute (config.py:73,77). That uses most of the 15-connection pool for requests that aren't touching the DB. | Connection held: Observed (no commit/close between the cited lines). Pool exhaustion stalling other routes and `/health/ready` (2 s DB timeout vs 30 s pool wait): Inferred. |
+| P2-M2 | Deploy / health | Nothing in the deploy path runs `alembic upgrade`. The container CMD starts only uvicorn, compose has no migration service, the lifespan never creates tables, and the README mentions Alembic only in the stack list. Readiness checks the DB with `SELECT 1`, which passes on an empty schema. | `backend/Dockerfile:77`; `docker-compose.yml:37-73`; `backend/main.py:84-117`, `backend/main.py:197`; `README.md:28` | **Medium.** A fresh `docker compose up` reports ready (200) even though every DB-backed route fails. The probe designed to catch this can't. | Missing step: Observed. "Relation does not exist" 500s on a fresh DB: Inferred. |
+| P2-M3 | Inference quality | The whole request text (≤500 characters, before digit expansion) goes through a single `Tacotron.generate()` call with the default `steps=2000`. The checkpoint's training clip cap is `max_mel_frames=900`. There is no sentence chunking. | `backend/schemas/synthesize.py:50`; `backend/services/tts_pipeline.py:527`; `backend/services/sv2tts/synthesizer/models/tacotron.py:502,536,554-555`; `backend/services/sv2tts/synthesizer/hparams.py:32,35,72` | **Medium.** 2000 frames × 200 hop ÷ 16 kHz = 25 s is a hard ceiling. Longer text is cut off at the step cap with no error. Anything past about 11 s of speech (900 frames) is outside the training length. | Single decode and step cap: Observed. Audio truncation and attention degradation on long text: **Inferred.** Not measured with real weights. |
+| P2-M4 | Auth | Refresh tokens get a `jti` that is never stored or checked. `/refresh` issues a new pair but leaves the old token valid, and there is no logout or revocation. The cookie `max_age` is hardcoded to 7 days instead of using `REFRESH_TOKEN_EXPIRE_DAYS`. | `backend/core/security.py:84`, `backend/core/security.py:91-109`; `backend/api/auth.py:115-131`; `backend/api/auth.py:102,139,215` vs `backend/core/config.py:24` | **Medium.** A leaked refresh cookie gives up to 7 days of access-token minting, and nothing short of rotating `JWT_SECRET_KEY` (which logs out every user) can stop it. | Observed. |
+| P2-M5 | Storage | Cleanup protects every `Generation.output_audio_path` unconditionally, and no route deletes or soft-deletes generations. So nothing in `outputs/` is ever reclaimed, although the module says its purpose is preventing disk exhaustion. | `backend/services/storage_cleanup.py:3-5`, `backend/services/storage_cleanup.py:75-78`; `docker-compose.yml:64` | **Medium.** The only reclamation mechanism excludes the whole contents of one of its two target directories, and that directory grows by one WAV per successful synthesis. | Observed. Eventual disk exhaustion: Inferred. |
+| P2-M6 | Concurrency | On the default CPU device, WaveRNN's `generate()` runs a Python-level loop over every output sample step. It runs through `asyncio.to_thread` in the single uvicorn process. | `backend/services/sv2tts/vocoder/models/fatchord_version.py:209-252`; `backend/services/tts_pipeline.py:122`; `backend/core/config.py:29`; `backend/Dockerfile:77` | **Medium.** There's one worker process and no second process to absorb load. While vocoding runs, its thread competes with the event loop for the GIL, which slows every endpoint, including `/health/live`. | Loop and in-process thread: Observed. GIL contention and added latency: **Inferred.** Not measured. |
+| P2-L1 | Validation | Upload `name` is `Form(...)` with no length limit, and `SignupRequest.name` has no `max_length`. Both columns are `String(255)`. On upload, the insert happens only after the full decode and embedding pass. | `backend/api/voice.py:86`, `backend/api/voice.py:161`; `backend/models/voice_profile.py:20`; `backend/schemas/auth.py:11`; `backend/models/user.py:18` | **Low.** It's a 500 plus wasted inference, not data loss. Files orphaned by the failed insert are pruned after 24 h, because they're unprotected when no row exists. | Missing bounds: Observed. Postgres raising on over-length values (SQLite, used in tests, doesn't): Inferred. |
+| P2-L2 | Failure modes | The success-path persists (`_persist_generation`, `_persist_profile`) are outside any `try`. The error-path `_record_failed_generation` calls run inside `except` blocks, so a DB error there replaces the intended 429/503 with an unhandled 500. | `backend/api/synthesize.py:176`; `backend/api/synthesize.py:124-126,138-140,152-154`; `backend/api/voice.py:161` | **Low.** Needs the DB to fail mid-request. When it does, the synthesized WAV has already been written and is orphaned, and the client gets a 500 for audio that was produced. | Observed. |
+| P2-L3 | Timeouts | Config and the pipeline docstring say `INFERENCE_CALL_TIMEOUT_SECONDS` bounds "the synthesizer+vocoder forward passes together". The code applies it separately to each stage. | `backend/core/config.py:74-77`; `backend/services/tts_pipeline.py:620-623` vs `backend/services/tts_pipeline.py:643-655` | **Low.** Real worst case is 60 s, not 30 s, so capacity planning based on the documented bound is off by 2×. | Observed. |
+| P2-L4 | Shutdown | The in-flight drain waits up to 30 s. Uvicorn has no `--timeout-graceful-shutdown` and compose sets no `stop_grace_period`. | `backend/core/config.py:80`; `backend/main.py:116`; `backend/Dockerfile:77`; `docker-compose.yml:37-73` | **Low.** Under Docker's default 10 s stop grace (a Docker default, not in this repo), the process is SIGKILLed before the drain finishes, and in-flight synthesis is lost without a failed-generation row. | Missing config: Observed. The kill during drain: Inferred. |
+| P2-L5 | Event loop | `google_callback` is `async def` but calls `db.query`, `db.commit` and `db.refresh` directly. | `backend/api/auth.py:160-162`, `backend/api/auth.py:185-203` | **Low.** Each Google sign-in blocks the event loop for up to two DB round trips (including a 10 s connect timeout if the pool needs a new connection). It's a low-traffic path. | Observed. |
+| P2-L6 | Observability / exposure | `/metrics` is on by default with no token, and it only checks auth when a token is set. The backend port is published on every host interface. | `backend/core/config.py:92-93`; `backend/main.py:207-212`; `docker-compose.yml:54-55` | **Low.** Only operational data (queue depth, latencies, rejection counts) is exposed. No user data. | Observed. |
+| P2-L7 | Logging / config | `APP_ENV` defaults to `"development"`, which sets the root logger to DEBUG. Both `.env.example` and compose leave it that way. Sentry is also tagged with that environment. | `backend/core/config.py:28`; `backend/main.py:35`; `backend/.env.example:32`; `docker-compose.yml:46-53`; `backend/core/sentry.py:42` | **Low.** A deployment copied from the example runs DEBUG logs, which include per-request user ids and file paths (e.g. `backend/api/synthesize.py:204-206`, `backend/api/voice.py:107`). | Observed. |
+| P2-L8 | Health | When the readiness `SELECT 1` hits `wait_for`'s timeout, the request returns while the worker thread may still be inside `db.execute`. `get_db` then calls `db.close()` from another thread. | `backend/main.py:238-241`; `backend/core/database.py:41-46` | **Low.** It only happens when the DB is already slow. SQLAlchemy sessions aren't thread-safe. | Code path: Observed. Resulting session/connection state errors: Inferred. |
+| P2-L9 | Deps | Only direct dependencies are pinned. Starlette, and resemblyzer's `webrtcvad>=2.0.10` and `typing`, resolve from open ranges at every build. There is no lock file or hash pinning. | `backend/requirements.txt:1-36`; resemblyzer metadata (runtime check in §1) | **Low.** Builds aren't reproducible, and the starlette resolution is what P2-H2 depends on. | Observed. |
+| P2-L10 | Concurrency | `preprocess_audio` (`librosa.get_duration`, `load` with resampling to 16 kHz, `trim`) runs on the default thread pool, outside `_inference_semaphore`. Inputs can be up to 300 s or 25 MB. | `backend/api/voice.py:97`; `backend/services/audio_processing.py:84-95`; `backend/core/config.py:30,40`; rate limit `backend/api/voice.py:83` (10/min per client IP) | **Low.** Concurrent uploads from different IPs each run a full decode and resample in parallel with the forward pass the semaphore is meant to protect. The only bound is the per-IP rate limit. | Code path: Observed. CPU contention with inference: Inferred. |
+
+---
+
+## 3. Fix Plan (Pass 2, by severity)
+
+### High
+- **P2-H1:** When linking Google to an existing local account, either require a password re-auth first or null `hashed_password`. Longer term, add email verification to local signup before the account can hold voice data.
+- **P2-H2:** Bump python-multipart (≥0.0.31), fastapi to a release that pulls starlette ≥1.3.1, authlib (≥1.6.12), torch (≥2.6.0, and check the checkpoints still load and `--verify-inference` passes) and python-dotenv (≥1.2.2). Re-run `pip-audit` as a CI gate.
+- **P2-H3:** Build the image once to confirm. If it fails, add `build-essential` in a builder stage (multi-stage, so no compiler ships in the image) or switch to a prebuilt wheel package such as `webrtcvad-wheels`.
+
+### Medium
+- **P2-M1:** End the read transaction (`db.commit()`/`db.close()`, or use a short-lived session) before `run_inference_pipeline` / `embed_speaker_async`, then open a fresh session for the persist.
+- **P2-M2:** Add an `alembic upgrade head` step: a one-shot compose `migrate` service that `backend` depends on, or an entrypoint script. Make readiness check `alembic_version` against the head revision.
+- **P2-M3:** Split text into sentences, as the reference SV2TTS demo does, and synthesize per chunk, then concatenate. Consider lowering `max_length` or checking the frame count against the step cap.
+- **P2-M4:** Store refresh `jti`s (DB or Redis) and revoke the old one on rotation. Add `/logout`. Derive the cookie `max_age` from `REFRESH_TOKEN_EXPIRE_DAYS`.
+- **P2-M5:** Define a retention policy for generation outputs, e.g. a `deleted_at`/age rule on `generations`, or dropping protection for outputs past N days. Let cleanup honour it.
+- **P2-M6:** Measure event-loop lag during vocoding first. If it's significant, move inference to a separate process (a process pool or a worker queue such as ARQ/Celery, which the code comment at `tts_pipeline.py:49` already anticipates).
+
+### Low
+- **P2-L1:** Add `max_length=255` (and `min_length=1`) to the upload `name` and `SignupRequest.name`, and validate before `save_upload`.
+- **P2-L2:** Wrap the persists in `try/except SQLAlchemyError`: delete the orphaned output on failure, and never let `_record_failed_generation` mask the original status code.
+- **P2-L3:** Either enforce one deadline across both stages or correct the config comment and docstring to say "per stage".
+- **P2-L4:** Set `stop_grace_period` (≥ drain + margin) in compose and `--timeout-graceful-shutdown` on uvicorn.
+- **P2-L5:** Make `google_callback` offload its DB block to `asyncio.to_thread`, as the other async routes do.
+- **P2-L6:** Default `METRICS_AUTH_TOKEN` to required outside development, or bind `8000` to `127.0.0.1` behind the proxy.
+- **P2-L7:** Default `APP_ENV` to `production` (and set it explicitly in compose), so DEBUG is opt-in.
+- **P2-L8:** Run the readiness check on its own short-lived session created and closed inside the thread, not on the request-scoped `get_db` session.
+- **P2-L9:** Generate a lock file with hashes (`pip-compile --generate-hashes`) and install from it in the Dockerfile.
+- **P2-L10:** Bound preprocessing concurrency with its own small semaphore, or run it under the inference permit.
+
+---
+
+## 4. Unverified / Needs Human Input (Pass 2)
+
+1. **P2-H3, container build:** couldn't be run here (no Docker socket permission). One command confirms or clears it: `docker build -f backend/Dockerfile .` from the repo root. If it succeeds, downgrade or close P2-H3.
+2. **P2-H1, product decision:** should an existing local account be linked to Google automatically at all? Should local signup require email verification? The fix direction depends on that answer.
+3. **P2-H2, advisory applicability:** only the torch, python-multipart and starlette advisory texts were read. The 10 authlib advisories and the python-dotenv one were not, so whether they touch the OAuth flow in `api/auth.py:26-33,151-217` is unverified. Whether the 25 MB body cap fully neutralises each multipart DoS was also not tested.
+4. **P2-M3, long-text behaviour:** needs a measurement with the real checkpoints. Synthesize a 500-character (and digit-heavy) text and check the output duration against the expected speech length and the 25 s cap.
+5. **P2-M6 / P2-L3, CPU latency:** measure CPU vocoder wall time for maximum-length text against the 30 s per-stage timeout, and `/health/live` latency while vocoding. Neither was run.
+6. **P2-M1:** confirm under load with `pg_stat_activity` (`state = 'idle in transaction'`) during a queued synthesis burst.
+7. **P2-L1:** Postgres raising on over-length `VARCHAR(255)` is standard behaviour, but the test suite runs on SQLite, which doesn't enforce the length, so no test covers it.
+8. **Not reached in this pass:** `backend/tests/**`, the Alembic revision files, and the SV2TTS text-processing utilities (`synthesizer/utils/*`). Nothing is claimed about them. The Pass-1 open item on responsible-use safeguards (Pass 1 §4 item 4) is still open and was not re-assessed.
+
+---
+---
+
+> **Archived below: Pass 1 (2026-09-15, audited commit `367d671`).** All 32 Pass-1 findings are fixed. The section is kept unchanged for its Task Status Log and commit tracker. Its line citations refer to the code as it stood at that commit.
+
 # CloneVoice Backend — Production-Hardening Audit
 
 **Audit date:** 2026-09-15 · **Audited commit:** `367d671` (main) · **Status:** COMPLETE for backend application code; tests and Alembic migrations NOT reviewed (see §1)
