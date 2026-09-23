@@ -11,6 +11,26 @@
 #   - CPU-only (DEVICE=cpu): 2+ cores, 4 GB RAM minimum.
 #   - GPU (DEVICE=cuda): NVIDIA GPU with 4 GB+ VRAM, nvidia-container-toolkit
 #     on the host, requires the CUDA build of torch (not swapped in here).
+# Builder stage (HARDENING_PLAN.md finding P2-H3): resemblyzer depends on
+# `webrtcvad`, which publishes no py3.11 binary wheel, so pip compiles it from
+# source and needs a C compiler. The compiler lives only in this stage; the
+# runtime stage below copies the finished virtualenv and ships no toolchain.
+FROM python:3.11-slim AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copied on its own so this (multi-hundred-MB, torch-heavy) layer is cached
+# across ordinary code changes. Only requirements.txt (runtime deps) is
+# installed — dev/test tooling lives in requirements-dev.txt and never ships
+# into this image (HARDENING_PLAN.md finding L7).
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
 FROM python:3.11-slim
 
 # System dependencies:
@@ -35,13 +55,9 @@ RUN useradd --create-home --uid 1000 appuser
 
 WORKDIR /app
 
-# Install Python dependencies before copying the rest of the source so this
-# (multi-hundred-MB, torch-heavy) layer is cached across ordinary code
-# changes. Only requirements.txt (runtime deps) is installed here — dev/test
-# tooling (pytest, black, isort) lives in requirements-dev.txt and never
-# ships into this image (HARDENING_PLAN.md finding L7).
-COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# Dependencies come pre-built from the builder stage (no compiler here).
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Application code. Model checkpoints (backend/weights/), uploads/, and
 # outputs/ are deliberately NOT baked into the image — see .dockerignore and
