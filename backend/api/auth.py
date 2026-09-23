@@ -186,6 +186,10 @@ async def google_callback(
     if user:
         if user.provider == "local":
             user.provider = "google"
+            # HARDENING_PLAN.md finding P2-H1: local signup never verified
+            # email ownership, while Google just did. Drop the password so
+            # whoever registered the address first can't keep signing in.
+            user.hashed_password = None
             if not user.avatar_url:
                 user.avatar_url = user_info.get("picture")
             db.commit()
