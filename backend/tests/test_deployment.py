@@ -91,6 +91,46 @@ def test_dockerfile_installs_audio_system_dependencies():
     assert "ffmpeg" in dockerfile
 
 
+def _dockerfile_stages() -> list:
+    """Split the Dockerfile into its build stages, one string per FROM."""
+    return re.split(r"^(?=FROM )", _read("backend/Dockerfile"), flags=re.MULTILINE)[1:]
+
+
+def test_dockerfile_is_multi_stage_with_builder_and_runtime():
+    """HARDENING_PLAN.md P2-H3: webrtcvad (via resemblyzer) has no py3.11
+    wheel and must be compiled, so a builder stage has to exist."""
+    stages = _dockerfile_stages()
+    assert len(stages) == 2
+    assert re.match(r"FROM python:3\.11-slim AS builder", stages[0])
+    assert re.match(r"FROM python:3\.11-slim\s*$", stages[1].splitlines()[0])
+
+
+def test_compiler_is_only_in_builder_stage():
+    """The C toolchain must build the wheels but never ship in the image."""
+    builder, runtime = _dockerfile_stages()
+    assert "build-essential" in builder
+    assert "build-essential" not in runtime
+    assert "gcc" not in runtime
+
+
+def test_requirements_are_installed_in_builder_and_venv_copied_to_runtime():
+    """pip runs where the compiler is; the runtime stage only copies the
+    finished virtualenv and puts it on PATH."""
+    builder, runtime = _dockerfile_stages()
+    assert "pip install --no-cache-dir -r /tmp/requirements.txt" in builder
+    assert "pip install" not in runtime
+    assert "COPY --from=builder /opt/venv /opt/venv" in runtime
+    assert 'ENV PATH="/opt/venv/bin:$PATH"' in runtime
+
+
+def test_runtime_stage_keeps_user_and_cmd():
+    """The runtime stage, not the builder, owns USER, HEALTHCHECK and CMD."""
+    builder, runtime = _dockerfile_stages()
+    for instruction in ("USER appuser", "HEALTHCHECK", 'CMD ["uvicorn"'):
+        assert instruction in runtime
+        assert instruction not in builder
+
+
 # ---------------------------------------------------------------------------
 # .dockerignore
 # ---------------------------------------------------------------------------
