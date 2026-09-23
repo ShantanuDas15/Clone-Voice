@@ -1,0 +1,24 @@
+name: backend-dependency-audit
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/requirements*.txt"]
+  pull_request:
+    paths: ["backend/requirements*.txt"]
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit==2.10.1
+      # Fails the job on any known advisory in a pinned runtime dependency
+      # (HARDENING_PLAN.md finding P2-H2). Exact pins only: transitive deps are
+      # not resolved until a lock file exists (P2-L9).
+      - run: pip-audit -r backend/requirements.txt --no-deps --disable-pip
