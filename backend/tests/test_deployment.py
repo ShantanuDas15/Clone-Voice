@@ -329,3 +329,41 @@ def test_compose_config_is_valid():
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
+# HARDENING_PLAN.md finding P2-M2: migration step in the deploy path
+# ---------------------------------------------------------------------------
+
+
+def _migrate_service_block() -> str:
+    """Return the `migrate:` service block (text-sliced, see above)."""
+    compose = _read("docker-compose.yml")
+    match = re.search(r"\n  migrate:\n(.*?)\n  backend:\n", compose, re.DOTALL)
+    assert match, "Could not locate a `migrate:` service block in docker-compose.yml"
+    return match.group(1)
+
+
+def test_compose_migrate_service_runs_alembic_upgrade_head():
+    migrate = _migrate_service_block()
+    assert "upgrade" in migrate and "head" in migrate
+    assert '"alembic"' in migrate
+    assert re.search(r'restart:\s*"no"', migrate)
+
+
+def test_compose_migrate_waits_for_healthy_db_and_shares_database_url():
+    migrate = _migrate_service_block()
+    assert re.search(r"condition:\s*service_healthy", migrate)
+    line = next(ln for ln in migrate.splitlines() if "DATABASE_URL:" in ln)
+    assert "@db:5432" in line and "${POSTGRES_PASSWORD" in line
+
+
+def test_compose_backend_waits_for_migrate_to_complete():
+    backend = _backend_service_block()
+    assert re.search(
+        r"migrate:\s*\n\s*condition:\s*service_completed_successfully", backend
+    )
+
+
+def test_alembic_ini_script_location_is_cwd_independent():
+    assert "%(here)s" in _read("backend/alembic.ini")

@@ -22,6 +22,7 @@ from backend.core import metrics
 from backend.core.body_limit import BodySizeLimitMiddleware
 from backend.core.config import settings
 from backend.core.database import SessionLocal, get_db
+from backend.core.migrations import check_schema_current
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
@@ -193,8 +194,9 @@ app.include_router(
 
 
 def _check_database(db: Session) -> None:
-    """Run ``SELECT 1`` to prove the DB connection is usable."""
+    """Prove the DB is usable (``SELECT 1``) and migrated to the Alembic head."""
     db.execute(text("SELECT 1"))
+    check_schema_current(db)
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -228,8 +230,9 @@ def liveness() -> dict:
 async def readiness(db: Session = Depends(get_db)) -> JSONResponse:
     """Readiness probe: 200 only when the app can actually serve requests.
 
-    Requires (1) a working DB connection (``SELECT 1``, bounded by
-    ``READINESS_DB_TIMEOUT_SECONDS``), (2) every SV2TTS model loaded on the
+    Requires (1) a working DB connection whose ``alembic_version`` is the
+    Alembic head revision (``SELECT 1`` plus that check, bounded by
+    ``READINESS_DB_TIMEOUT_SECONDS``; HARDENING_PLAN.md finding P2-M2), (2) every SV2TTS model loaded on the
     configured device, and (3) when ``READINESS_WARMUP_ENABLED`` is set, a
     successful startup warm-up forward pass. ``/health`` is kept as an alias
     for backward compatibility. Errors are logged, never returned.

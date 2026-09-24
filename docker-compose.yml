@@ -31,6 +31,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # HARDENING_PLAN.md finding P2-M2: one-shot schema migration. Runs
+  # `alembic upgrade head` against the same image and database as `backend`,
+  # then exits; `backend` waits for it to complete successfully, so a fresh
+  # `docker compose up` never serves requests against an empty schema.
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clonevoice}:${POSTGRES_PASSWORD:-clonevoice_dev}@db:5432/${POSTGRES_DB:-clonevoice}
+    command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+    # Overrides the image HEALTHCHECK, which probes the API port this
+    # one-shot process never opens.
+    healthcheck:
+      disable: true
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
   # HARDENING_PLAN.md finding H7: this service (plus backend/Dockerfile) was
   # previously missing entirely — `docker-compose up --build` (the README's
   # only documented start command) could bring up `db` but never the API.
@@ -65,6 +87,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     # Exactly one container, one uvicorn worker (set explicitly in
