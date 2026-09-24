@@ -158,7 +158,7 @@ def _fresh_session(with_version_table: bool, version: str | None = None):
 def test_head_revision_matches_latest_migration_file() -> None:
     from backend.core.migrations import get_head_revision
 
-    assert get_head_revision() == "1234567890ad"
+    assert get_head_revision() == "1234567890ae"
 
 
 def test_schema_check_passes_at_head() -> None:
