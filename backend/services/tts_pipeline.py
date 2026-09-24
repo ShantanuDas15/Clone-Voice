@@ -23,6 +23,7 @@ from backend.services.sv2tts.synthesizer.utils.symbols import \
 from backend.services.sv2tts.synthesizer.utils.text import text_to_sequence
 from backend.services.sv2tts.vocoder import hparams as vocoder_hparams
 from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
+from backend.services.text_chunking import split_into_chunks
 
 try:
     from resemblyzer import VoiceEncoder
@@ -499,7 +500,41 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
 
 
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
-    """Generate a mel spectrogram from text and a speaker embedding.
+    """Generate a mel spectrogram for text of any supported length.
+
+    The text is split into sentence-sized chunks (``TTS_CHUNK_MAX_CHARS``),
+    each decoded separately by ``_synthesize_chunk`` so no single Tacotron
+    decode exceeds the checkpoint's training length, then the mels are joined
+    with ``TTS_CHUNK_PAUSE_SECONDS`` of silence between chunks — the same idea
+    as the reference SV2TTS demo, which synthesizes per line and concatenates
+    (HARDENING_PLAN.md finding P2-M3).
+    """
+    chunks = split_into_chunks(text, settings.TTS_CHUNK_MAX_CHARS)
+    if not chunks:
+        chunks = [text]  # let the single-chunk path handle degenerate input
+    mels = [_synthesize_chunk(chunk, embedding) for chunk in chunks]
+    if len(mels) == 1:
+        return mels[0]
+
+    pause_frames = int(
+        settings.TTS_CHUNK_PAUSE_SECONDS
+        * synth_hparams.sample_rate
+        / synth_hparams.hop_size
+    )
+    # Floor of the symmetric mel range = digital silence for the vocoder.
+    pause = np.full(
+        (mels[0].shape[0], pause_frames), -synth_hparams.max_abs_value, np.float32
+    )
+    parts: list[np.ndarray] = []
+    for mel in mels:
+        if parts:
+            parts.append(pause)
+        parts.append(mel)
+    return np.concatenate(parts, axis=1)
+
+
+def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
+    """Generate a mel spectrogram from one chunk of text and a speaker embedding.
 
     Text is converted to model input IDs via the vendored SV2TTS symbol
     table and cleaner pipeline (`sv2tts.synthesizer.utils.text`), matching
@@ -524,8 +559,19 @@ def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
             0
         )
         emb_tensor = torch.from_numpy(embedding).float().to(device).unsqueeze(0)
-        _, mel_tensor, _ = _synthesizer.generate(text_tensor, emb_tensor)
+        _, mel_tensor, _ = _synthesizer.generate(
+            text_tensor, emb_tensor, steps=synth_hparams.max_mel_frames
+        )
         result = mel_tensor.squeeze(0).cpu().numpy().astype(np.float32)
+
+    # Reaching the step cap means the stop token never fired, so the decode
+    # was cut off mid-speech (HARDENING_PLAN.md finding P2-M3).
+    if result.shape[1] >= synth_hparams.max_mel_frames:
+        logger.warning(
+            "Synthesizer hit the %d-frame cap for a %d-char chunk; audio truncated.",
+            synth_hparams.max_mel_frames,
+            len(text),
+        )
 
     # Explicitly drop references to the GPU tensors before releasing cached
     # memory — Python's refcounting won't free them promptly otherwise since
@@ -717,9 +763,11 @@ class _MockSynthesizer(torch.nn.Module):
     needed.
     """
 
-    def generate(self, text_ids: torch.Tensor, speaker_emb: torch.Tensor):
-        """Return ``(None, mel, None)``, a deterministic zero mel spectrogram."""
-        T = text_ids.shape[1] * 5
+    def generate(
+        self, text_ids: torch.Tensor, speaker_emb: torch.Tensor, steps: int = 2000
+    ):
+        """Return ``(None, mel, None)``, a zero mel spectrogram capped at ``steps``."""
+        T = min(text_ids.shape[1] * 5, steps)
         return None, torch.zeros(1, 80, T), None
 
 
