@@ -1,0 +1,15 @@
+# Keep the map about our code, not dependencies, data or generated artifacts.
+backend/.venv/
+backend/weights/
+backend/uploads/
+backend/outputs/
+uploads/
+outputs/
+graphify-out/
+**/__pycache__/
+.pytest_cache/
+*.wav
+*.npy
+*.pt
+*.db
+backend-review.md

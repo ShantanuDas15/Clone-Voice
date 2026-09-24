@@ -27,3 +27,6 @@ clonevoice_test.db
 uploads/
 outputs/
 test_output.wav
+
+# Graphify knowledge graph (derived; rebuild with /graphify or the post-commit hook)
+graphify-out/
