@@ -75,13 +75,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     )
 
 
-def create_refresh_token(data: dict) -> str:
+def create_refresh_token(data: dict, jti: Optional[str] = None) -> str:
+    """Sign a refresh JWT; ``jti`` lets the caller register the id it embeds."""
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
     to_encode.update(
-        {"exp": expire, "jti": str(uuid.uuid4()), "type": REFRESH_TOKEN_TYPE}
+        {"exp": expire, "jti": jti or str(uuid.uuid4()), "type": REFRESH_TOKEN_TYPE}
     )
     return jwt.encode(
         to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM

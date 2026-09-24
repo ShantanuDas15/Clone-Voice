@@ -1,27 +1,53 @@
 """Authentication API routes and handlers."""
 
 import logging
-import uuid
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from fastapi import (APIRouter, Cookie, Depends, HTTPException, Request,
-                     Response, status)
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.rate_limit import limiter
-from backend.core.security import (REFRESH_TOKEN_TYPE, create_access_token,
-                                   create_refresh_token, decode_token,
-                                   get_current_user, hash_email_for_logging,
-                                   hash_password, verify_password)
+from backend.core.security import (
+    REFRESH_TOKEN_TYPE,
+    create_access_token,
+    decode_token,
+    get_current_user,
+    hash_email_for_logging,
+    hash_password,
+    verify_password,
+)
 from backend.models.user import User
-from backend.schemas.auth import (LoginRequest, SignupRequest, TokenResponse,
-                                  UpdateUserRequest, UserOut)
+from backend.schemas.auth import (
+    LoginRequest,
+    SignupRequest,
+    TokenResponse,
+    UpdateUserRequest,
+    UserOut,
+)
+from backend.services.refresh_tokens import (
+    consume_refresh_token,
+    issue_refresh_token,
+    parse_refresh_claims,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    """Attach the refresh cookie, aged to match the token's own lifetime."""
+    response.set_cookie(
+        key="refresh_token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+
 
 oauth = OAuth()
 oauth.register(
@@ -91,16 +117,9 @@ def login(
 
     logger.info("User logged in: user_id=%s", user.id)
     access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    refresh_token = issue_refresh_token(db, user.id)
 
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60,
-    )
+    _set_refresh_cookie(response, refresh_token)
     return TokenResponse(access_token=access_token)
 
 
@@ -112,34 +131,43 @@ def refresh(
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
 
-    payload = decode_token(refresh_token, expected_type=REFRESH_TOKEN_TYPE)
-    user_id_str = payload.get("sub")
-    if not user_id_str:
+    # Signature/type problems raise 401 here; a token that verifies but has
+    # no usable jti/sub (e.g. issued before P2-M4) is rejected just below.
+    decode_token(refresh_token, expected_type=REFRESH_TOKEN_TYPE)
+    claims = parse_refresh_claims(refresh_token)
+    if claims is None:
         raise HTTPException(status_code=401, detail="Invalid token")
-
-    try:
-        user_id = uuid.UUID(user_id_str)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid token subject")
+    jti, user_id = claims
 
     user = db.query(User).filter(User.id == user_id, User.deleted_at == None).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
+    # HARDENING_PLAN.md finding P2-M4: the presented token is single-use.
+    if not consume_refresh_token(db, jti, user_id):
+        raise HTTPException(status_code=401, detail="Refresh token revoked or expired")
+
     logger.debug("Refresh token rotated for user_id=%s", user_id)
     access_token = create_access_token(data={"sub": str(user.id)})
-    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    new_refresh_token = issue_refresh_token(db, user.id)
 
-    response.set_cookie(
-        key="refresh_token",
-        value=new_refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60,
-    )
+    _set_refresh_cookie(response, new_refresh_token)
 
     return TokenResponse(access_token=access_token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    response: Response, refresh_token: str = Cookie(None), db: Session = Depends(get_db)
+):
+    """Revoke the caller's refresh token and clear the cookie (idempotent)."""
+    claims = parse_refresh_claims(refresh_token) if refresh_token else None
+    if claims is not None:
+        jti, user_id = claims
+        consume_refresh_token(db, jti, user_id)
+    response.delete_cookie(
+        key="refresh_token", httponly=True, secure=True, samesite="lax"
+    )
 
 
 @router.get("/me", response_model=UserOut)
@@ -208,16 +236,9 @@ async def google_callback(
         logger.info("New user created via Google OAuth: user_id=%s", user.id)
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    refresh_token = issue_refresh_token(db, user.id)
 
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60,
-    )
+    _set_refresh_cookie(response, refresh_token)
     return TokenResponse(access_token=access_token)
 
 

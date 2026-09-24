@@ -107,9 +107,10 @@ def test_generation_deleted_at_can_be_set() -> None:
     assert generation.deleted_at is not None
 
 
-def test_alembic_migration_chain_has_a_single_head_at_the_new_revision() -> None:
+def test_alembic_migration_chain_has_a_single_head() -> None:
     script = _script_directory()
-    assert script.get_heads() == ["1234567890ad"]
+    assert len(script.get_heads()) == 1
+    assert script.get_revision("1234567890ad") is not None
 
 
 def test_alembic_migration_revision_chains_from_the_previous_head() -> None:
