@@ -190,3 +190,23 @@ backend/
 - **No Force Pushing**: Never run `git push -f` against `main`.
 - **Main Protection**: The `main` branch must always remain deployable. Code only enters `main` when tests pass 100%.
 - **No AI Attribution**: Never add Claude/AI co-author trailers, session links, or "Generated with" footers to commits or PRs (see Section 0).
+
+---
+
+## 11. Knowledge Graph (Graphify) — Planning & Impact Analysis
+
+- `graphify-out/` (gitignored, derived) holds a map of the code **and** these docs.
+  Read `graphify-out/GRAPH_REPORT.md` and run `graphify query "<question>"` /
+  `graphify path "A" "B"` / `graphify explain "X"` **before planning any feature**, to
+  list every module, test, doc and hardening finding the change touches.
+- The graph shows structure, not proof: it never replaces the test suite (§3.3), and
+  `HARDENING_PLAN.md` remains the source of truth for what is fixed vs. unverified.
+- Keep it fresh: the git post-commit hook re-extracts changed **code**. After changing
+  `*.md` docs (plans, this file), run `/graphify --update` to refresh the semantic part.
+- **Blind spots — open these directly, the graph does not parse their contents:**
+  `backend/Dockerfile`, `docker-compose.yml`, `.env.example`, `backend/.env.example`,
+  `backend/alembic.ini`, `backend/requirements*.txt`, `backend/weights_manifest.json`,
+  `.gitignore`/`.dockerignore`, and individual `Settings` attributes in `core/config.py`.
+  Any change touching config, deploy or dependencies must check these by hand.
+- `.graphifyignore` excludes `.venv/`, `weights/`, `uploads/`, `outputs/`. Never remove
+  those entries; they keep user audio and multi-GB dependencies out of the graph.
