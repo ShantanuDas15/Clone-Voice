@@ -77,15 +77,9 @@ def test_readiness_503_when_model_missing_but_db_ok(client: TestClient) -> None:
     assert body["models"]["synthesizer"]["loaded"] is False
 
 
-def test_database_check_runs_real_select_1() -> None:
-    """The helper issues a real ``SELECT 1`` against a real (SQLite) session."""
-    from backend.tests.conftest import TestingSessionLocal
-
-    db = TestingSessionLocal()
-    try:
-        main_module._check_database(db)  # must not raise
-    finally:
-        db.close()
+def test_database_check_runs_real_select_1(db_session) -> None:
+    """The helper runs against a real (SQLite) session stamped at Alembic head."""
+    main_module._check_database(db_session)  # must not raise
 
 
 @pytest.mark.parametrize(
@@ -133,3 +127,68 @@ def test_lifespan_runs_warmup_only_when_enabled(monkeypatch) -> None:
             with TestClient(main_module.app):
                 pass
         assert warm.call_count == expected_calls
+
+
+# ---------------------------------------------------------------------------
+# HARDENING_PLAN.md finding P2-M2: readiness verifies the Alembic head
+# ---------------------------------------------------------------------------
+
+
+def _fresh_session(with_version_table: bool, version: str | None = None):
+    """Return an isolated in-memory SQLite session, optionally stamped."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    eng = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    if with_version_table:
+        with eng.begin() as conn:
+            conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
+            if version is not None:
+                conn.execute(
+                    text("INSERT INTO alembic_version VALUES (:v)"), {"v": version}
+                )
+    return sessionmaker(bind=eng)()
+
+
+def test_head_revision_matches_latest_migration_file() -> None:
+    from backend.core.migrations import get_head_revision
+
+    assert get_head_revision() == "1234567890ad"
+
+
+def test_schema_check_passes_at_head() -> None:
+    from backend.core.migrations import check_schema_current, get_head_revision
+
+    db = _fresh_session(True, get_head_revision())
+    try:
+        check_schema_current(db)  # must not raise
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize(
+    "with_table,version", [(False, None), (True, None), (True, "1234567890ab")]
+)
+def test_schema_check_fails_when_unmigrated_or_stale(with_table, version) -> None:
+    from backend.core.migrations import check_schema_current
+
+    db = _fresh_session(with_table, version)
+    try:
+        with pytest.raises(Exception):
+            check_schema_current(db)
+    finally:
+        db.close()
+
+
+def test_readiness_503_when_schema_not_at_head(client: TestClient) -> None:
+    with patch.object(
+        main_module, "check_schema_current", side_effect=RuntimeError("stale")
+    ):
+        resp = client.get("/health/ready")
+    assert resp.status_code == 503
+    assert resp.json()["database"] == {"ok": False}

@@ -2,12 +2,13 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.core.config import settings
 from backend.core.database import Base, get_db
+from backend.core.migrations import get_head_revision
 from backend.main import app
 from backend.services.tts_pipeline import load_mock_models
 
@@ -42,10 +43,26 @@ def setup_ml_models():
     load_mock_models("cpu")
 
 
+def _stamp_alembic_head() -> None:
+    """Mimic `alembic upgrade head` so the readiness schema check passes."""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"
+            )
+        )
+        conn.execute(text("DELETE FROM alembic_version"))
+        conn.execute(
+            text("INSERT INTO alembic_version (version_num) VALUES (:v)"),
+            {"v": get_head_revision()},
+        )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def create_tables():
     """Create all tables once at the start of the test session."""
     Base.metadata.create_all(bind=engine)
+    _stamp_alembic_head()
     yield
     Base.metadata.drop_all(bind=engine)
 
