@@ -20,26 +20,31 @@ import asyncio
 import logging
 import os
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
+from backend.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
-def get_protected_paths(db: Session) -> Set[str]:
+def get_protected_paths(
+    db: Session, output_retention_days: Optional[float] = None
+) -> Set[str]:
     """Return the absolute paths of every file still referenced by the database.
 
     A file is protected from age-based pruning when it is:
       - the audio sample or speaker embedding of a voice profile that has not
         been soft-deleted (``deleted_at IS NULL``), or
-      - the synthesized output of any generation. `Generation` has a
-        `deleted_at` column (HARDENING_PLAN.md finding L11), but no route
-        ever sets it — it's an append-only audit trail per CLAUDE.md §6
-        ("audit trails are never hard-deleted"), so unlike voice profiles,
-        every generation's output stays protected regardless of that column
-        until a future feature actually defines what soft-deleting one
-        means for pruning.
+      - the synthesized output of a generation that is still inside the
+        retention window: not soft-deleted (``deleted_at IS NULL``) and
+        younger than ``OUTPUT_RETENTION_DAYS`` (HARDENING_PLAN.md finding
+        P2-M5). Older outputs are unprotected and pruned by the ordinary
+        age rule. Only the *file* expires: the ``generations`` row stays as
+        the append-only audit trail (CLAUDE.md §6). ``OUTPUT_RETENTION_DAYS``
+        <= 0 disables expiry, so every output stays protected.
 
     A soft-deleted voice profile's files fall out of this set and become
     eligible for ordinary age-based pruning, which is the intended way to
@@ -47,6 +52,7 @@ def get_protected_paths(db: Session) -> Set[str]:
 
     Args:
         db: An open database session used for read-only queries.
+        output_retention_days: Override for ``settings.OUTPUT_RETENTION_DAYS``.
 
     Returns:
         A set of absolute filesystem paths. Blank paths (e.g. a `voice
@@ -72,7 +78,15 @@ def get_protected_paths(db: Session) -> Set[str]:
         if embedding_path:
             protected.add(os.path.abspath(embedding_path))
 
-    generation_outputs = db.query(Generation.output_audio_path).all()
+    if output_retention_days is None:
+        output_retention_days = settings.OUTPUT_RETENTION_DAYS
+    outputs_query = db.query(Generation.output_audio_path)
+    if output_retention_days > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=output_retention_days)
+        outputs_query = outputs_query.filter(
+            Generation.deleted_at.is_(None), Generation.created_at >= cutoff
+        )
+    generation_outputs = outputs_query.all()
     for (output_path,) in generation_outputs:
         if output_path:
             protected.add(os.path.abspath(output_path))
