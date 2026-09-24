@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     METRICS_AUTH_TOKEN: str = ""
     STORAGE_MAX_AGE_HOURS: float = 24
     STORAGE_CLEANUP_INTERVAL_SECONDS: float = 3600
+    # HARDENING_PLAN.md finding P2-M5: synthesized outputs are protected from
+    # pruning only for this many days after creation; after that the WAV is
+    # eligible for the normal age-based cleanup (the DB row is kept). 0 or
+    # negative keeps every output forever.
+    OUTPUT_RETENTION_DAYS: float = 30
     # HARDENING_PLAN.md finding L5: the engine previously had no
     # pool_pre_ping, pool sizing, or connect timeout, so a stale pooled
     # connection (e.g. after a DB restart or an idle-connection reap by the
