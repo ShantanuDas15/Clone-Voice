@@ -23,9 +23,11 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, List, Optional, Set
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
+from backend.services.refresh_tokens import prune_expired_refresh_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,13 @@ def _run_cleanup_pass(
         db = session_factory()
         try:
             protected_paths = get_protected_paths(db)
+            try:
+                pruned = prune_expired_refresh_tokens(db)
+                if pruned:
+                    logger.info("Pruned %d expired refresh token(s).", pruned)
+            except SQLAlchemyError:
+                db.rollback()
+                logger.exception("Refresh-token pruning failed; continuing cleanup.")
         finally:
             db.close()
     return cleanup_stale_files(

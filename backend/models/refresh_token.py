@@ -10,8 +10,9 @@ from backend.core.database import Base
 class RefreshToken(Base):
     """One issued refresh token; ``id`` is the JWT's ``jti`` claim.
 
-    Rows are never deleted: ``revoked_at`` marks a token as used (rotated) or
-    signed out (HARDENING_PLAN.md finding P2-M4).
+    ``revoked_at`` marks a token as used (rotated) or signed out; rows are
+    only deleted by the cleanup pass, once long expired (HARDENING_PLAN.md
+    finding P2-M4).
     """
 
     __tablename__ = "refresh_tokens"
