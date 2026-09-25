@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     SESSION_SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # HARDENING_PLAN.md finding P2-M4: a token replayed this many seconds after
+    # it was rotated is refused but does not revoke the user's other sessions,
+    # so two tabs refreshing at once don't sign the user out. 0 = always revoke.
+    REFRESH_REUSE_GRACE_SECONDS: int = 10
+    # Expired refresh-token rows are deleted after this many days (the JWT's
+    # own exp already rejects them; the row is dead weight). <= 0 keeps them.
+    REFRESH_TOKEN_PRUNE_AFTER_DAYS: int = 1
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""

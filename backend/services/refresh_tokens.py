@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 def _now() -> datetime:
     """Return the current UTC time."""
     return datetime.now(timezone.utc)
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Treat a naive timestamp (SQLite) as UTC so it compares with aware ones."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def issue_refresh_token(db: Session, user_id: uuid.UUID) -> str:
@@ -53,7 +58,10 @@ def consume_refresh_token(db: Session, jti: uuid.UUID, user_id: uuid.UUID) -> bo
     The single conditional UPDATE means two concurrent refreshes with the
     same token can't both succeed. If the token exists but was already
     revoked, it is being replayed (stolen or reused after rotation), so the
-    user's whole token set is revoked.
+    user's whole token set is revoked, unless it was revoked within
+    ``REFRESH_REUSE_GRACE_SECONDS``: then it is just refused, since the loser
+    of a same-cookie race (two tabs) would otherwise revoke the winner's
+    fresh token and sign the user out everywhere.
     """
     now = _now()
     result = db.execute(
@@ -72,12 +80,40 @@ def consume_refresh_token(db: Session, jti: uuid.UUID, user_id: uuid.UUID) -> bo
 
     row = db.get(RefreshToken, jti)
     if row is not None and row.user_id == user_id and row.revoked_at is not None:
+        grace = timedelta(seconds=settings.REFRESH_REUSE_GRACE_SECONDS)
+        if now - _as_utc(row.revoked_at) <= grace:
+            logger.info("Refresh token reused within grace window: user_id=%s", user_id)
+            return False
         logger.warning(
             "Revoked refresh token replayed; revoking all sessions: user_id=%s",
             user_id,
         )
         revoke_all_for_user(db, user_id)
     return False
+
+
+def prune_expired_refresh_tokens(
+    db: Session, older_than_days: Optional[int] = None
+) -> int:
+    """Delete refresh-token rows that expired more than N days ago; return count.
+
+    Expired tokens are already rejected by the JWT ``exp`` claim, so their rows
+    only accumulate. Non-positive ``older_than_days`` disables pruning.
+    """
+    days = (
+        settings.REFRESH_TOKEN_PRUNE_AFTER_DAYS
+        if older_than_days is None
+        else older_than_days
+    )
+    if days <= 0:
+        return 0
+    result = db.execute(
+        delete(RefreshToken).where(
+            RefreshToken.expires_at < _now() - timedelta(days=days)
+        )
+    )
+    db.commit()
+    return result.rowcount
 
 
 def parse_refresh_claims(token: str) -> Optional[tuple[uuid.UUID, uuid.UUID]]:
