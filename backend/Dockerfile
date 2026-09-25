@@ -10,7 +10,9 @@
 # writeup and how these numbers were derived:
 #   - CPU-only (DEVICE=cpu): 2+ cores, 4 GB RAM minimum.
 #   - GPU (DEVICE=cuda): NVIDIA GPU with 4 GB+ VRAM, nvidia-container-toolkit
-#     on the host, requires the CUDA build of torch (not swapped in here).
+#     on the host, requires the CUDA build of torch. The image ships the CPU
+#     build by default; build a GPU image with
+#     `--build-arg TORCH_INDEX_URL=https://pypi.org/simple`.
 # Builder stage (HARDENING_PLAN.md finding P2-H3): resemblyzer depends on
 # `webrtcvad`, which publishes no py3.11 binary wheel, so pip compiles it from
 # source and needs a C compiler. The compiler lives only in this stage; the
@@ -29,6 +31,17 @@ ENV PATH="/opt/venv/bin:$PATH"
 # installed — dev/test tooling lives in requirements-dev.txt and never ships
 # into this image (HARDENING_PLAN.md finding L7).
 COPY backend/requirements.txt /tmp/requirements.txt
+
+# torch is installed first, from its own index (HARDENING_PLAN.md finding
+# P2-H3). The default PyPI wheel is the CUDA build and pulls ~6 GB of nvidia-*
+# libraries this CPU-default image never loads (7.9 GB vs 1.5 GB measured).
+# The version is read from requirements.txt so the pin lives in one place, and
+# the next step finds it already satisfied (`torch==X` also matches `X+cpu`)
+# without mixing package indexes.
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+RUN grep -E '^torch==' /tmp/requirements.txt > /tmp/torch-requirement.txt \
+    && pip install --no-cache-dir --index-url "${TORCH_INDEX_URL}" \
+        -r /tmp/torch-requirement.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 FROM python:3.11-slim
@@ -58,6 +71,11 @@ WORKDIR /app
 # Dependencies come pre-built from the builder stage (no compiler here).
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Fail the build, not the first request, if the copied virtualenv is unusable
+# (HARDENING_PLAN.md finding P2-H3): imports the compiled webrtcvad, torch and
+# the audio stack against this stage's system libraries.
+RUN python -c "import torch, webrtcvad, resemblyzer, librosa, soundfile"
 
 # Application code. Model checkpoints (backend/weights/), uploads/, and
 # outputs/ are deliberately NOT baked into the image — see .dockerignore and

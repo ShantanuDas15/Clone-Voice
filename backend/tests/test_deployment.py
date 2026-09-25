@@ -123,6 +123,43 @@ def test_requirements_are_installed_in_builder_and_venv_copied_to_runtime():
     assert 'ENV PATH="/opt/venv/bin:$PATH"' in runtime
 
 
+def test_torch_is_installed_cpu_only_before_requirements():
+    """P2-H3: PyPI's default torch wheel drags in ~6 GB of CUDA libraries, so
+    torch goes in first from an overridable CPU index, before requirements."""
+    builder, _ = _dockerfile_stages()
+    assert "ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu" in builder
+    torch_step = builder.index('--index-url "${TORCH_INDEX_URL}"')
+    requirements_step = builder.index(
+        "pip install --no-cache-dir -r /tmp/requirements.txt"
+    )
+    assert torch_step < requirements_step
+
+
+def test_torch_version_is_read_from_requirements_not_duplicated():
+    """The pin stays in requirements.txt (the pip-audit gate reads it)."""
+    builder, _ = _dockerfile_stages()
+    assert "grep -E '^torch==' /tmp/requirements.txt" in builder
+    assert not re.search(r"torch==\d", builder.replace("'^torch=='", ""))
+    assert re.search(r"^torch==\d", _read("backend/requirements.txt"), re.MULTILINE)
+
+
+def test_runtime_stage_smoke_tests_the_copied_venv():
+    """A bad venv copy must fail `docker build`, after the copy and as root."""
+    _, runtime = _dockerfile_stages()
+    smoke = 'RUN python -c "import torch, webrtcvad, resemblyzer, librosa, soundfile"'
+    assert smoke in runtime
+    assert runtime.index("COPY --from=builder /opt/venv /opt/venv") < runtime.index(
+        smoke
+    )
+    assert runtime.index(smoke) < runtime.index("USER appuser")
+
+
+def test_readme_documents_the_gpu_build_override():
+    readme = _read("README.md")
+    assert "TORCH_INDEX_URL" in readme
+    assert "CPU-only" in readme
+
+
 def test_runtime_stage_keeps_user_and_cmd():
     """The runtime stage, not the builder, owns USER, HEALTHCHECK and CMD."""
     builder, runtime = _dockerfile_stages()
