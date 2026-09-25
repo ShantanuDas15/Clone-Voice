@@ -404,3 +404,53 @@ def test_compose_backend_waits_for_migrate_to_complete():
 
 def test_alembic_ini_script_location_is_cwd_independent():
     assert "%(here)s" in _read("backend/alembic.ini")
+
+
+# ---------------------------------------------------------------------------
+# CI workflow (HARDENING_PLAN.md P2-H3 / P2-M2: real Docker verification)
+# ---------------------------------------------------------------------------
+
+
+def _docker_workflow() -> str:
+    return _read(".github/workflows/docker-build.yml")
+
+
+def test_docker_workflow_runs_when_the_image_inputs_change():
+    """A Dockerfile, dependency, migration or compose edit must trigger the
+    build, and a weekly run catches upstream drift."""
+    workflow = _docker_workflow()
+    for path in (
+        "backend/Dockerfile",
+        "backend/requirements.txt",
+        "backend/alembic/**",
+        "docker-compose.yml",
+    ):
+        assert f'"{path}"' in workflow
+    assert "schedule:" in workflow and "workflow_dispatch:" in workflow
+
+
+def test_docker_workflow_checks_the_p2_h3_acceptance_criteria():
+    """The build, CPU-only torch, non-root user and a size ceiling."""
+    workflow = _docker_workflow()
+    assert "docker build -f backend/Dockerfile -t clonevoice-backend ." in workflow
+    assert "torch.version.cuda is None" in workflow
+    assert "import webrtcvad, resemblyzer" in workflow
+    assert '"$(docker run --rm clonevoice-backend id -u)" = "1000"' in workflow
+    assert 'test "$mb" -le 3072' in workflow
+
+
+def test_docker_workflow_checks_migrate_ordering_and_schema_readiness():
+    """migrate must exit 0, and the readiness schema check must pass at head
+    and fail on a stale revision."""
+    workflow = _docker_workflow()
+    assert 'test "$state" = "exited 0"' in workflow
+    assert "check_schema_current" in workflow
+    assert "UPDATE alembic_version" in workflow
+    assert "docker compose down -v" in workflow
+
+
+def test_docker_workflow_never_needs_real_secrets():
+    """backend/.env is generated in CI from the example, never from secrets."""
+    workflow = _docker_workflow()
+    assert "cp backend/.env.example backend/.env" in workflow
+    assert "secrets." not in workflow
