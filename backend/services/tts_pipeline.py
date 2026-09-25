@@ -604,6 +604,11 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
     return result
 
 
+# WaveRNN returns (frames - 1) * hop samples and fades the last 20 hops, so it
+# needs at least 21 frames.
+_VOCODER_MIN_FRAMES = 21
+
+
 def vocode(mel: np.ndarray) -> np.ndarray:
     """Convert a mel spectrogram to a raw audio waveform.
 
@@ -626,6 +631,17 @@ def vocode(mel: np.ndarray) -> np.ndarray:
         )
 
     device = _inference_device(_vocoder)
+    # WaveRNN.generate() fades the last 20 hops out and raises ValueError on
+    # fewer than _VOCODER_MIN_FRAMES; a few-frame decode (a one-word chunk)
+    # hit this on the real checkpoint. Pad with mel-floor silence
+    # (HARDENING_PLAN.md P2-M3).
+    short_by = _VOCODER_MIN_FRAMES - mel.shape[-1]
+    if short_by > 0:
+        mel = np.pad(
+            mel,
+            ((0, 0), (0, short_by)),
+            constant_values=-vocoder_hparams.mel_max_abs_value,
+        )
     mel_normalized = mel / vocoder_hparams.mel_max_abs_value
 
     with torch.no_grad():

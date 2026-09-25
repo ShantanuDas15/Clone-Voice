@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 
+from backend.services import tts_pipeline
 from backend.services.tts_pipeline import (embed_speaker, load_mock_models,
                                            load_models, save_output,
                                            synthesize_speech, vocode)
@@ -594,3 +595,35 @@ def test_embed_speaker_frees_gpu_memory_even_on_encoder_failure(monkeypatch):
         with pytest.raises(RuntimeError, match="mocked encoder failure"):
             embed_speaker(np.random.randn(16000).astype(np.float32))
     mock_empty.assert_called_once()
+
+
+def test_vocode_pads_mels_shorter_than_the_fade_window(monkeypatch):
+    """A few-frame mel must reach the vocoder padded to the minimum frame count.
+
+    The real WaveRNN raises ValueError below that length (P2-M3 real-weights run).
+    """
+    seen = []
+    real = tts_pipeline._vocoder.generate
+
+    def spy(mel, *args, **kwargs):
+        seen.append(mel.shape[-1])
+        return real(mel, *args, **kwargs)
+
+    monkeypatch.setattr(tts_pipeline._vocoder, "generate", spy)
+    wav = vocode(np.zeros((80, 5), dtype=np.float32))
+    assert seen == [tts_pipeline._VOCODER_MIN_FRAMES]
+    assert len(wav) == tts_pipeline._VOCODER_MIN_FRAMES * 200
+
+
+def test_vocode_leaves_long_mels_unpadded(monkeypatch):
+    """Mels at or above the fade window are passed through unchanged."""
+    seen = []
+    real = tts_pipeline._vocoder.generate
+
+    def spy(mel, *args, **kwargs):
+        seen.append(mel.shape[-1])
+        return real(mel, *args, **kwargs)
+
+    monkeypatch.setattr(tts_pipeline._vocoder, "generate", spy)
+    vocode(np.zeros((80, 45), dtype=np.float32))
+    assert seen == [45]
