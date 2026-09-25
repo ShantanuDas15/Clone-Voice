@@ -1,0 +1,92 @@
+name: backend-docker-build
+
+# Builds the backend image and exercises the compose migration path on real
+# Docker, which the local sandbox can't run (HARDENING_PLAN.md findings
+# P2-H3 and P2-M2). Model weights are not in the repo, so the `backend`
+# container itself can't become healthy here; what is verified is that the
+# image builds, is CPU-only and non-root, and that `migrate` runs first and
+# leaves a schema the readiness check accepts.
+
+on:
+  push:
+    paths:
+      - "backend/Dockerfile"
+      - "backend/requirements.txt"
+      - "backend/alembic.ini"
+      - "backend/alembic/**"
+      - "backend/core/migrations.py"
+      - "docker-compose.yml"
+      - ".dockerignore"
+      - ".github/workflows/docker-build.yml"
+  workflow_dispatch:
+  schedule:
+    # Weekly, so an upstream change (base image, torch CPU index, webrtcvad
+    # build) shows up without waiting for the next Dockerfile edit.
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  image-and-migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runtime stage's own smoke import (torch, webrtcvad, resemblyzer,
+      # librosa, soundfile) runs as part of this build (P2-H3).
+      - name: Build the backend image
+        run: docker build -f backend/Dockerfile -t clonevoice-backend .
+
+      - name: Image is CPU-only, non-root and has the compiled dependencies
+        run: |
+          docker run --rm clonevoice-backend python -c "import torch; assert torch.version.cuda is None, torch.version.cuda; print('torch', torch.__version__)"
+          docker run --rm clonevoice-backend python -c "import webrtcvad, resemblyzer; print('webrtcvad + resemblyzer import OK')"
+          test "$(docker run --rm clonevoice-backend id -u)" = "1000"
+
+      # PyPI's CUDA torch alone makes this image about 8 GB; the CPU-only
+      # image should stay far below the limit. Raise the limit deliberately,
+      # not by accident.
+      - name: Image size guard
+        run: |
+          size=$(docker image inspect clonevoice-backend --format '{{.Size}}')
+          mb=$((size / 1024 / 1024))
+          echo "Backend image size: ${mb} MB (limit 3072 MB)" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$mb" -le 3072
+
+      - name: Create backend/.env for compose (gitignored, never committed)
+        run: |
+          cp backend/.env.example backend/.env
+          sed -i "s/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$(openssl rand -hex 32)/" backend/.env
+
+      # `up -d backend` starts db, redis and migrate first and only starts
+      # backend after migrate completed successfully. backend then exits for
+      # lack of weights, which is expected here, so its status is ignored.
+      - name: Compose runs migrate before backend (P2-M2)
+        run: |
+          docker compose up -d --build backend || true
+          state=$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' "$(docker compose ps -a -q migrate)")
+          echo "migrate: ${state}"
+          test "$state" = "exited 0"
+
+      - name: Readiness schema check passes at head and fails when stale
+        run: |
+          check() {
+            docker compose run --rm --no-deps -T backend python -c \
+              "from backend.core.database import SessionLocal; from backend.core.migrations import check_schema_current; check_schema_current(SessionLocal())"
+          }
+          check
+          docker compose exec -T db psql -U clonevoice -d clonevoice -c "UPDATE alembic_version SET version_num = '0'"
+          if check; then
+            echo "expected the stale revision to fail the schema check"
+            exit 1
+          fi
+
+      - name: Backend logs (diagnostics)
+        if: failure()
+        run: docker compose logs --no-color backend migrate db
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
