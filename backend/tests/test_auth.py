@@ -363,6 +363,55 @@ def test_google_link_revokes_local_password(client: TestClient):
     assert resp.status_code == 401
 
 
+def _google_callback(client: TestClient, email: str):
+    """Run the Google callback with a mocked, email-verified Google identity."""
+    claims = {"email": email, "email_verified": True, "name": "Real Owner"}
+    with patch(
+        "backend.api.auth.oauth.google.authorize_access_token",
+        new_callable=AsyncMock,
+        return_value={"userinfo": claims},
+    ):
+        return client.get("/api/v1/auth/google/callback?code=c&state=s")
+
+
+def _refresh_with(client: TestClient, token: str):
+    """POST /refresh with exactly this refresh cookie."""
+    client.cookies.clear()
+    client.cookies.set("refresh_token", token)
+    resp = client.post("/api/v1/auth/refresh")
+    client.cookies.clear()
+    return resp
+
+
+def test_google_link_revokes_squatters_refresh_token(client: TestClient):
+    """P2-H1: a refresh cookie the squatter already holds dies at link time."""
+    email = "squatted2@example.com"
+    client.post(
+        "/api/v1/auth/signup",
+        json={"email": email, "password": "Password123!", "name": "Squatter"},
+    )
+    squatter = client.post(
+        "/api/v1/auth/login", json={"email": email, "password": "Password123!"}
+    ).cookies.get("refresh_token")
+    assert squatter
+
+    resp = _google_callback(client, email)
+    assert resp.status_code == 200
+    owner = resp.cookies.get("refresh_token")
+
+    assert _refresh_with(client, squatter).status_code == 401
+    assert _refresh_with(client, owner).status_code == 200  # the real owner is in
+
+
+def test_google_signin_of_google_account_keeps_other_sessions(client: TestClient):
+    """Only the first link revokes; a repeat Google sign-in (another device) doesn't."""
+    email = "twodevices@example.com"
+    first = _google_callback(client, email).cookies.get("refresh_token")
+    second = _google_callback(client, email).cookies.get("refresh_token")
+    assert first and second and first != second
+    assert _refresh_with(client, first).status_code == 200
+
+
 @pytest.mark.parametrize(
     "email,pre_existing_local",
     [

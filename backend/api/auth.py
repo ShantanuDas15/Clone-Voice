@@ -30,6 +30,7 @@ from backend.services.refresh_tokens import (
     consume_refresh_token,
     issue_refresh_token,
     parse_refresh_claims,
+    revoke_all_for_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -222,6 +223,16 @@ async def google_callback(
                 user.avatar_url = user_info.get("picture")
             db.commit()
             db.refresh(user)
+            # A session the squatter already holds must not outlive the link
+            # (the password alone isn't the only way in: refresh cookies work
+            # for up to REFRESH_TOKEN_EXPIRE_DAYS). Google-to-Google sign-ins
+            # leave other devices alone; only this first link revokes.
+            revoked = revoke_all_for_user(db, user.id)
+            logger.info(
+                "Linked Google to local account, revoked %d session(s): user_id=%s",
+                revoked,
+                user.id,
+            )
         logger.info("Existing user signed in via Google: user_id=%s", user.id)
     else:
         user = User(
