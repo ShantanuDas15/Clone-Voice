@@ -53,6 +53,7 @@ def test_dockerfile_only_installs_runtime_requirements() -> None:
     dockerfile = _read_lines("backend/Dockerfile")
     install_lines = [line for line in dockerfile if "pip install" in line]
 
-    assert len(install_lines) == 1
-    assert "requirements-dev.txt" not in install_lines[0]
-    assert "requirements.txt" in install_lines[0]
+    # Two steps since P2-H3: torch alone from the CPU index, then everything.
+    assert len(install_lines) == 2
+    assert not any("requirements-dev.txt" in line for line in install_lines)
+    assert sum("-r /tmp/requirements.txt" in line for line in install_lines) == 1

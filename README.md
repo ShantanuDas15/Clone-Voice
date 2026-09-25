@@ -151,6 +151,10 @@ many requests are queued behind it:
   `nvidia-container-toolkit` on the Docker host and a `deploy.resources.reservations.devices`
   GPU block added to the `backend` service in `docker-compose.yml` — not included by default,
   since a GPU is not guaranteed to be present on every host this compose file runs on.
+- **Image size:** the image installs the **CPU-only** build of torch by default (about
+  1.5 GB of Python dependencies instead of about 8 GB with PyPI's CUDA wheel, which pulls in
+  ~6 GB of unused `nvidia-*` libraries). For a GPU image, build with
+  `docker build -f backend/Dockerfile --build-arg TORCH_INDEX_URL=https://pypi.org/simple -t clonevoice-backend .`.
 - **Disk:** ~424 MB for the two checkpoints, plus resemblyzer's own pretrained encoder cache
   (~17 MB, downloaded automatically into the container user's home directory on first use —
   persist `~appuser` if you don't want to re-download it on every container recreation).
