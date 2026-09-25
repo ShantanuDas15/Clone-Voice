@@ -140,7 +140,15 @@ many requests are queued behind it:
 - **CPU-only (`DEVICE=cpu`, the default):** 2+ cores, 4 GB RAM minimum. Works, but WaveRNN's
   autoregressive sample-by-sample generation is slow on CPU — expect synthesis to take much
   longer than real-time (`C2.3`'s smoke test measured ~8.6s for a 1.4s clip on GPU; CPU is
-  markedly slower still).
+  markedly slower still). Measured vocoding speed (real checkpoints, `HARDENING_PLAN.md`
+  P2-M6): about 0.8x real time on 16 threads (22 s of audio in 18 s), 1.9x on 2 cores
+  (9.1 s of audio in 17.3 s) and 2.7x on 1 core. At the 2-core minimum a maximum-length
+  request (~22 s of audio) therefore needs roughly 40 s, more than the default 30 s
+  per-stage `INFERENCE_CALL_TIMEOUT_SECONDS`, so raise that setting or cap the text length
+  on small hosts. Inference runs in a worker thread and does **not** starve the event loop:
+  worst measured delay was 1-3 ms, even on one core. Re-check on your hardware with
+  `python -m backend.measure_event_loop_lag` (exit code 1 if the worst delay exceeds
+  `--max-lag-ms`, default 250).
 - **GPU (`DEVICE=cuda`):** an NVIDIA GPU with **4 GB+ VRAM** is a reasonable baseline —
   ~424 MB of fp32 parameters once loaded onto the device, plus a few hundred MB of fixed CUDA
   context overhead, plus mel/waveform activation buffers for one in-flight request (the
