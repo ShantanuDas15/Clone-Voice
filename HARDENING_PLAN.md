@@ -1,13 +1,23 @@
 # CloneVoice Backend — Production-Hardening Audit (Pass 2)
 
 **Audit date:** 2026-09-22 · **Audited commit:** `f69ab71` (main) · **Status:** COMPLETE for backend application code, deploy files and dependencies. Tests, Alembic revision files and parts of the vendored SV2TTS package were NOT reviewed (see §1).
-**Last reviewed:** 2026-09-24 (P2-M5 fixed in `0cc89e3`; P2-M4 fixed in code in `673c861`, new migration not applied to Postgres; P2-M3 fixed in code in `329ae82`, not measured with real checkpoints; P2-M2 fixed in code in `4879ecd`, real `docker compose up` migration still unverified; P2-M1 fixed in `e3b7f93`; P2-H3 fixed in code in `3eb462a`, real image build still unverified; P2-H2 fixed in `ebf92a3`; P2-H1 fixed in `b86ea44` — Google link now clears the local password; email verification still open; audit written 2026-09-22)
+**Last reviewed:** 2026-09-25 (progress summary added; no new fixes since P2-M5; P2-M5 fixed in `0cc89e3`; P2-M4 fixed in code in `673c861`, new migration not applied to Postgres; P2-M3 fixed in code in `329ae82`, not measured with real checkpoints; P2-M2 fixed in code in `4879ecd`, real `docker compose up` migration still unverified; P2-M1 fixed in `e3b7f93`; P2-H3 fixed in code in `3eb462a`, real image build still unverified; P2-H2 fixed in `ebf92a3`; P2-H1 fixed in `b86ea44` — Google link now clears the local password; email verification still open; audit written 2026-09-22)
 
 This is a fresh pass over the code as it stands after all 32 Pass-1 findings were fixed. Pass 1 (2026-09-15) is kept unchanged below the line at the end of this section, for its commit-by-commit tracker. Pass-2 IDs have a `P2-` prefix so they can't collide with Pass-1 IDs (`C1`, `H1`, …). No code was changed in this pass.
 
 ## Progress Overview (Pass 2)
 
 **19 findings — 3 Fixed · 5 Partial · 11 Not Started** (3 High · 6 Medium · 10 Low)
+
+**Addressed so far: 8 of 19 (3 fully verified, 5 fixed in code but awaiting real-infrastructure verification). Remaining: 11.**
+
+| Severity | Fixed | Partial | Not Started |
+|----------|:-----:|:-------:|:-----------:|
+| High (3) | P2-H2 | P2-H1, P2-H3 | — |
+| Medium (6) | P2-M1, P2-M5 | P2-M2, P2-M3, P2-M4 | P2-M6 |
+| Low (10) | — | — | P2-L1 … P2-L10 |
+
+All High findings are addressed and 5 of 6 Medium. **Next up:** P2-M6 (measure event-loop lag during vocoding first), then the Low findings. **What blocks Partial → Fixed:** a Docker daemon (P2-H3, P2-M2), a real Postgres (P2-M2, P2-M4), real checkpoints for a long-text measurement (P2-M3), and an email-verification product decision (P2-H1).
 
 | # | Finding | Status | Commit(s) |
 |---|---------|--------|-----------|
