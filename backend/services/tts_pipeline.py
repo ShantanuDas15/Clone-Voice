@@ -14,6 +14,7 @@ import torch
 
 from backend.core import metrics
 from backend.core.config import settings
+from backend.core.cpu_limits import resolve_thread_count
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
 from backend.services.sv2tts.synthesizer.hparams import hparams as synth_hparams
 from backend.services.sv2tts.synthesizer.models.tacotron import Tacotron
@@ -374,6 +375,21 @@ def get_model_health(expected_device: str | None = None) -> dict:
     return status
 
 
+def _configure_torch_threads() -> None:
+    """Cap torch's CPU threads at the container CPU limit (P2-L11).
+
+    Under a cgroup quota torch still starts one thread per host core and the
+    kernel throttles them: measured 75.4 s instead of 10.6 s for the same
+    vocoding, with 88 ms event-loop lag instead of 1.2 ms.
+    """
+    threads = resolve_thread_count(settings.TORCH_NUM_THREADS)
+    if threads is None:
+        logger.info("Torch CPU threads: %d (default).", torch.get_num_threads())
+        return
+    torch.set_num_threads(threads)
+    logger.info("Torch CPU threads set to %d (container CPU limit or setting).", threads)
+
+
 def load_models(device: str = "cpu") -> None:
     """Load all SV2TTS models into memory for inference.
 
@@ -394,6 +410,7 @@ def load_models(device: str = "cpu") -> None:
     global _encoder, _synthesizer, _vocoder
     global _synthesizer_checksum_verified, _vocoder_checksum_verified
     logger.info("Loading SV2TTS models on %s...", device)
+    _configure_torch_threads()
     _synthesizer_checksum_verified = False
     _vocoder_checksum_verified = False
 

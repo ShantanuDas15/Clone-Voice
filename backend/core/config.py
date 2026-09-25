@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = ""
     APP_ENV: str = "development"
     DEVICE: str = "cpu"
+    # HARDENING_PLAN.md finding P2-L11: torch's CPU thread count. 0 = follow the
+    # container CPU limit (cgroup quota) when it is tighter than the host's
+    # cores, else leave torch's default; > 0 forces that many threads. An
+    # explicit OMP_NUM_THREADS in the environment is respected when this is 0.
+    TORCH_NUM_THREADS: int = 0
     MAX_AUDIO_SIZE_MB: int = 25
     # HARDENING_PLAN.md finding M5: extra bytes allowed on top of
     # MAX_AUDIO_SIZE_MB for multipart boundaries and form fields. The ASGI
@@ -127,6 +132,14 @@ class Settings(BaseSettings):
     DB_CONNECT_TIMEOUT_SECONDS: float = 10.0
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+
+    @field_validator("TORCH_NUM_THREADS")
+    @classmethod
+    def torch_threads_not_negative(cls, v: int) -> int:
+        """Reject negative thread counts; 0 means auto."""
+        if v < 0:
+            raise ValueError("TORCH_NUM_THREADS must be >= 0 (0 = auto)")
+        return v
 
     @field_validator("UPLOAD_DIR", "OUTPUT_DIR")
     @classmethod
