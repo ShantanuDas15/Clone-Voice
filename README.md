@@ -145,7 +145,12 @@ many requests are queued behind it:
   (9.1 s of audio in 17.3 s) and 2.7x on 1 core. At the 2-core minimum a maximum-length
   request (~22 s of audio) therefore needs roughly 40 s, more than the default 30 s
   per-stage `INFERENCE_CALL_TIMEOUT_SECONDS`, so raise that setting or cap the text length
-  on small hosts. Inference runs in a worker thread and does **not** starve the event loop:
+  on small hosts. These figures assume torch's thread count matches the CPUs you actually
+  have: PyTorch ignores a container CPU quota (`docker run --cpus`, Kubernetes limits) and
+  starts one thread per *host* core, which was measured at 75 s instead of 10.6 s under a
+  2-CPU quota (`HARDENING_PLAN.md` P2-L11). The backend now reads the cgroup quota at
+  startup and sizes torch to it; set `TORCH_NUM_THREADS` to force a value, or
+  `OMP_NUM_THREADS`, which is respected. Inference runs in a worker thread and does **not** starve the event loop:
   worst measured delay was 1-3 ms, even on one core. Re-check on your hardware with
   `python -m backend.measure_event_loop_lag` (exit code 1 if the worst delay exceeds
   `--max-lag-ms`, default 250).
