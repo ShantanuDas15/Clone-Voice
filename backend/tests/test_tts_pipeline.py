@@ -627,3 +627,28 @@ def test_vocode_leaves_long_mels_unpadded(monkeypatch):
     monkeypatch.setattr(tts_pipeline._vocoder, "generate", spy)
     vocode(np.zeros((80, 45), dtype=np.float32))
     assert seen == [45]
+
+
+def test_load_mock_models_probes_cuda_at_load_not_at_first_request():
+    """P2-M6: the ~2 s first CUDA probe must happen in load, off the event loop."""
+    with patch(
+        "backend.services.tts_pipeline.torch.cuda.is_available", return_value=False
+    ) as probe:
+        load_mock_models("cpu")
+    assert probe.call_count == 1
+
+
+def test_load_models_primes_the_cuda_probe_after_loading():
+    """The real loader primes too (needs the provisioned checkpoints)."""
+    from backend.core.config import settings
+
+    weights = [
+        os.path.join(settings.WEIGHTS_DIR, name)
+        for name in ("synthesizer.pt", "vocoder.pt")
+    ]
+    if not all(os.path.exists(path) for path in weights):
+        pytest.skip("real checkpoints not provisioned")
+    with patch("backend.services.tts_pipeline._prime_cuda_probe") as prime:
+        load_models("cpu")
+    assert prime.call_count == 1
+    load_mock_models("cpu")  # leave the module-scoped mock models in place

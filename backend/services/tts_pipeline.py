@@ -47,6 +47,10 @@ _vocoder_checksum_verified = False
 # Process-wide semaphore: permits exactly one model forward pass at a time.
 # Prevents concurrent GPU OOM / CPU thrash when multiple requests arrive
 # simultaneously. Replace with a Celery/ARQ task queue for multi-GPU scaling.
+# Moving inference to another process is NOT needed for event-loop health:
+# measured with the real checkpoints, a worker thread delays the loop by at most
+# a few ms even on one CPU core (HARDENING_PLAN.md finding P2-M6; re-check with
+# `python -m backend.measure_event_loop_lag`).
 _inference_semaphore = asyncio.Semaphore(1)
 
 # Count of requests currently waiting to acquire `_inference_semaphore`
@@ -272,6 +276,18 @@ def _free_gpu_memory() -> None:
         torch.cuda.empty_cache()
 
 
+def _prime_cuda_probe() -> None:
+    """Pay the one-off CUDA driver probe now, not inside the first request.
+
+    On a host with an idle NVIDIA GPU the first ``torch.cuda.is_available()``
+    can take ~2 s and holds the GIL, so if it first runs in an inference worker
+    thread it freezes the whole event loop for that long (measured,
+    HARDENING_PLAN.md finding P2-M6). Later calls are instant, so calling it
+    once at model load moves the stall to startup.
+    """
+    torch.cuda.is_available()
+
+
 def free_gpu_memory() -> None:
     """Public entry point for callers outside this module (e.g. API error paths)."""
     _free_gpu_memory()
@@ -467,6 +483,7 @@ def load_models(device: str = "cpu") -> None:
             "weights directory."
         ) from exc
 
+    _prime_cuda_probe()
     logger.info("All SV2TTS models loaded successfully.")
 
 
@@ -845,4 +862,5 @@ def load_mock_models(device: str = "cpu") -> None:
     # never reports a mock as a verified real checkpoint.
     _synthesizer_checksum_verified = False
     _vocoder_checksum_verified = False
+    _prime_cuda_probe()
     logger.debug("Mock TTS models loaded for testing (device=%s).", device)
