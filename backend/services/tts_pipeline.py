@@ -15,11 +15,10 @@ import torch
 from backend.core import metrics
 from backend.core.config import settings
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
-from backend.services.sv2tts.synthesizer.hparams import \
-    hparams as synth_hparams
+from backend.services.sv2tts.synthesizer.hparams import hparams as synth_hparams
 from backend.services.sv2tts.synthesizer.models.tacotron import Tacotron
-from backend.services.sv2tts.synthesizer.utils.symbols import \
-    symbols as sv2tts_symbols
+from backend.services.sv2tts.synthesizer.utils import cleaners
+from backend.services.sv2tts.synthesizer.utils.symbols import symbols as sv2tts_symbols
 from backend.services.sv2tts.synthesizer.utils.text import text_to_sequence
 from backend.services.sv2tts.vocoder import hparams as vocoder_hparams
 from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
@@ -499,6 +498,22 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
         _free_gpu_memory()
 
 
+def _clean_for_chunking(text: str) -> str:
+    """Run the synthesizer's cleaners so chunk limits count decoded symbols.
+
+    Number expansion turns 120 raw characters into ~250 symbols, which put
+    digit-heavy chunks at 857 of the 900-frame cap when measured on raw text
+    (HARDENING_PLAN.md finding P2-M3). The cleaners are idempotent, so the
+    per-chunk clean inside ``text_to_sequence`` is harmless. Text with
+    ARPAbet braces is left raw, since lowercasing would corrupt the phonemes.
+    """
+    if "{" in text:
+        return text
+    for name in synth_hparams.tts_cleaner_names:
+        text = getattr(cleaners, name)(text)
+    return text
+
+
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
     """Generate a mel spectrogram for text of any supported length.
 
@@ -509,7 +524,7 @@ def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
     as the reference SV2TTS demo, which synthesizes per line and concatenates
     (HARDENING_PLAN.md finding P2-M3).
     """
-    chunks = split_into_chunks(text, settings.TTS_CHUNK_MAX_CHARS)
+    chunks = split_into_chunks(_clean_for_chunking(text), settings.TTS_CHUNK_MAX_CHARS)
     if not chunks:
         chunks = [text]  # let the single-chunk path handle degenerate input
     mels = [_synthesize_chunk(chunk, embedding) for chunk in chunks]
@@ -589,6 +604,11 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
     return result
 
 
+# WaveRNN returns (frames - 1) * hop samples and fades the last 20 hops, so it
+# needs at least 21 frames.
+_VOCODER_MIN_FRAMES = 21
+
+
 def vocode(mel: np.ndarray) -> np.ndarray:
     """Convert a mel spectrogram to a raw audio waveform.
 
@@ -611,6 +631,17 @@ def vocode(mel: np.ndarray) -> np.ndarray:
         )
 
     device = _inference_device(_vocoder)
+    # WaveRNN.generate() fades the last 20 hops out and raises ValueError on
+    # fewer than _VOCODER_MIN_FRAMES; a few-frame decode (a one-word chunk)
+    # hit this on the real checkpoint. Pad with mel-floor silence
+    # (HARDENING_PLAN.md P2-M3).
+    short_by = _VOCODER_MIN_FRAMES - mel.shape[-1]
+    if short_by > 0:
+        mel = np.pad(
+            mel,
+            ((0, 0), (0, short_by)),
+            constant_values=-vocoder_hparams.mel_max_abs_value,
+        )
     mel_normalized = mel / vocoder_hparams.mel_max_abs_value
 
     with torch.no_grad():

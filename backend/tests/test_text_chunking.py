@@ -133,3 +133,34 @@ def test_no_truncation_warning_under_cap(caplog) -> None:
     with caplog.at_level(logging.WARNING, logger=tts_pipeline.logger.name):
         tts_pipeline._synthesize_chunk("Hi.", EMB)
     assert "truncated" not in caplog.text
+
+
+# ---- chunking counts cleaned symbols, not raw characters --------------------
+
+
+def test_clean_for_chunking_expands_numbers() -> None:
+    cleaned = tts_pipeline._clean_for_chunking("I paid $45 for 12 tickets.")
+    assert not any(ch.isdigit() for ch in cleaned)
+    assert len(cleaned) > len("I paid $45 for 12 tickets.")
+
+
+def test_clean_for_chunking_leaves_arpabet_braces_raw() -> None:
+    text = "Turn left on {HH AW1 S S T AH0 N} Street."
+    assert tts_pipeline._clean_for_chunking(text) == text
+
+
+def test_digit_heavy_chunks_respect_limit_after_cleaning(monkeypatch) -> None:
+    """120 raw digit-heavy chars expand to ~250 symbols; the limit must hold."""
+    seen: list[str] = []
+    real = tts_pipeline._synthesize_chunk
+
+    def spy(text: str, emb: np.ndarray) -> np.ndarray:
+        seen.append(text)
+        return real(text, emb)
+
+    monkeypatch.setattr(tts_pipeline, "_synthesize_chunk", spy)
+    text = ("In 2024 there were 1,234,567 visitors, 89 percent paid $45.50. " * 8)[:500]
+    tts_pipeline.synthesize_speech(text, EMB)
+    assert len(seen) > 1
+    decoded = [len(tts_pipeline._clean_for_chunking(chunk)) for chunk in seen]
+    assert max(decoded) <= settings.TTS_CHUNK_MAX_CHARS

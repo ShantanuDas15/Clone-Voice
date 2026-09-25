@@ -75,9 +75,10 @@ class Settings(BaseSettings):
     # inference call (embedding extraction, or the synthesizer+vocoder
     # forward passes together) before it is abandoned with 503.
     INFERENCE_CALL_TIMEOUT_SECONDS: float = 30.0
-    # HARDENING_PLAN.md finding P2-M3: text is split into chunks of at most
-    # this many characters, each synthesized separately. ~150 chars is about
-    # 10 s of speech, inside the checkpoint's 900-frame training length.
+    # HARDENING_PLAN.md finding P2-M3: text is cleaned (digits expanded), then
+    # split into chunks of at most this many characters, each synthesized
+    # separately. ~150 chars is about 10 s of speech, inside the checkpoint's
+    # 900-frame training length.
     TTS_CHUNK_MAX_CHARS: int = 150
     # Silence inserted between chunks, in seconds.
     TTS_CHUNK_PAUSE_SECONDS: float = 0.15
