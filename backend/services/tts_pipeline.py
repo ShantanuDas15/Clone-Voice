@@ -90,7 +90,7 @@ class InferenceQueueFullError(RuntimeError):
 class InferenceTimeoutError(RuntimeError):
     """Raised when a request waits longer than
     `settings.INFERENCE_ACQUIRE_TIMEOUT_SECONDS` for a free inference slot,
-    or an acquired forward pass runs longer than
+    or any one acquired forward-pass stage runs longer than
     `settings.INFERENCE_CALL_TIMEOUT_SECONDS`. Mapped to HTTP 503 by
     callers."""
 
@@ -729,9 +729,11 @@ async def run_inference_pipeline(
     outside the semaphore because it is disk-bound and safe to parallelise.
 
     The acquisition itself is bounded (queue-depth cap + wait timeout) and
-    the two forward passes together are bounded by a single per-call
-    timeout (HARDENING_PLAN.md finding H6), so a stuck or overloaded
-    inference run fails fast instead of blocking indefinitely.
+    each of the two forward passes is bounded by its own
+    ``INFERENCE_CALL_TIMEOUT_SECONDS`` (HARDENING_PLAN.md findings H6 and
+    P2-L3), so a stuck or overloaded inference run fails fast instead of
+    blocking indefinitely. The limit is per stage, so the worst case for one
+    synthesis is twice that value, not the value itself.
 
     Args:
         text: Input text to synthesise.
@@ -743,8 +745,8 @@ async def run_inference_pipeline(
 
     Raises:
         InferenceQueueFullError: The inference queue is already at capacity.
-        InferenceTimeoutError: The slot wait, or the forward passes
-            themselves, exceeded their configured timeout.
+        InferenceTimeoutError: The slot wait, or either forward-pass stage
+            (synthesizer, vocoder), exceeded its configured timeout.
     """
     async with _acquire_inference_slot() as slot:
         logger.debug(
@@ -766,7 +768,7 @@ async def run_inference_pipeline(
             )
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
-                "Inference forward pass exceeded the per-call timeout."
+                "Inference forward pass exceeded the per-stage timeout."
             ) from None
         logger.debug("Inference semaphore releasing — forward passes complete.")
 
@@ -783,7 +785,7 @@ async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
     The encoder forward pass shares the same hardware resources as the
     synthesizer and vocoder, so it is gated by the same semaphore to prevent
     concurrent model execution during voice-profile upload. Subject to the
-    same bounded queue and per-call timeout as ``run_inference_pipeline``
+    same bounded queue and per-stage timeout as ``run_inference_pipeline``
     (HARDENING_PLAN.md finding H6).
 
     Args:
@@ -807,7 +809,7 @@ async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:
             )
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
-                "Embedding extraction exceeded the per-call timeout."
+                "Embedding extraction exceeded the per-stage timeout."
             ) from None
 
 

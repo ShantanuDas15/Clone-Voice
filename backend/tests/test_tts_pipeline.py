@@ -652,3 +652,53 @@ def test_load_models_primes_the_cuda_probe_after_loading():
         load_models("cpu")
     assert prime.call_count == 1
     load_mock_models("cpu")  # leave the module-scoped mock models in place
+
+
+def test_call_timeout_applies_per_stage_not_across_the_call(monkeypatch):
+    """HARDENING_PLAN.md P2-L3: `INFERENCE_CALL_TIMEOUT_SECONDS` bounds each
+    stage separately, so two stages that each fit the limit succeed even when
+    their sum exceeds it."""
+    import asyncio
+    import time
+
+    from backend.services.tts_pipeline import run_inference_pipeline
+
+    monkeypatch.setattr(
+        "backend.services.tts_pipeline.settings.INFERENCE_CALL_TIMEOUT_SECONDS",
+        0.5,
+    )
+
+    def _slow_synthesize(text, embedding):
+        time.sleep(0.3)
+        return np.zeros((80, 10), dtype=np.float32)
+
+    def _slow_vocode(mel):
+        time.sleep(0.3)
+        return np.zeros(1600, dtype=np.float32)
+
+    started = time.monotonic()
+    with patch(
+        "backend.services.tts_pipeline.synthesize_speech",
+        side_effect=_slow_synthesize,
+    ), patch("backend.services.tts_pipeline.vocode", side_effect=_slow_vocode):
+        asyncio.run(
+            run_inference_pipeline(
+                "Hello world.", np.zeros(256, dtype=np.float32), "per_stage_user"
+            )
+        )
+    assert time.monotonic() - started > 0.5
+
+
+def test_call_timeout_documentation_says_per_stage():
+    """HARDENING_PLAN.md P2-L3: config and pipeline docs must not claim a
+    single deadline across the whole call."""
+    import inspect
+
+    from backend.core import config
+    from backend.services import tts_pipeline
+
+    config_src = " ".join(inspect.getsource(config).replace("#", " ").split())
+    assert "applies per stage, not across the call" in config_src
+    doc = " ".join(tts_pipeline.run_inference_pipeline.__doc__.split())
+    assert "per stage" in doc
+    assert "together" not in doc

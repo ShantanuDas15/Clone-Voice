@@ -83,9 +83,11 @@ class Settings(BaseSettings):
     # INFERENCE_ACQUIRE_TIMEOUT_SECONDS: max time a queued request waits for
     # a free slot before giving up with 503.
     INFERENCE_ACQUIRE_TIMEOUT_SECONDS: float = 10.0
-    # INFERENCE_CALL_TIMEOUT_SECONDS: max wall-clock time for one held
-    # inference call (embedding extraction, or the synthesizer+vocoder
-    # forward passes together) before it is abandoned with 503.
+    # INFERENCE_CALL_TIMEOUT_SECONDS: max wall-clock time for each stage of a
+    # held inference call (the encoder; or, separately, the synthesizer and
+    # the vocoder) before it is abandoned with 503. The limit applies per
+    # stage, not across the call, so a synthesis can take up to twice this
+    # (HARDENING_PLAN.md finding P2-L3).
     INFERENCE_CALL_TIMEOUT_SECONDS: float = 30.0
     # HARDENING_PLAN.md finding P2-M3: text is cleaned (digits expanded), then
     # split into chunks of at most this many characters, each synthesized
