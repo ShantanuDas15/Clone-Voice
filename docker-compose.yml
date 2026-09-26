@@ -73,8 +73,12 @@ services:
       # service above (finding L12) so the two can never drift apart.
       DATABASE_URL: postgresql://${POSTGRES_USER:-clonevoice}:${POSTGRES_PASSWORD:-clonevoice_dev}@db:5432/${POSTGRES_DB:-clonevoice}
       RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
+    # HARDENING_PLAN.md finding P2-L6: bound to localhost by default, like the
+    # db service (L12), so the API isn't reachable from other machines unless a
+    # reverse proxy on this host fronts it. Set BACKEND_BIND_ADDRESS=0.0.0.0 in
+    # the root .env to publish it on every interface deliberately.
     ports:
-      - "8000:8000"
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     # HARDENING_PLAN.md finding P2-L4: Docker's default 10 s stop grace would
     # SIGKILL the process before shutdown finishes. 70 s = uvicorn's 30 s
     # --timeout-graceful-shutdown (Dockerfile CMD) + the 30 s inference drain

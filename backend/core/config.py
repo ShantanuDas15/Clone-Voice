@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     # HARDENING_PLAN.md finding M8: Prometheus metrics at GET /metrics.
     # METRICS_ENABLED=False makes the endpoint return 404. When
     # METRICS_AUTH_TOKEN is non-empty, scrapers must send it as a bearer token.
+    # HARDENING_PLAN.md finding P2-L6: outside APP_ENV=development an empty
+    # token no longer means 'open'; /metrics returns 401 until one is set (or
+    # METRICS_ENABLED=false).
     METRICS_ENABLED: bool = True
     METRICS_AUTH_TOKEN: str = ""
     STORAGE_MAX_AGE_HOURS: float = 24

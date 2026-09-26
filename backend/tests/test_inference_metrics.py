@@ -218,3 +218,48 @@ def test_metrics_endpoint_reflects_pipeline_activity(
     asyncio.run(tts.run_inference_pipeline("metrics scrape", EMB, "u2"))
     body = client.get("/metrics").text
     assert 'clonevoice_inference_stage_seconds_count{stage="vocoder"}' in body
+
+
+def test_metrics_fails_closed_without_token_outside_development(
+    client: TestClient, monkeypatch
+):
+    """HARDENING_PLAN.md P2-L6: an empty token must not mean 'open' in
+    production; nobody is let in until a token is configured."""
+    from backend.main import settings
+
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "METRICS_AUTH_TOKEN", "")
+    assert client.get("/metrics").status_code == 401
+    assert (
+        client.get("/metrics", headers={"Authorization": "Bearer "}).status_code == 401
+    )
+
+
+def test_metrics_with_token_works_outside_development(client: TestClient, monkeypatch):
+    """A configured token still grants access in production."""
+    from backend.main import settings
+
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "METRICS_AUTH_TOKEN", "s3cret")
+    ok = client.get("/metrics", headers={"Authorization": "Bearer s3cret"})
+    assert ok.status_code == 200
+
+
+def test_metrics_open_without_token_in_development(client: TestClient, monkeypatch):
+    """Local development keeps the zero-config scrape."""
+    from backend.main import settings
+
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    monkeypatch.setattr(settings, "METRICS_AUTH_TOKEN", "")
+    assert client.get("/metrics").status_code == 200
+
+
+def test_metrics_disabled_still_404_outside_development(
+    client: TestClient, monkeypatch
+):
+    """METRICS_ENABLED=false remains the way to switch the endpoint off."""
+    from backend.main import settings
+
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "METRICS_ENABLED", False)
+    assert client.get("/metrics").status_code == 404

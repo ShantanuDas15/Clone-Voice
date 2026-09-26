@@ -204,11 +204,19 @@ def prometheus_metrics(authorization: str = Header(default="")) -> Response:
     """Expose inference metrics in Prometheus text format (finding M8).
 
     404 when ``METRICS_ENABLED`` is false; when ``METRICS_AUTH_TOKEN`` is set
-    the caller must send it as ``Authorization: Bearer <token>``.
+    the caller must send it as ``Authorization: Bearer <token>``. Outside
+    ``APP_ENV=development`` a missing token fails closed (401 for everyone)
+    instead of exposing the endpoint unauthenticated (HARDENING_PLAN.md
+    finding P2-L6).
     """
     if not settings.METRICS_ENABLED:
         raise HTTPException(status_code=404, detail="Not Found")
     token = settings.METRICS_AUTH_TOKEN
+    if not token and settings.APP_ENV != "development":
+        logger.warning(
+            "/metrics refused: METRICS_AUTH_TOKEN is unset outside development"
+        )
+        raise HTTPException(status_code=401, detail="Unauthorized")
     if token and not hmac.compare_digest(authorization, f"Bearer {token}"):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return Response(generate_latest(metrics.registry), media_type=CONTENT_TYPE_LATEST)
