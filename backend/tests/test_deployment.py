@@ -454,3 +454,48 @@ def test_docker_workflow_never_needs_real_secrets():
     workflow = _docker_workflow()
     assert "cp backend/.env.example backend/.env" in workflow
     assert "secrets." not in workflow
+
+
+# ---------------------------------------------------------------------------
+# Shutdown grace (HARDENING_PLAN.md finding P2-L4)
+# ---------------------------------------------------------------------------
+
+
+def _uvicorn_graceful_timeout() -> int:
+    """Return the `--timeout-graceful-shutdown` value from the Dockerfile CMD."""
+    match = re.search(
+        r'"--timeout-graceful-shutdown",\s*"(\d+)"', _read("backend/Dockerfile")
+    )
+    assert match, "Dockerfile CMD must set --timeout-graceful-shutdown"
+    return int(match.group(1))
+
+
+def _backend_stop_grace_seconds() -> int:
+    """Return the backend service's `stop_grace_period` in seconds."""
+    compose = _read("docker-compose.yml")
+    backend = compose.split("\n  backend:\n", 1)[1].split("\nvolumes:\n", 1)[0]
+    match = re.search(r"^    stop_grace_period:\s*(\d+)s\s*$", backend, re.MULTILINE)
+    assert match, "backend service must set stop_grace_period in seconds"
+    return int(match.group(1))
+
+
+def test_stop_grace_period_covers_graceful_timeout_and_inference_drain():
+    """A stop grace shorter than uvicorn's wait plus the inference drain lets
+    Docker SIGKILL the process mid-drain and lose in-flight synthesis."""
+    from backend.core.config import Settings
+
+    drain = Settings.model_fields["INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS"].default
+    needed = _uvicorn_graceful_timeout() + drain
+    assert _backend_stop_grace_seconds() > needed, (
+        f"stop_grace_period must exceed {needed} s "
+        "(uvicorn graceful timeout + inference drain)"
+    )
+    assert _backend_stop_grace_seconds() > 10, "must beat Docker's 10 s default"
+
+
+def test_uvicorn_graceful_timeout_is_set_and_keeps_single_worker():
+    """The graceful-shutdown flag is present without disturbing `--workers 1`."""
+    dockerfile = _read("backend/Dockerfile")
+    assert _uvicorn_graceful_timeout() > 0
+    assert '"--workers", "1"' in dockerfile
+    assert len(re.findall(r"^CMD ", dockerfile, re.MULTILINE)) == 1
