@@ -17,6 +17,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
@@ -87,7 +88,13 @@ async def _cleanup_failed_upload(
         embedding_path="",
         status="failed",
     )
-    await asyncio.to_thread(_persist_profile, db, profile)
+    try:
+        await asyncio.to_thread(_persist_profile, db, profile)
+    except SQLAlchemyError:
+        # HARDENING_PLAN.md P2-L2: the caller re-raises its own status code;
+        # a DB error while recording the failure must not replace it.
+        logger.exception("Failed to persist failed profile for user_id=%s", user_id)
+        await asyncio.to_thread(db.rollback)
 
 
 @router.post(
@@ -175,7 +182,15 @@ async def upload_audio(
         embedding_path=embedding_path,
         status="ready",
     )
-    await asyncio.to_thread(_persist_profile, db, profile)
+    try:
+        await asyncio.to_thread(_persist_profile, db, profile)
+    except SQLAlchemyError:
+        # HARDENING_PLAN.md P2-L2: no row will reference these files.
+        logger.exception("Failed to persist voice profile for user_id=%s", user_id)
+        await asyncio.to_thread(db.rollback)
+        await asyncio.to_thread(_remove_quietly, file_path)
+        await asyncio.to_thread(_remove_quietly, embedding_path)
+        raise HTTPException(status_code=500, detail="Failed to save voice profile")
 
     logger.info(
         "Voice profile created: id=%s, name=%s, user_id=%s",

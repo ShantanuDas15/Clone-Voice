@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
@@ -18,10 +19,12 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           free_gpu_memory,
-                                           run_inference_pipeline)
+from backend.services.tts_pipeline import (
+    InferenceQueueFullError,
+    InferenceTimeoutError,
+    free_gpu_memory,
+    run_inference_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,9 @@ def _record_failed_generation(
     """Persist a `status="failed"` audit row for an inference error.
 
     Runs on the error path only — a successful synthesis records its own
-    `status="completed"` row after the pipeline returns.
+    `status="completed"` row after the pipeline returns. A DB failure here is
+    logged and swallowed (HARDENING_PLAN.md P2-L2) so it can never replace the
+    caller's intended 429/503/500 with an unhandled error.
     """
     failed_generation = Generation(
         user_id=user_id,
@@ -44,8 +49,24 @@ def _record_failed_generation(
         duration_seconds=None,
         status="failed",
     )
-    db.add(failed_generation)
-    db.commit()
+    try:
+        db.add(failed_generation)
+        db.commit()
+    except SQLAlchemyError:
+        logger.exception(
+            "Failed to record failed generation — user_id=%s, profile_id=%s",
+            user_id,
+            voice_profile_id,
+        )
+        db.rollback()
+
+
+def _remove_quietly(path: str) -> None:
+    """Delete a file, logging (not raising) on failure."""
+    try:
+        os.remove(path)
+    except OSError:
+        logger.exception("Failed to remove orphaned output: %s", path)
 
 
 def _persist_generation(db: Session, generation: Generation) -> None:
@@ -183,7 +204,21 @@ async def synthesize(
         duration_seconds=duration,
         status="completed",
     )
-    await asyncio.to_thread(_persist_generation, db, generation)
+    try:
+        await asyncio.to_thread(_persist_generation, db, generation)
+    except SQLAlchemyError:
+        # HARDENING_PLAN.md P2-L2: no row will ever reference this WAV, so
+        # remove it instead of leaving an orphan behind.
+        logger.exception(
+            "Failed to persist generation — user_id=%s, profile_id=%s",
+            user_id,
+            profile_id,
+        )
+        await asyncio.to_thread(db.rollback)
+        await asyncio.to_thread(_remove_quietly, out_path)
+        raise HTTPException(
+            status_code=500, detail="Failed to save the synthesized audio"
+        )
 
     return FileResponse(
         out_path, media_type="audio/wav", filename=f"synthesized_{generation.id}.wav"
