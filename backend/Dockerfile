@@ -108,4 +108,11 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 # limits this hardening pass relies on. Scale horizontally with multiple
 # *containers* behind a shared-state limiter (once M3's `storage_uri` fix
 # lands) instead of raising this value.
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+#
+# --timeout-graceful-shutdown (HARDENING_PLAN.md finding P2-L4): on SIGTERM
+# uvicorn waits this many seconds for open requests (an in-flight synthesis)
+# before cancelling them; the lifespan shutdown then drains inference threads
+# for up to INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS (30). docker-compose's
+# `stop_grace_period` must cover both plus a margin, or Docker's default 10 s
+# SIGKILLs the process mid-drain.
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "30"]

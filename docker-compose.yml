@@ -75,6 +75,12 @@ services:
       RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
     ports:
       - "8000:8000"
+    # HARDENING_PLAN.md finding P2-L4: Docker's default 10 s stop grace would
+    # SIGKILL the process before shutdown finishes. 70 s = uvicorn's 30 s
+    # --timeout-graceful-shutdown (Dockerfile CMD) + the 30 s inference drain
+    # (INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS) + a 10 s margin. Raise it if
+    # you raise either of those.
+    stop_grace_period: 70s
     volumes:
       # Model checkpoints, uploads, and outputs are deliberately not baked
       # into the image (see backend/Dockerfile, .dockerignore) — these
