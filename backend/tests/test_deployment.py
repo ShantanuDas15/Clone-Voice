@@ -321,6 +321,16 @@ def test_compose_backend_exposes_port_8000():
     assert "8000" in backend
 
 
+def test_compose_backend_port_binds_localhost_by_default():
+    """HARDENING_PLAN.md P2-L6: a bare "8000:8000" publishes on every host
+    interface; the default must be 127.0.0.1, overridable deliberately."""
+    backend = _backend_service_block()
+    assert re.search(
+        r'-\s*"\$\{BACKEND_BIND_ADDRESS:-127\.0\.0\.1\}:8000:8000"', backend
+    )
+    assert not re.search(r'-\s*"8000:8000"', backend)
+
+
 def test_compose_backend_persists_weights_uploads_outputs_as_volumes():
     """Model checkpoints and user data must survive `docker-compose down` /
     a container rebuild — see .dockerignore, which deliberately excludes
