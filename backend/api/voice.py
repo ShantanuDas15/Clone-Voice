@@ -7,8 +7,16 @@ import uuid
 from typing import List
 
 import numpy as np
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
-                     UploadFile, status)
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
@@ -18,11 +26,16 @@ from backend.core.security import get_current_user
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.voice import VoiceProfileOut
-from backend.services.audio_processing import (preprocess_audio, save_upload,
-                                               validate_audio_file)
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           embed_speaker_async)
+from backend.services.audio_processing import (
+    preprocess_audio,
+    save_upload,
+    validate_audio_file,
+)
+from backend.services.tts_pipeline import (
+    InferenceQueueFullError,
+    InferenceTimeoutError,
+    embed_speaker_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +96,7 @@ async def _cleanup_failed_upload(
 @limiter.limit("10/minute")
 async def upload_audio(
     request: Request,
-    name: str = Form(...),
+    name: str = Form(..., min_length=1, max_length=255),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
