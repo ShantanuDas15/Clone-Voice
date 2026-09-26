@@ -174,3 +174,44 @@ def test_synthesize_offloads_db_query_embedding_load_and_persist_to_worker_threa
             f"{name} ran on the event-loop thread instead of a worker thread "
             f"(H5 regression) — it must be wrapped in asyncio.to_thread."
         )
+
+
+def test_google_callback_runs_db_work_off_the_event_loop_thread(client):
+    """HARDENING_PLAN.md P2-L5: `google_callback` must run its user lookup,
+    commit and refresh-token issue in a worker thread, not on the event loop."""
+    from unittest.mock import AsyncMock
+
+    from backend.api import auth as auth_module
+
+    threads = {}
+    real_sign_in = auth_module._sign_in_google_user
+    real_set_cookie = auth_module._set_refresh_cookie
+
+    def tracking_sign_in(db, email, user_info):
+        threads["db_work"] = threading.get_ident()
+        return real_sign_in(db, email, user_info)
+
+    def tracking_set_cookie(response, token):
+        # Called inline in the async handler: this is the event-loop thread.
+        threads["loop"] = threading.get_ident()
+        return real_set_cookie(response, token)
+
+    user_info = {
+        "email": "offload-google@example.com",
+        "email_verified": True,
+        "name": "Offload Google",
+    }
+    with patch(
+        "backend.api.auth.oauth.google.authorize_access_token",
+        new_callable=AsyncMock,
+        return_value={"userinfo": user_info},
+    ), patch.object(
+        auth_module, "_sign_in_google_user", side_effect=tracking_sign_in
+    ), patch.object(
+        auth_module, "_set_refresh_cookie", side_effect=tracking_set_cookie
+    ):
+        resp = client.get("/api/v1/auth/google/callback?code=c&state=s")
+
+    assert resp.status_code == 200
+    assert "access_token" in resp.json()
+    assert threads["db_work"] != threads["loop"]

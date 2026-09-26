@@ -1,5 +1,6 @@
 """Authentication API routes and handlers."""
 
+import asyncio
 import logging
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
@@ -177,40 +178,13 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.get("/google")
-async def google_login(request: Request):
-    """Redirect user to Google OAuth consent screen."""
-    redirect_uri = settings.GOOGLE_REDIRECT_URI or str(
-        request.url_for("google_callback")
-    )
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+def _sign_in_google_user(db: Session, email: str, user_info: dict) -> tuple[str, str]:
+    """Find, link or create the Google user and issue a refresh token.
 
-
-@router.get("/google/callback", response_model=TokenResponse)
-async def google_callback(
-    request: Request, response: Response, db: Session = Depends(get_db)
-):
-    """Handle the Google OAuth callback and return tokens."""
-    try:
-        token = await oauth.google.authorize_access_token(request)
-        user_info = token.get("userinfo")
-        if not user_info:
-            user_info = await oauth.google.parse_id_token(request, token)
-    except OAuthError as error:
-        logger.warning("OAuth error during Google callback: %s", error.error)
-        raise HTTPException(status_code=400, detail=f"OAuth error: {error.error}")
-    except Exception:
-        logger.exception("Unexpected error during Google OAuth callback")
-        raise HTTPException(status_code=400, detail="Invalid code or state")
-
-    email = user_info.get("email")
-    if not email:
-        raise HTTPException(status_code=400, detail="No email provided by Google")
-
-    if user_info.get("email_verified") is not True:
-        logger.warning("Google sign-in rejected: email not verified by provider")
-        raise HTTPException(status_code=400, detail="Google email is not verified")
-
+    All blocking DB work for the callback lives here so the async route can run
+    it off the event loop (HARDENING_PLAN.md finding P2-L5). Returns the user's
+    id (as a string) and the new refresh token.
+    """
     user = db.query(User).filter(User.email == email).first()
     if user:
         if user.provider == "local":
@@ -246,8 +220,48 @@ async def google_callback(
         db.refresh(user)
         logger.info("New user created via Google OAuth: user_id=%s", user.id)
 
-    access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = issue_refresh_token(db, user.id)
+    return str(user.id), refresh_token
+
+
+@router.get("/google")
+async def google_login(request: Request):
+    """Redirect user to Google OAuth consent screen."""
+    redirect_uri = settings.GOOGLE_REDIRECT_URI or str(
+        request.url_for("google_callback")
+    )
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/google/callback", response_model=TokenResponse)
+async def google_callback(
+    request: Request, response: Response, db: Session = Depends(get_db)
+):
+    """Handle the Google OAuth callback and return tokens."""
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get("userinfo")
+        if not user_info:
+            user_info = await oauth.google.parse_id_token(request, token)
+    except OAuthError as error:
+        logger.warning("OAuth error during Google callback: %s", error.error)
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error.error}")
+    except Exception:
+        logger.exception("Unexpected error during Google OAuth callback")
+        raise HTTPException(status_code=400, detail="Invalid code or state")
+
+    email = user_info.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="No email provided by Google")
+
+    if user_info.get("email_verified") is not True:
+        logger.warning("Google sign-in rejected: email not verified by provider")
+        raise HTTPException(status_code=400, detail="Google email is not verified")
+
+    user_id, refresh_token = await asyncio.to_thread(
+        _sign_in_google_user, db, email, user_info
+    )
+    access_token = create_access_token(data={"sub": user_id})
 
     _set_refresh_cookie(response, refresh_token)
     return TokenResponse(access_token=access_token)
