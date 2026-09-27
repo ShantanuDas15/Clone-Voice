@@ -54,6 +54,10 @@ def test_dockerfile_only_installs_runtime_requirements() -> None:
     install_lines = [line for line in dockerfile if "pip install" in line]
 
     # Two steps since P2-H3: torch alone from the CPU index, then everything.
+    # Since P2-L9 the second step installs from the hash-locked file, not
+    # the loose requirements.txt (whose ranges/transitive deps it still
+    # ultimately satisfies).
     assert len(install_lines) == 2
     assert not any("requirements-dev.txt" in line for line in install_lines)
-    assert sum("-r /tmp/requirements.txt" in line for line in install_lines) == 1
+    assert sum("-r /tmp/requirements.lock.txt" in line for line in install_lines) == 1
+    assert any("--require-hashes" in line for line in install_lines)
