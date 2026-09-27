@@ -59,7 +59,7 @@ def test_readiness_503_when_database_check_times_out(
 ) -> None:
     monkeypatch.setattr(main_module.settings, "READINESS_DB_TIMEOUT_SECONDS", 0.05)
 
-    def slow(_db):
+    def slow():
         time.sleep(0.5)
 
     with patch.object(main_module, "_check_database", side_effect=slow):
@@ -77,9 +77,51 @@ def test_readiness_503_when_model_missing_but_db_ok(client: TestClient) -> None:
     assert body["models"]["synthesizer"]["loaded"] is False
 
 
-def test_database_check_runs_real_select_1(db_session) -> None:
-    """The helper runs against a real (SQLite) session stamped at Alembic head."""
-    main_module._check_database(db_session)  # must not raise
+def test_database_check_runs_real_select_1(monkeypatch, db_session) -> None:
+    """P2-L8: `_check_database` takes no session argument any more — it opens
+    its own via `SessionLocal` and closes it. Point that at the real (SQLite)
+    per-test session, stamped at Alembic head, and confirm it still runs
+    clean."""
+    monkeypatch.setattr(main_module, "SessionLocal", lambda: db_session)
+    main_module._check_database()  # must not raise
+
+
+def test_check_database_opens_and_closes_its_own_session(monkeypatch) -> None:
+    """P2-L8: the readiness DB check must not depend on the request-scoped
+    `get_db` session — it opens (and always closes) a private one via the
+    module-level `SessionLocal`, so a check thread that outlives its
+    `asyncio.wait_for` timeout never touches a session another thread (or
+    FastAPI's own dependency teardown) might concurrently close."""
+
+    class FakeSession:
+        instances = []
+
+        def __init__(self) -> None:
+            self.closed = False
+            FakeSession.instances.append(self)
+
+        def execute(self, *_args, **_kwargs) -> None:
+            return None
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(main_module, "SessionLocal", FakeSession)
+    monkeypatch.setattr(main_module, "check_schema_current", lambda db: None)
+
+    main_module._check_database()
+
+    assert len(FakeSession.instances) == 1
+    assert FakeSession.instances[0].closed is True
+
+
+def test_readiness_takes_no_database_dependency() -> None:
+    """P2-L8: `readiness` must not accept a request-scoped `db` session — that
+    dependency is exactly what let a timed-out check thread outlive the
+    session FastAPI's teardown closes on the main thread."""
+    import inspect
+
+    assert "db" not in inspect.signature(main_module.readiness).parameters
 
 
 @pytest.mark.parametrize(

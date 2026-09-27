@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import backend.main as main_module
 from backend.core.config import settings
 from backend.core.database import Base, get_db
 from backend.core.migrations import get_head_revision
@@ -82,7 +83,7 @@ def db_session(create_tables):
 
 
 @pytest.fixture(scope="function")
-def client(db_session):
+def client(db_session, monkeypatch):
     """Provide a FastAPI test client wired to the isolated per-test DB session."""
 
     def override_get_db():
@@ -92,6 +93,12 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
+    # HARDENING_PLAN.md finding P2-L8: readiness's `_check_database` no longer
+    # takes the request-scoped `get_db` session (see main.py) — it opens its
+    # own via the module-level `SessionLocal` it imported. Point that at the
+    # same in-memory test engine `TestingSessionLocal` uses, so it still runs
+    # against the test DB instead of the real DATABASE_URL.
+    monkeypatch.setattr(main_module, "SessionLocal", TestingSessionLocal)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
