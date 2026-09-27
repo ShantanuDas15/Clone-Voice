@@ -19,6 +19,14 @@ jobs:
           python-version: "3.11"
       - run: pip install pip-audit==2.10.1
       # Fails the job on any known advisory in a pinned runtime dependency
-      # (HARDENING_PLAN.md finding P2-H2). Exact pins only: transitive deps are
-      # not resolved until a lock file exists (P2-L9).
+      # (HARDENING_PLAN.md finding P2-H2). Direct pins only.
       - run: pip-audit -r backend/requirements.txt --no-deps --disable-pip
+      # HARDENING_PLAN.md finding P2-L9: also scans the full transitive
+      # dependency tree pinned in requirements.lock.txt (torch excluded —
+      # see that file's header). PYSEC-2026-3447/CVE-2026-59890 is accepted:
+      # a macOS-sdist-only bug in setuptools 79.0.1, pinned there because
+      # every version that fixes it dropped `pkg_resources`, which the
+      # vendored webrtcvad needs (see requirements.constraints.txt).
+      - run: |
+          pip-audit -r backend/requirements.lock.txt --no-deps --disable-pip \
+            --ignore-vuln PYSEC-2026-3447

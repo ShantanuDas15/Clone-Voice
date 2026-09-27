@@ -29,20 +29,29 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copied on its own so this (multi-hundred-MB, torch-heavy) layer is cached
 # across ordinary code changes. Only requirements.txt (runtime deps) is
 # installed — dev/test tooling lives in requirements-dev.txt and never ships
-# into this image (HARDENING_PLAN.md finding L7).
+# into this image (HARDENING_PLAN.md finding L7). requirements.lock.txt
+# (HARDENING_PLAN.md finding P2-L9) pins every transitive dependency by
+# hash; see its header for how it's kept in sync with requirements.txt.
 COPY backend/requirements.txt /tmp/requirements.txt
+COPY backend/requirements.lock.txt /tmp/requirements.lock.txt
 
 # torch is installed first, from its own index (HARDENING_PLAN.md finding
 # P2-H3). The default PyPI wheel is the CUDA build and pulls ~6 GB of nvidia-*
 # libraries this CPU-default image never loads (7.9 GB vs 1.5 GB measured).
 # The version is read from requirements.txt so the pin lives in one place, and
 # the next step finds it already satisfied (`torch==X` also matches `X+cpu`)
-# without mixing package indexes.
+# without mixing package indexes. It's deliberately absent from
+# requirements.lock.txt (P2-L9's header explains why) so the hash-checked
+# install below can never try to re-verify/reinstall it against a CUDA-wheel
+# hash.
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 RUN grep -E '^torch==' /tmp/requirements.txt > /tmp/torch-requirement.txt \
     && pip install --no-cache-dir --index-url "${TORCH_INDEX_URL}" \
         -r /tmp/torch-requirement.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+# --require-hashes (P2-L9): every package below torch must match one of the
+# hashes pinned in requirements.lock.txt, not just resolve to a version that
+# merely satisfies requirements.txt's ranges/transitive deps.
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock.txt
 
 FROM python:3.11-slim
 

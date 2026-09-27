@@ -1,0 +1,31 @@
+# Overrides for two resolver footguns hit while generating
+# requirements.lock.txt (HARDENING_PLAN.md finding P2-L9). Passed to
+# `uv pip compile` via `-c`; not installed directly, not shipped in the image.
+
+# resemblyzer declares an unbounded `typing` dependency (the standalone
+# PyPI backport package, unrelated to the stdlib module or typing_extensions).
+# `uv pip compile` resolved that open range to a nonexistent "3.10.0.0" —
+# no such release exists on PyPI (real versions top out at 3.7.4.3);
+# `pip install --require-hashes` on the unconstrained lock fails outright.
+# Pin to the real latest release.
+typing==3.7.4.3
+
+# setuptools removed the bundled `pkg_resources` module (deprecated
+# upstream) starting at 82.0.0. The vendored `webrtcvad.py:1` does
+# `import pkg_resources`, so an unconstrained resolve picks a setuptools new
+# enough to break that import at runtime. 79.0.1 is the version already
+# verified working in this project's own dev venv (same version that
+# produces the pkg_resources DeprecationWarning already in the test suite's
+# known baseline warnings).
+#
+# Accepted risk: 79.0.1 carries PYSEC-2026-3447 (CVE-2026-59890), fixed in
+# 83.0.0 — but 83.0.0 no longer has pkg_resources, so no version is both
+# patched and compatible with webrtcvad. The bug itself is a Unicode
+# normalization mismatch in `sdist`'s MANIFEST.in exclude matching on macOS
+# APFS/HFS+, which only matters to someone BUILDING a source distribution on
+# a Mac; it has no runtime attack surface, and this project's builds run on
+# Linux (backend/Dockerfile: python:3.11-slim). `.github/workflows/
+# backend-audit.yml` passes `--ignore-vuln PYSEC-2026-3447` on the lock-file
+# scan for this reason. Revisit if webrtcvad ever drops or replaces its
+# `pkg_resources` import.
+setuptools==79.0.1

@@ -12,6 +12,8 @@ on:
     paths:
       - "backend/Dockerfile"
       - "backend/requirements.txt"
+      - "backend/requirements.lock.txt"
+      - "backend/requirements.constraints.txt"
       - "backend/alembic.ini"
       - "backend/alembic/**"
       - "backend/core/migrations.py"

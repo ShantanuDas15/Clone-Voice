@@ -117,7 +117,10 @@ def test_requirements_are_installed_in_builder_and_venv_copied_to_runtime():
     """pip runs where the compiler is; the runtime stage only copies the
     finished virtualenv and puts it on PATH."""
     builder, runtime = _dockerfile_stages()
-    assert "pip install --no-cache-dir -r /tmp/requirements.txt" in builder
+    assert (
+        "pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock.txt"
+        in builder
+    )
     assert "pip install" not in runtime
     assert "COPY --from=builder /opt/venv /opt/venv" in runtime
     assert 'ENV PATH="/opt/venv/bin:$PATH"' in runtime
@@ -130,7 +133,7 @@ def test_torch_is_installed_cpu_only_before_requirements():
     assert "ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu" in builder
     torch_step = builder.index('--index-url "${TORCH_INDEX_URL}"')
     requirements_step = builder.index(
-        "pip install --no-cache-dir -r /tmp/requirements.txt"
+        "pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock.txt"
     )
     assert torch_step < requirements_step
 
