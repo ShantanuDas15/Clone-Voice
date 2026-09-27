@@ -5,7 +5,24 @@ import logging
 
 from asgi_correlation_id import correlation_id
 
+from backend.core.config import settings
 from backend.main import configure_logging
+
+
+def test_configure_logging_uses_info_level_in_production(monkeypatch) -> None:
+    """P2-L7: DEBUG logs include per-request user ids and file paths, so the
+    root logger must stay at INFO unless APP_ENV is explicitly "development"."""
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    configure_logging()
+
+    assert logging.getLogger().level == logging.INFO
+
+
+def test_configure_logging_uses_debug_level_in_development(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    configure_logging()
+
+    assert logging.getLogger().level == logging.DEBUG
 
 
 def test_health_response_includes_request_id_header(client) -> None:

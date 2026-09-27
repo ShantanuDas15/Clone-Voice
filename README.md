@@ -49,6 +49,10 @@ Copy the example environment files and fill in the required keys (e.g., Google O
 ```bash
 cp backend/.env.example backend/.env
 ```
+`backend/.env.example` ships `APP_ENV=production` (INFO logging) so a
+deployment that copies it unedited doesn't run DEBUG logs by default
+(`HARDENING_PLAN.md` finding P2-L7). For verbose logging during local
+development, edit `backend/.env` and set `APP_ENV=development`.
 Optionally, also copy the root `.env.example` to override the Postgres
 credentials `docker-compose.yml` uses (`POSTGRES_USER`/`POSTGRES_PASSWORD`/
 `POSTGRES_DB`/`POSTGRES_PORT`) — it works with no `.env` here at all, since

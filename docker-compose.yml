@@ -63,6 +63,10 @@ services:
     # Secrets (JWT_SECRET_KEY, GOOGLE_CLIENT_SECRET, ...) come from your own
     # backend/.env (gitignored, never baked into the image — see
     # backend/.env.example and README.md "Environment Setup").
+    #
+    # HARDENING_PLAN.md finding P2-L7: this includes APP_ENV, which
+    # backend/.env.example now ships as "production" (INFO logging). Set
+    # APP_ENV=development in backend/.env for verbose DEBUG logs locally.
     env_file:
       - backend/.env
     environment:

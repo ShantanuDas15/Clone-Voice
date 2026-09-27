@@ -272,6 +272,15 @@ def test_root_env_example_documents_postgres_variables():
         assert key in root_env_example
 
 
+def test_backend_env_example_ships_app_env_as_production():
+    """P2-L7: `backend/.env.example` must not ship APP_ENV=development —
+    `cp backend/.env.example backend/.env` (README's documented step) must
+    not leave a deployment running DEBUG logging by default."""
+    backend_env_example = _read("backend/.env.example")
+    assert re.search(r"^APP_ENV=production\s*$", backend_env_example, re.MULTILINE)
+    assert not re.search(r"^APP_ENV=development\s*$", backend_env_example, re.MULTILINE)
+
+
 @pytest.mark.skipif(
     shutil.which("docker") is None,
     reason="docker CLI not available in this environment",
