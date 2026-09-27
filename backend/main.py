@@ -5,14 +5,13 @@ import logging.config
 from contextlib import asynccontextmanager
 
 from asgi_correlation_id import CorrelationIdFilter, CorrelationIdMiddleware
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.api.auth import router as auth_router
@@ -21,7 +20,7 @@ from backend.api.voice import router as voice_router
 from backend.core import metrics
 from backend.core.body_limit import BodySizeLimitMiddleware
 from backend.core.config import settings
-from backend.core.database import SessionLocal, get_db
+from backend.core.database import SessionLocal
 from backend.core.migrations import check_schema_current
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
@@ -193,10 +192,24 @@ app.include_router(
 )
 
 
-def _check_database(db: Session) -> None:
-    """Prove the DB is usable (``SELECT 1``) and migrated to the Alembic head."""
-    db.execute(text("SELECT 1"))
-    check_schema_current(db)
+def _check_database() -> None:
+    """Prove the DB is usable (``SELECT 1``) and migrated to the Alembic head.
+
+    HARDENING_PLAN.md finding P2-L8: opens and closes its own session here,
+    inside the worker thread this runs on via ``asyncio.to_thread`` — not the
+    request-scoped session ``get_db`` hands to the endpoint. That session is
+    closed by FastAPI's dependency teardown as soon as the endpoint returns;
+    if ``asyncio.wait_for`` timed out first, this thread could still be
+    inside ``db.execute`` while the request's teardown ran ``db.close()`` on
+    the very same (non-thread-safe) SQLAlchemy `Session` from another
+    thread. A private, thread-owned session removes the shared object.
+    """
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        check_schema_current(db)
+    finally:
+        db.close()
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -235,7 +248,7 @@ def liveness() -> dict:
 
 @app.get("/health/ready")
 @app.get("/health")
-async def readiness(db: Session = Depends(get_db)) -> JSONResponse:
+async def readiness() -> JSONResponse:
     """Readiness probe: 200 only when the app can actually serve requests.
 
     Requires (1) a working DB connection whose ``alembic_version`` is the
@@ -247,7 +260,7 @@ async def readiness(db: Session = Depends(get_db)) -> JSONResponse:
     """
     try:
         await asyncio.wait_for(
-            asyncio.to_thread(_check_database, db),
+            asyncio.to_thread(_check_database),
             timeout=settings.READINESS_DB_TIMEOUT_SECONDS,
         )
         database_ok = True
