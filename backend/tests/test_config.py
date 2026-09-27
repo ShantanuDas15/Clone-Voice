@@ -90,6 +90,15 @@ def test_tests_never_write_into_real_storage_dirs(tmp_path) -> None:
     assert settings.OUTPUT_DIR == str(tmp_path / "outputs")
 
 
+def test_app_env_defaults_to_production() -> None:
+    """P2-L7: a deployment that never sets APP_ENV (e.g. a minimal .env, or
+    one missing the line entirely) must get INFO logging, not DEBUG — DEBUG
+    is opt-in via an explicit APP_ENV=development."""
+    cfg = Settings(_env_file=None, DATABASE_URL="sqlite://", JWT_SECRET_KEY="x" * 40)
+
+    assert cfg.APP_ENV == "production"
+
+
 def test_session_secret_key_blank_by_default_is_accepted(monkeypatch) -> None:
     """L6: blank is a valid value — it signals 'fall back to JWT_SECRET_KEY',
     not an unset/invalid field, so existing deployments aren't broken."""

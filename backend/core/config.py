@@ -32,7 +32,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
-    APP_ENV: str = "development"
+    # HARDENING_PLAN.md finding P2-L7: production is the fail-safe default —
+    # a deployment that forgets to set this (or copies backend/.env.example
+    # unedited) gets INFO logging, not DEBUG lines carrying per-request user
+    # ids and file paths. Set to "development" for verbose local debugging.
+    APP_ENV: str = "production"
     DEVICE: str = "cpu"
     # HARDENING_PLAN.md finding P2-L11: torch's CPU thread count. 0 = follow the
     # container CPU limit (cgroup quota) when it is tighter than the host's
