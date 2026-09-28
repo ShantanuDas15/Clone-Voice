@@ -27,9 +27,13 @@ def _upload(client: TestClient, headers: dict, name: str):
     )
 
 
-@pytest.mark.parametrize("name", ["", "x" * (MAX_NAME + 1)])
+@pytest.mark.parametrize("name", ["", "x" * (MAX_NAME + 1), "   ", "\t\n "])
 def test_signup_rejects_out_of_bounds_name(client: TestClient, name: str):
-    """Empty and over-length signup names are rejected with 422."""
+    """Empty, over-length, and whitespace-only signup names are rejected with 422.
+
+    HARDENING_PLAN.md finding P2-L1: `min_length=1` alone counts characters,
+    not content, so a whitespace-only string needs its own check.
+    """
     assert _signup(client, name).status_code == 422
 
 
@@ -38,11 +42,23 @@ def test_signup_accepts_name_at_limit(client: TestClient):
     assert _signup(client, "x" * MAX_NAME).status_code == 201
 
 
-@pytest.mark.parametrize("name", ["", "x" * (MAX_NAME + 1)])
+def test_signup_trims_surrounding_whitespace_from_name(client: TestClient):
+    """Leading/trailing whitespace is stripped before the name is stored."""
+    resp = _signup(client, "  Padded Name  ")
+    assert resp.status_code == 201
+    token = resp.json()["access_token"]
+    me = client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    assert me["name"] == "Padded Name"
+
+
+@pytest.mark.parametrize("name", ["", "x" * (MAX_NAME + 1), "   ", "\t\n "])
 def test_upload_rejects_out_of_bounds_name_before_saving(
     client: TestClient, auth_headers, name: str  # noqa: F811
 ):
-    """Bad upload names get 422 before any file is saved or inference runs."""
+    """Bad upload names — including whitespace-only — get 422 before any
+    file is saved or inference runs (HARDENING_PLAN.md finding P2-L1)."""
     with patch("backend.api.voice.save_upload") as save, patch(
         "backend.api.voice.embed_speaker_async"
     ) as embed:
@@ -57,3 +73,12 @@ def test_upload_accepts_name_at_limit(client: TestClient, auth_headers):  # noqa
     resp = _upload(client, auth_headers, "x" * MAX_NAME)
     assert resp.status_code == 201
     assert resp.json()["name"] == "x" * MAX_NAME
+
+
+def test_upload_trims_surrounding_whitespace_from_name(
+    client: TestClient, auth_headers  # noqa: F811
+):
+    """Leading/trailing whitespace is stripped from the upload name too."""
+    resp = _upload(client, auth_headers, "  Padded Name  ")
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "Padded Name"
