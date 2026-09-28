@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import os
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -19,12 +19,10 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import (
-    InferenceQueueFullError,
-    InferenceTimeoutError,
-    free_gpu_memory,
-    run_inference_pipeline,
-)
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           free_gpu_memory,
+                                           run_inference_pipeline)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +74,19 @@ def _persist_generation(db: Session, generation: Generation) -> None:
     db.refresh(generation)
 
 
+def _load_profile_and_release(db: Session, profile_id) -> Optional[VoiceProfile]:
+    """Look up a voice profile and close the session in one thread dispatch.
+
+    HARDENING_PLAN.md finding P2-M1: doing the query and the close as two
+    separate `asyncio.to_thread` calls leaves an event-loop hop between them
+    where the transaction is still open; running both synchronously here
+    means there is no scheduling point in between for it to be observed.
+    """
+    profile = db.query(VoiceProfile).filter(VoiceProfile.id == profile_id).first()
+    db.close()
+    return profile
+
+
 @router.post("", response_class=FileResponse)
 @limiter.limit("5/minute")
 async def synthesize(
@@ -85,10 +96,17 @@ async def synthesize(
     db: Session = Depends(get_db),
 ):
     """Synthesize speech from text using a given voice profile."""
+    # HARDENING_PLAN.md finding P2-M1: the auth lookup left a transaction (and
+    # its pooled connection) open on this session. The profile query and the
+    # close must happen inside the *same* thread dispatch: two separate
+    # `await asyncio.to_thread(...)` calls each yield to the event loop, and
+    # under a big enough burst of simultaneous requests that gap is long
+    # enough for the connection to be observed sitting "idle in transaction"
+    # (confirmed under real concurrent load against a real Postgres — see the
+    # P2-M1 log row's 2026-09-28 follow-up). Doing both in one synchronous
+    # function closes that gap entirely, not just narrows it.
     profile = await asyncio.to_thread(
-        lambda: db.query(VoiceProfile)
-        .filter(VoiceProfile.id == req.voice_profile_id)
-        .first()
+        _load_profile_and_release, db, req.voice_profile_id
     )
 
     if not profile or profile.deleted_at is not None:
@@ -106,15 +124,12 @@ async def synthesize(
             detail="Voice profile is not ready for synthesis",
         )
 
-    # HARDENING_PLAN.md finding P2-M1: the auth lookup and profile query left a
-    # transaction (and its pooled connection) open on this session. Copy what
-    # inference needs into plain locals and release the connection now, so a
-    # request queued for or running inference doesn't hold one "idle in
-    # transaction". The session reconnects lazily for the persist below.
+    # Copy what inference needs into plain locals; the profile row's already-
+    # loaded scalar columns stay readable after the session closed above. The
+    # session reconnects lazily for the persist below.
     user_id = current_user.id
     profile_id = profile.id
     embedding_path = profile.embedding_path
-    await asyncio.to_thread(db.close)
 
     try:
         embedding = await asyncio.to_thread(np.load, embedding_path)
