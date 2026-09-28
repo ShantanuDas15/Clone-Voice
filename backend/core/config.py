@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     # are rejected immediately with 429, never counting the request(s)
     # currently holding the semaphore.
     INFERENCE_MAX_WAITERS: int = 10
+    # HARDENING_PLAN.md finding P2-L10: preprocess_audio's decode/resample/trim
+    # ran unbounded outside `_inference_semaphore`, so concurrent uploads (the
+    # only existing bound is the per-IP rate limit) could each run a full
+    # decode in parallel with the forward pass the semaphore protects.
+    # PREPROCESS_MAX_CONCURRENCY caps how many of those can run at once.
+    PREPROCESS_MAX_CONCURRENCY: int = 4
     # INFERENCE_ACQUIRE_TIMEOUT_SECONDS: max time a queued request waits for
     # a free slot before giving up with 503.
     INFERENCE_ACQUIRE_TIMEOUT_SECONDS: float = 10.0

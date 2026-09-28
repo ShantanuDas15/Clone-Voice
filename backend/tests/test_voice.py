@@ -72,6 +72,35 @@ def test_upload_valid_mp3(client: TestClient, auth_headers):
         assert response.status_code == 201
 
 
+def test_upload_acquires_preprocess_semaphore(client: TestClient, auth_headers):
+    """HARDENING_PLAN.md P2-L10: the upload route must acquire
+    preprocess_semaphore around the decode/resample call, not just leave it
+    defined and unused in audio_processing.py."""
+
+    class _TrackingSemaphore:
+        def __init__(self):
+            self.entered = False
+
+        async def __aenter__(self):
+            self.entered = True
+
+        async def __aexit__(self, *exc_info):
+            return False
+
+    tracker = _TrackingSemaphore()
+
+    with patch("backend.api.voice.preprocess_semaphore", tracker):
+        wav_data = create_dummy_wav()
+        files = {"file": ("test.wav", wav_data, "audio/wav")}
+        data = {"name": "Tracked Voice"}
+        response = client.post(
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
+        )
+
+    assert response.status_code == 201
+    assert tracker.entered, "Upload did not acquire preprocess_semaphore"
+
+
 def test_upload_invalid_format_txt(client: TestClient, auth_headers):
     files = {"file": ("test.txt", b"hello text", "text/plain")}
     data = {"name": "Text Voice"}
