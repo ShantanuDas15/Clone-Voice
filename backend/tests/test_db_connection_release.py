@@ -1,5 +1,6 @@
 """HARDENING_PLAN.md finding P2-M1: no DB transaction is held during inference."""
 
+import uuid
 from unittest.mock import patch
 
 import numpy as np
@@ -7,6 +8,9 @@ import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
+from backend.api.synthesize import _load_profile_and_release
+from backend.models.user import User
+from backend.models.voice_profile import VoiceProfile
 from backend.tests.test_synthesize import create_dummy_wav, upload_profile
 
 
@@ -98,3 +102,44 @@ def test_upload_holds_no_transaction_during_embedding(
     assert seen["in_transaction"] is False
     profiles = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
     assert [p["name"] for p in profiles] == ["Release Voice"]
+
+
+def test_load_profile_and_release_closes_session_in_one_dispatch(db_session):
+    """HARDENING_PLAN.md finding P2-M1 (2026-09-28 follow-up): the profile
+    query and the session close must happen in a single synchronous call, so
+    there is no `await` point between them where a real Postgres connection
+    could be observed sitting idle in transaction under concurrent load
+    (confirmed with `pg_stat_activity` against a real Postgres instance)."""
+    user = User(
+        email="m1-unit@example.com",
+        name="M1 Unit",
+        hashed_password="not-a-real-hash",
+        provider="local",
+    )
+    db_session.add(user)
+    db_session.commit()
+    profile = VoiceProfile(
+        user_id=user.id,
+        name="M1 Unit Profile",
+        audio_sample_path="/tmp/unused.wav",
+        embedding_path="/tmp/unused.npy",
+        status="ready",
+    )
+    db_session.add(profile)
+    db_session.commit()
+    profile_id = profile.id
+
+    result = _load_profile_and_release(db_session, profile_id)
+
+    assert result is not None
+    assert result.id == profile_id
+    assert db_session.in_transaction() is False
+
+
+def test_load_profile_and_release_returns_none_for_missing_profile(db_session):
+    """A profile id with no matching row must return None, not raise, and
+    still leave the session out of a transaction."""
+    result = _load_profile_and_release(db_session, uuid.uuid4())
+
+    assert result is None
+    assert db_session.in_transaction() is False
