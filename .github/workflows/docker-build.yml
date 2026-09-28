@@ -92,3 +92,152 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  # HARDENING_PLAN.md finding P2-L4: the job above can't exercise this,
+  # because `backend` never becomes healthy without real model weights (see
+  # its own header comment). This job downloads the real ~424MB SV2TTS
+  # checkpoints (MIT licensed, see backend/download_weights.py) and boots the
+  # full stack so an actual in-flight synthesis can be interrupted with a
+  # real `docker stop`, confirming stop_grace_period (docker-compose.yml) and
+  # --timeout-graceful-shutdown (backend/Dockerfile) actually let it drain
+  # instead of being SIGKILLed. Manual-only (workflow_dispatch): the weight
+  # download and real CPU inference add real time and bandwidth cost that
+  # the always-on push/schedule triggers above should not pay on every run.
+  graceful-shutdown-with-real-weights:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create backend/.env for compose (gitignored, never committed)
+        run: |
+          cp backend/.env.example backend/.env
+          sed -i "s/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$(openssl rand -hex 32)/" backend/.env
+
+      - name: Build the compose-managed backend image
+        run: docker compose build backend
+
+      - name: Fetch real model weights into the shared volume
+        run: docker compose run --rm --no-deps -T backend python -m backend.download_weights --fetch
+
+      - name: Start the full stack
+        run: docker compose up -d backend
+
+      - name: Wait for /health/ready
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health/ready || true)
+            echo "attempt ${i}: /health/ready -> ${code}"
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "backend never became ready within 5 minutes"
+          docker compose logs --no-color backend migrate db
+          exit 1
+
+      # Bypasses the upload/embedding flow entirely (a synthetic test tone
+      # can fail resemblyzer's real speech VAD unpredictably) — this test is
+      # about the shutdown path, not embedding extraction, which P2-H2's own
+      # checkpoint verification already exercises separately.
+      - name: Create a real user and a ready voice profile directly in the DB
+        run: |
+          output=$(docker compose exec -T backend python - <<'PYEOF'
+          import numpy as np
+
+          from backend.core.database import SessionLocal
+          from backend.core.security import hash_password
+          from backend.models.user import User
+          from backend.models.voice_profile import VoiceProfile
+
+          db = SessionLocal()
+          user = User(
+              email="ci-shutdown-test@example.com",
+              name="CI Shutdown Test",
+              hashed_password=hash_password("Password123!"),
+              provider="local",
+          )
+          db.add(user)
+          db.commit()
+          db.refresh(user)
+
+          embedding_path = "/app/backend/uploads/ci_shutdown_embed.npy"
+          np.save(embedding_path, np.ones(256, dtype=np.float32))
+
+          profile = VoiceProfile(
+              user_id=user.id,
+              name="CI Shutdown Profile",
+              audio_sample_path=embedding_path,
+              embedding_path=embedding_path,
+              status="ready",
+          )
+          db.add(profile)
+          db.commit()
+          db.refresh(profile)
+          print(f"PROFILE_ID={profile.id}")
+          db.close()
+          PYEOF
+          )
+          echo "$output"
+          echo "PROFILE_ID=$(echo "$output" | grep '^PROFILE_ID=' | cut -d= -f2)" >> "$GITHUB_ENV"
+
+      - name: Log in as the CI test user
+        run: |
+          token=$(curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ci-shutdown-test@example.com","password":"Password123!"}' \
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+          test -n "$token"
+          echo "ACCESS_TOKEN=${token}" >> "$GITHUB_ENV"
+
+      - name: Start a synthesis request, then docker-stop the backend mid-flight
+        run: |
+          set -x
+          text="The quick brown fox jumps over the lazy dog, again and again, while the sun sets slowly behind the distant hills and the evening wind begins to rise across the open field."
+
+          curl -s -o /tmp/synth_out.wav -w '%{http_code}' \
+            -X POST http://127.0.0.1:8000/api/v1/synthesize \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d "$(python3 -c 'import json,sys; print(json.dumps({"voice_profile_id": sys.argv[1], "text": sys.argv[2]}))' "${PROFILE_ID}" "${text}")" \
+            > /tmp/synth_status.txt &
+          curl_pid=$!
+
+          # Give it time to actually start decoding before we pull the plug.
+          sleep 3
+
+          container_id=$(docker compose ps -q backend)
+          test -n "$container_id"
+
+          start=$(date +%s)
+          # No -t override: this must respect docker-compose.yml's own
+          # stop_grace_period (70s), the exact value under test.
+          docker compose stop backend
+          end=$(date +%s)
+          elapsed=$((end - start))
+          echo "docker compose stop took ${elapsed}s"
+
+          wait "$curl_pid" || true
+          echo "synthesis request finished with HTTP status: $(cat /tmp/synth_status.txt)"
+
+          exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$container_id")
+          echo "Container exit code: ${exit_code}"
+
+          {
+            echo "docker compose stop elapsed: ${elapsed}s (must be < 70s stop_grace_period)"
+            echo "container exit code: ${exit_code} (must be 0, not 137/SIGKILL)"
+            echo "synthesis HTTP status: $(cat /tmp/synth_status.txt)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          test "$exit_code" = "0"
+          test "$elapsed" -lt 70
+
+      - name: Backend logs (diagnostics)
+        if: failure()
+        run: docker compose logs --no-color backend migrate db
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
