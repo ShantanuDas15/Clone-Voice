@@ -7,16 +7,8 @@ import uuid
 from typing import List
 
 import numpy as np
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-    status,
-)
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile, status)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -27,16 +19,13 @@ from backend.core.security import get_current_user
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.voice import VoiceProfileOut
-from backend.services.audio_processing import (
-    preprocess_audio,
-    save_upload,
-    validate_audio_file,
-)
-from backend.services.tts_pipeline import (
-    InferenceQueueFullError,
-    InferenceTimeoutError,
-    embed_speaker_async,
-)
+from backend.services.audio_processing import (preprocess_audio,
+                                               preprocess_semaphore,
+                                               save_upload,
+                                               validate_audio_file)
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           embed_speaker_async)
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +109,11 @@ async def upload_audio(
     logger.info("Audio uploaded by user_id=%s — file=%s", user_id, file_path)
 
     try:
-        y_processed = await asyncio.to_thread(preprocess_audio, file_path)
+        # HARDENING_PLAN.md finding P2-L10: bound how many uploads decode
+        # audio at once, so this doesn't compete unbounded with the model
+        # forward pass the inference semaphore protects.
+        async with preprocess_semaphore:
+            y_processed = await asyncio.to_thread(preprocess_audio, file_path)
     except HTTPException:
         # Unusable input (too short/silent/long/undecodable): don't keep the
         # user's audio on disk for a profile that will never exist.

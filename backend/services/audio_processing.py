@@ -1,5 +1,6 @@
 """Audio file validation and preprocessing utilities."""
 
+import asyncio
 import logging
 import os
 import shutil
@@ -14,6 +15,14 @@ from backend.core.config import settings
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
+
+# HARDENING_PLAN.md finding P2-L10: bounds how many uploads may run
+# preprocess_audio's decode/resample/trim at once. Callers `async with` this
+# around their `asyncio.to_thread(preprocess_audio, ...)` call; it is a plain
+# semaphore (no queue-depth cap or timeout, unlike `_inference_semaphore` in
+# tts_pipeline.py) since a stalled decode just delays that one upload, not a
+# shared GPU/CPU model permit.
+preprocess_semaphore = asyncio.Semaphore(settings.PREPROCESS_MAX_CONCURRENCY)
 
 
 def validate_audio_file(file: UploadFile) -> str:
