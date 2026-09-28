@@ -16,6 +16,7 @@ from sqlalchemy.sql import func
 from backend.core.database import get_db
 from backend.core.rate_limit import limiter
 from backend.core.security import get_current_user
+from backend.core.validators import require_nonblank_name
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.voice import VoiceProfileOut
@@ -98,6 +99,13 @@ async def upload_audio(
     db: Session = Depends(get_db),
 ):
     """Validate, process, and embed an uploaded audio sample."""
+    # HARDENING_PLAN.md finding P2-L1: `Form(min_length=1)` alone still
+    # accepts a whitespace-only name; reject it before any file work.
+    try:
+        name = require_nonblank_name(name)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
     # HARDENING_PLAN.md finding P2-M1: release the connection the auth lookup
     # left open in a transaction before the slow decode/embedding work. The
     # session reconnects lazily when the profile row is persisted.

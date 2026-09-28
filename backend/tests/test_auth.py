@@ -544,3 +544,14 @@ def test_update_me(client: TestClient):
     # Invalid update
     res = client.patch("/api/v1/auth/me", headers=auth_headers, json={"name": ""})
     assert res.status_code == 422
+
+    # HARDENING_PLAN.md finding P2-L1: whitespace-only is blank too
+    res = client.patch("/api/v1/auth/me", headers=auth_headers, json={"name": "   "})
+    assert res.status_code == 422
+
+    # Leading/trailing whitespace is trimmed before it's stored
+    res = client.patch(
+        "/api/v1/auth/me", headers=auth_headers, json={"name": "  Padded  "}
+    )
+    assert res.status_code == 200
+    assert res.json()["name"] == "Padded"
