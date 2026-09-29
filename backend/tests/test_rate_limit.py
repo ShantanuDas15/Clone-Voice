@@ -127,7 +127,7 @@ def test_voice_upload_rate_limit_enforced(client: TestClient):
             resp = client.post(
                 "/api/v1/voice/upload",
                 headers=headers,
-                data={"name": "RL Upload"},
+                data={"name": "RL Upload", "consent_confirmed": "true"},
                 files={"file": ("test.wav", b"\x00", "audio/wav")},
             )
             responses.append(resp)

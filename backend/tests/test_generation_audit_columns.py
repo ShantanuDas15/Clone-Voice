@@ -4,6 +4,7 @@ ORM level and via a matching Alembic migration."""
 
 import subprocess
 import uuid
+from datetime import datetime, timezone
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -42,6 +43,7 @@ def _make_user_and_profile(db_session):
         audio_sample_path="/data/a.wav",
         embedding_path="/data/a_embed.npy",
         status="ready",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()

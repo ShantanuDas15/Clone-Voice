@@ -6,6 +6,7 @@ import os
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 
 from backend.models.generation import Generation
 from backend.models.user import User
@@ -136,6 +137,7 @@ def test_get_protected_paths_includes_active_voice_profile_files(db_session):
         audio_sample_path="/data/uploads/u1/a.wav",
         embedding_path="/data/uploads/u1/a_embed.npy",
         status="ready",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()
@@ -157,6 +159,7 @@ def test_get_protected_paths_excludes_soft_deleted_voice_profile(db_session):
         embedding_path="/data/uploads/u1/deleted_embed.npy",
         status="ready",
         deleted_at=func.now(),
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()
@@ -177,6 +180,7 @@ def test_get_protected_paths_skips_blank_embedding_path(db_session):
         audio_sample_path="/data/uploads/u1/failed.wav",
         embedding_path="",
         status="failed",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()
@@ -196,6 +200,7 @@ def test_get_protected_paths_includes_generation_output_files(db_session):
         audio_sample_path="/data/uploads/u1/a.wav",
         embedding_path="/data/uploads/u1/a_embed.npy",
         status="ready",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()
@@ -266,6 +271,7 @@ def test_periodic_cleanup_protects_files_referenced_via_session_factory(
         audio_sample_path=str(protected_file),
         embedding_path=str(protected_file),
         status="ready",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()

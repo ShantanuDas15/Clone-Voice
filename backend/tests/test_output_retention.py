@@ -11,7 +11,8 @@ from backend.core.config import settings
 from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
-from backend.services.storage_cleanup import _run_cleanup_pass, get_protected_paths
+from backend.services.storage_cleanup import (_run_cleanup_pass,
+                                              get_protected_paths)
 
 
 def _touch(path: str, age_hours: float) -> None:
@@ -33,6 +34,7 @@ def profile(db_session):
         audio_sample_path="/nonexistent/a.wav",
         embedding_path="/nonexistent/a.npy",
         status="ready",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(p)
     db_session.commit()

@@ -23,7 +23,10 @@ def _upload(client: TestClient, headers: dict, name: str):
     """POST a valid WAV upload with the given profile name."""
     files = {"file": ("t.wav", create_dummy_wav(), "audio/wav")}
     return client.post(
-        "/api/v1/voice/upload", headers=headers, data={"name": name}, files=files
+        "/api/v1/voice/upload",
+        headers=headers,
+        data={"name": name, "consent_confirmed": "true"},
+        files=files,
     )
 
 

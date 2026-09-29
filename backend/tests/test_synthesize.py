@@ -3,6 +3,7 @@
 import io
 import uuid
 import wave
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import numpy as np
@@ -58,7 +59,10 @@ def upload_profile(client: TestClient, headers: dict) -> str:
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}
     up_res = client.post(
-        "/api/v1/voice/upload", headers=headers, data={"name": "Syn Voice"}, files=files
+        "/api/v1/voice/upload",
+        headers=headers,
+        data={"name": "Syn Voice", "consent_confirmed": "true"},
+        files=files,
     )
     return up_res.json()["id"]
 
@@ -378,6 +382,7 @@ def test_synthesize_other_users_non_ready_profile_still_403(
         audio_sample_path="",
         embedding_path="",
         status="failed",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()

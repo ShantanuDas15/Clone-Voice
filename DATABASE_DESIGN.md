@@ -99,6 +99,7 @@ Stores the metadata and filesystem references for the AI voice embeddings extrac
 | `audio_sample_path`| `TEXT` | `NOT NULL` | Relative path to the raw `.wav` upload in the filesystem/S3. |
 | `embedding_path` | `TEXT` | `NOT NULL` | Relative path to the pre-computed `.npy` 256-dim tensor. |
 | `status` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'ready'` | Lifecycle state: `processing`, `ready`, `failed`. |
+| `consent_confirmed_at` | `TIMESTAMPTZ` | `NOT NULL` | Responsible-use safeguard: when the uploader attested they have the right to use this voice sample. Captured at upload time, not a separate boolean. |
 | `created_at` | `TIMESTAMPTZ`| `NOT NULL`, `DEFAULT NOW()` | Record creation timestamp. |
 | `updated_at` | `TIMESTAMPTZ`| `NOT NULL`, `DEFAULT NOW()` | Auto-updated on modification. |
 | `deleted_at` | `TIMESTAMPTZ`| `NULL` | Soft delete marker. Protects generation history. |
