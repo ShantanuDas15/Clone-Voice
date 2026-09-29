@@ -84,6 +84,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan events."""
+    if settings.REQUIRE_EMAIL_VERIFICATION and settings.EMAIL_BACKEND in (
+        "disabled",
+        "console",
+    ):
+        # Local signups could never verify (or, with "console", the links
+        # would land in the logs): make the misconfiguration loud at boot.
+        logger.error(
+            "REQUIRE_EMAIL_VERIFICATION is on but EMAIL_BACKEND=%s cannot deliver "
+            "mail — new local accounts will be unable to upload or synthesize. "
+            "Configure EMAIL_BACKEND=resend|smtp, or set "
+            "REQUIRE_EMAIL_VERIFICATION=false for local development.",
+            settings.EMAIL_BACKEND,
+        )
     logger.info("Starting CloneVoice API — loading SV2TTS models...")
     load_models(device=settings.DEVICE)
     if settings.READINESS_WARMUP_ENABLED:

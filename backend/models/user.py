@@ -19,6 +19,9 @@ class User(Base):
     avatar_url = Column(Text, nullable=True)
     provider = Column(String(50), nullable=False, default="local")
     hashed_password = Column(Text, nullable=True)
+    # When the owner proved control of `email` (via the emailed link, a password
+    # reset, or Google, which verifies it itself). NULL = unverified.
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
     preferences = Column(JSON_TYPE, default=dict)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

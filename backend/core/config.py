@@ -1,9 +1,9 @@
 """Application configuration and environment settings."""
 
 from pathlib import Path
-from typing import List
+from typing import List, Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,6 +78,35 @@ class Settings(BaseSettings):
     TRUSTED_PROXY_COUNT: int = 0
     AUTH_LOGIN_RATE_LIMIT: str = "10/minute"
     AUTH_SIGNUP_RATE_LIMIT: str = "5/minute"
+    # Rate limits for the endpoints that send email (resend-verification,
+    # forgot-password) and for the ones that consume an emailed token.
+    AUTH_EMAIL_RATE_LIMIT: str = "5/hour"
+    AUTH_TOKEN_RATE_LIMIT: str = "20/minute"
+
+    # HARDENING_PLAN.md finding P2-H1: local signup does not prove ownership of
+    # the address. When True (the fail-safe default), an account whose email is
+    # unverified may sign in but cannot upload a voice or synthesize. Google
+    # accounts count as verified. Set False only for local development without
+    # an email provider.
+    REQUIRE_EMAIL_VERIFICATION: bool = True
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+    # Base URL of the web app; emailed links point at
+    # {FRONTEND_URL}/verify-email?token=... and /reset-password?token=...
+    FRONTEND_URL: str = "http://localhost:3000"
+    # How outgoing mail is delivered. "disabled" (the default) sends nothing
+    # and logs that fact; "console" logs the message INCLUDING its link, for
+    # local development only; "resend" uses the Resend HTTPS API; "smtp" uses
+    # an SMTP relay. Hosts that block outbound SMTP should use "resend".
+    EMAIL_BACKEND: Literal["disabled", "console", "smtp", "resend"] = "disabled"
+    EMAIL_FROM: str = ""
+    RESEND_API_KEY: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    # STARTTLS on the SMTP connection; set False only for a local test relay.
+    SMTP_STARTTLS: bool = True
     # HARDENING_PLAN.md finding H6: bound the single process-wide inference
     # semaphore so callers fail fast instead of queuing unbounded.
     # INFERENCE_MAX_WAITERS: requests already queued for a slot beyond this
@@ -155,6 +184,30 @@ class Settings(BaseSettings):
         if v < 0:
             raise ValueError("TORCH_NUM_THREADS must be >= 0 (0 = auto)")
         return v
+
+    @field_validator("EMAIL_VERIFICATION_EXPIRE_HOURS", "PASSWORD_RESET_EXPIRE_MINUTES")
+    @classmethod
+    def token_lifetime_positive(cls, v: int) -> int:
+        """Reject a zero or negative lifetime, which would mint dead tokens."""
+        if v <= 0:
+            raise ValueError("email token lifetimes must be > 0")
+        return v
+
+    @model_validator(mode="after")
+    def email_backend_is_configured(self) -> "Settings":
+        """Fail at startup, not at the first signup, on a half-set provider."""
+        required = {
+            "resend": {"RESEND_API_KEY": self.RESEND_API_KEY},
+            "smtp": {"SMTP_HOST": self.SMTP_HOST},
+        }.get(self.EMAIL_BACKEND)
+        if self.EMAIL_BACKEND != "disabled":
+            required = {**(required or {}), "EMAIL_FROM": self.EMAIL_FROM}
+        missing = [name for name, value in (required or {}).items() if not value]
+        if missing:
+            raise ValueError(
+                f"EMAIL_BACKEND={self.EMAIL_BACKEND} requires: {', '.join(missing)}"
+            )
+        return self
 
     @field_validator("UPLOAD_DIR", "OUTPUT_DIR")
     @classmethod

@@ -20,6 +20,17 @@ from backend.services.tts_pipeline import load_mock_models
 # their own setup/teardown.
 app.state.limiter.enabled = False
 
+
+@pytest.fixture(autouse=True)
+def email_verification_off_by_default(monkeypatch):
+    """Most tests sign up a local user and go straight to a gated endpoint.
+
+    The gate itself is covered in test_email_verification.py, which switches
+    it back on explicitly.
+    """
+    monkeypatch.setattr(settings, "REQUIRE_EMAIL_VERIFICATION", False)
+
+
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 # Session-scoped engine — one connection kept alive for the entire test session.

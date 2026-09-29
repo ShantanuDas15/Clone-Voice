@@ -16,7 +16,7 @@ from sqlalchemy.sql import func
 
 from backend.core.database import get_db
 from backend.core.rate_limit import limiter
-from backend.core.security import get_current_user
+from backend.core.security import get_current_user, get_verified_user
 from backend.core.validators import require_nonblank_name
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
@@ -102,7 +102,7 @@ async def upload_audio(
     name: str = Form(..., min_length=1, max_length=255),
     consent_confirmed: bool = Form(...),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     db: Session = Depends(get_db),
 ):
     """Validate, process, and embed an uploaded audio sample."""

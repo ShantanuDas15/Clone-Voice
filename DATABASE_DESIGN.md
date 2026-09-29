@@ -77,6 +77,7 @@ Stores authentication identity and core profile data. Designed to handle both lo
 | `name` | `VARCHAR(255)` | `NOT NULL` | Display name of the user. |
 | `provider` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'local'` | Identifies auth source (`local`, `google`, `github`). |
 | `hashed_password`| `TEXT` | `NULL` | Bcrypt hash. Nullable because OAuth users do not have a password. |
+| `email_verified_at` | `TIMESTAMPTZ` | `NULL` | When the owner proved control of `email` (emailed link, password reset, or Google). `NULL` = unverified; unverified accounts cannot upload or synthesize while `REQUIRE_EMAIL_VERIFICATION` is on. |
 | `avatar_url` | `TEXT` | `NULL` | Link to profile picture (e.g., from Google OAuth). |
 | `preferences` | `JSONB` | `DEFAULT '{}'` | Extensible UI/UX preferences (e.g., dark mode, default voice). |
 | `created_at` | `TIMESTAMPTZ`| `NOT NULL`, `DEFAULT NOW()` | Record creation timestamp. |

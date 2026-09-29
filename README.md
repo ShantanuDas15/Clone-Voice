@@ -53,6 +53,12 @@ cp backend/.env.example backend/.env
 deployment that copies it unedited doesn't run DEBUG logs by default
 (`HARDENING_PLAN.md` finding P2-L7). For verbose logging during local
 development, edit `backend/.env` and set `APP_ENV=development`.
+Local accounts must verify their email before they can upload a voice or
+synthesize (`REQUIRE_EMAIL_VERIFICATION=true`), so a fresh `backend/.env` needs
+a mail backend: set `EMAIL_BACKEND=resend` (or `smtp`) with `EMAIL_FROM`, or
+for local development `EMAIL_BACKEND=console` (logs each message, link
+included) or `REQUIRE_EMAIL_VERIFICATION=false`. Sign-in with Google counts as
+verified. See the "Email verification" block in `backend/.env.example`.
 Optionally, also copy the root `.env.example` to override the Postgres
 credentials `docker-compose.yml` uses (`POSTGRES_USER`/`POSTGRES_PASSWORD`/
 `POSTGRES_DB`/`POSTGRES_PORT`) — it works with no `.env` here at all, since
