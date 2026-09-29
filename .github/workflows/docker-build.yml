@@ -11,6 +11,8 @@ on:
   push:
     paths:
       - "backend/Dockerfile"
+      - "backend/serve.py"
+      - "railway.toml"
       - "backend/requirements.txt"
       - "backend/requirements.lock.txt"
       - "backend/requirements.constraints.txt"
@@ -46,6 +48,33 @@ jobs:
           docker run --rm clonevoice-backend python -c "import torch; assert torch.version.cuda is None, torch.version.cuda; print('torch', torch.__version__)"
           docker run --rm clonevoice-backend python -c "import webrtcvad, resemblyzer; print('webrtcvad + resemblyzer import OK')"
           test "$(docker run --rm clonevoice-backend id -u)" = "1000"
+
+      # HARDENING_PLAN.md R1: what Railway relies on, checked on real Docker.
+      # A fresh named volume is root-owned, like a Railway volume.
+      - name: Entrypoint honours PORT and fixes a root-owned volume (R1)
+        run: |
+          env_args="-e DATABASE_URL=sqlite:// -e JWT_SECRET_KEY=$(openssl rand -hex 32)"
+
+          # Started as root (Railway with RAILWAY_RUN_UID=0): chown, drop, report.
+          docker volume create cv-data
+          out=$(docker run --rm -u 0 -v cv-data:/data -e DATA_DIR=/data -e PORT=9001 $env_args             clonevoice-backend python -m backend.serve --dry-run)
+          echo "$out"
+          echo "$out" | grep -q -- "--port 9001"
+          echo "$out" | grep -q -- "--workers 1"
+
+          # The app user (uid 1000) can now write to every storage directory.
+          docker run --rm -v cv-data:/data $env_args clonevoice-backend sh -c \
+            'test "$(id -u)" = 1000 && touch /data/uploads/p /data/outputs/p /data/weights/p'
+
+          # Without root the same fresh volume is unusable, and the error says why.
+          docker volume create cv-fresh
+          if docker run --rm -v cv-fresh:/data -e DATA_DIR=/data $env_args \
+            clonevoice-backend python -m backend.serve --dry-run 2> serve.err; then
+            echo "expected a root-owned volume to be rejected for the unprivileged user"
+            exit 1
+          fi
+          cat serve.err
+          grep -q "RAILWAY_RUN_UID=0" serve.err
 
       # PyPI's CUDA torch alone makes this image about 8 GB; the CPU-only
       # image should stay far below the limit. Raise the limit deliberately,
@@ -91,7 +120,9 @@ jobs:
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: |
+          docker compose down -v
+          docker volume rm -f cv-data cv-fresh
 
   # HARDENING_PLAN.md finding P2-L4: the job above can't exercise this,
   # because `backend` never becomes healthy without real model weights (see

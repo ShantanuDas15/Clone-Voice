@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
     OUTPUT_DIR: str = str(BASE_DIR / "outputs")
     WEIGHTS_DIR: str = str(BASE_DIR / "weights")
+    # One directory that holds all three of the above as `uploads/`,
+    # `outputs/` and `weights/`, so a host with a single persistent volume
+    # (Railway allows one per service) sets one variable, not three. Any of
+    # the three set explicitly still wins. Blank (default) leaves them as is.
+    DATA_DIR: str = ""
+    # When True, `python -m backend.serve` (the container entrypoint) downloads
+    # any missing or checksum-failing synthesizer/vocoder checkpoint before
+    # starting the API. Off by default: provisioning is otherwise an explicit
+    # operator step (backend/download_weights.py --fetch). Turn it on where
+    # the weights directory is a fresh volume (e.g. Railway).
+    FETCH_WEIGHTS_ON_START: bool = False
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
     # Must match backend/services/sv2tts/vocoder/hparams.py's `sample_rate`
     # (itself derived from the synthesizer's hparams) for the real SV2TTS
@@ -192,6 +203,23 @@ class Settings(BaseSettings):
         if v <= 0:
             raise ValueError("email token lifetimes must be > 0")
         return v
+
+    @model_validator(mode="after")
+    def derive_storage_dirs_from_data_dir(self) -> "Settings":
+        """Place uploads/outputs/weights under DATA_DIR unless set explicitly."""
+        if not self.DATA_DIR.strip():
+            return self
+        root = Path(self.DATA_DIR).expanduser()
+        if not root.is_absolute():
+            raise ValueError("DATA_DIR must be an absolute path")
+        for field, subdir in (
+            ("UPLOAD_DIR", "uploads"),
+            ("OUTPUT_DIR", "outputs"),
+            ("WEIGHTS_DIR", "weights"),
+        ):
+            if field not in self.model_fields_set:
+                setattr(self, field, str(root / subdir))
+        return self
 
     @model_validator(mode="after")
     def email_backend_is_configured(self) -> "Settings":

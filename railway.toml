@@ -1,0 +1,25 @@
+# Railway config as code (HARDENING_PLAN.md R1). Values here override the
+# dashboard. Environment variables are NOT set here: see RAILWAY_DEPLOYMENT.md
+# for the full list (DATABASE_URL, secrets, DATA_DIR, RAILWAY_RUN_UID=0, ...).
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+# Redeploy only for changes that can affect the image or the schema.
+watchPatterns = ["backend/**", "railway.toml"]
+
+[deploy]
+# Schema first, in its own container, before the new version takes traffic.
+# Replaces the compose `migrate` service (HARDENING_PLAN.md P2-M2).
+preDeployCommand = ["alembic -c backend/alembic.ini upgrade head"]
+# Readiness, not liveness: a deploy only goes live once the database is
+# reachable, the schema is at head and the models are loaded (finding M7).
+healthcheckPath = "/health/ready"
+# First boot on a fresh volume downloads ~424 MB of weights before the API
+# can answer; the 300 s default is too tight for a slow start.
+healthcheckTimeout = 600
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+# uvicorn's 30 s graceful wait + the 30 s inference drain + a 10 s margin,
+# the same 70 s as docker-compose's stop_grace_period (finding P2-L4).
+drainingSeconds = 70
