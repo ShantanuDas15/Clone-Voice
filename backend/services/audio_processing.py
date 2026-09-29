@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 
+# The level (RMS, dBFS) resemblyzer's speaker encoder was trained on: its own
+# `audio_norm_target_dBFS`, pinned by a test so it cannot drift silently.
+ENCODER_TARGET_DBFS = -30.0
+
 # HARDENING_PLAN.md finding P2-L10: bounds how many uploads may run
 # preprocess_audio's decode/resample/trim at once. Callers `async with` this
 # around their `asyncio.to_thread(preprocess_audio, ...)` call; it is a plain
@@ -87,8 +91,27 @@ def save_upload(file: UploadFile, user_id: str, ext: str) -> str:
     return file_path
 
 
+def raise_to_encoder_level(
+    y: np.ndarray, target_dbfs: float = ENCODER_TARGET_DBFS
+) -> np.ndarray:
+    """Boost quiet audio to `target_dbfs` RMS; never turn louder audio down.
+
+    Mirrors resemblyzer's `normalize_volume(..., increase_only=True)`. Peak
+    normalising every upload to full scale instead over-drives the encoder:
+    measured on 20 real speakers it lowered the cloned voice's similarity to
+    the real speaker by 0.02 (95% CI 0.011 to 0.028), see PREPROCESSING_STUDY.md.
+    """
+    rms = float(np.sqrt(np.mean(np.square(y, dtype=np.float64)))) if len(y) else 0.0
+    if rms <= 0.0:
+        return y
+    change_db = target_dbfs - 20.0 * np.log10(rms)
+    if change_db <= 0.0:
+        return y
+    return (y * (10.0 ** (change_db / 20.0))).astype(np.float32)
+
+
 def preprocess_audio(file_path: str) -> np.ndarray:
-    """Load, trim silence, and normalize audio; reject too-long or too-quiet/short input."""
+    """Load, trim silence and set the level for the encoder; reject bad input."""
     try:
         raw_duration = librosa.get_duration(path=file_path)
         if raw_duration > settings.MAX_AUDIO_DURATION_SECONDS:
@@ -115,7 +138,7 @@ def preprocess_audio(file_path: str) -> np.ndarray:
                 ),
             )
 
-        return y_trimmed / max_val
+        return raise_to_encoder_level(y_trimmed)
     except HTTPException:
         raise
     except Exception:
