@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
 from backend.core.database import get_db
+from backend.core.db_errors import db_unavailable, is_transient_db_error
 from backend.core.rate_limit import limiter
 from backend.core.security import get_current_user, get_verified_user
 from backend.core.validators import require_nonblank_name
@@ -204,12 +205,14 @@ async def upload_audio(
     )
     try:
         await asyncio.to_thread(_persist_profile, db, profile)
-    except SQLAlchemyError:
+    except SQLAlchemyError as error:
         # HARDENING_PLAN.md P2-L2: no row will reference these files.
         logger.exception("Failed to persist voice profile for user_id=%s", user_id)
         await asyncio.to_thread(db.rollback)
         await asyncio.to_thread(_remove_quietly, file_path)
         await asyncio.to_thread(_remove_quietly, embedding_path)
+        if is_transient_db_error(error):
+            raise db_unavailable()
         raise HTTPException(status_code=500, detail="Failed to save voice profile")
 
     logger.info(
