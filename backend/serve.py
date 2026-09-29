@@ -39,6 +39,27 @@ APP_GID = 1000
 APP_HOME = "/home/appuser"
 
 
+def json_log_handler() -> logging.Handler:
+    """A stderr handler emitting the same JSON shape as the app's own logs
+    (timestamp, level, logger, message), so the lines this entrypoint prints
+    before uvicorn starts don't break a JSON log pipeline."""
+    from pythonjsonlogger.json import JsonFormatter
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        JsonFormatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s",
+            rename_fields={
+                "asctime": "timestamp",
+                "levelname": "level",
+                "name": "logger",
+            },
+            datefmt="%Y-%m-%dT%H:%M:%S%z",
+        )
+    )
+    return handler
+
+
 def resolve_port(environ: Mapping[str, str]) -> int:
     """Return the port to listen on: ``$PORT`` if set, else 8000."""
     raw = environ.get("PORT", "").strip()
@@ -169,7 +190,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s serve: %(message)s")
+    logging.basicConfig(level=logging.INFO, handlers=[json_log_handler()])
     try:
         command = uvicorn_command(resolve_port(os.environ))
         prepare()
