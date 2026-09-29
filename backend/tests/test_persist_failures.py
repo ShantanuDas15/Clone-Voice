@@ -75,7 +75,7 @@ def test_upload_persist_failure_returns_500_and_removes_files(
         res = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers_syn,
-            data={"name": "Persist Fail"},
+            data={"name": "Persist Fail", "consent_confirmed": "true"},
             files=files,
         )
     assert res.status_code == 500
@@ -103,7 +103,7 @@ def test_upload_failed_profile_db_error_does_not_mask_status(
         res = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers_syn,
-            data={"name": "Mask"},
+            data={"name": "Mask", "consent_confirmed": "true"},
             files=files,
         )
     assert res.status_code == expected

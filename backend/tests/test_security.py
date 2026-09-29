@@ -110,7 +110,7 @@ def test_path_not_in_generation_response(client: TestClient):
     up_res = client.post(
         "/api/v1/voice/upload",
         headers=headers,
-        data={"name": "Path Voice"},
+        data={"name": "Path Voice", "consent_confirmed": "true"},
         files={"file": ("path.wav", wav_bytes, "audio/wav")},
     )
     assert up_res.status_code == 201

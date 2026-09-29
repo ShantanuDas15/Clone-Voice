@@ -2,12 +2,16 @@ import io
 import os
 import uuid
 import wave
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
+from backend.models.user import User
+from backend.models.voice_profile import VoiceProfile
 from backend.services.audio_processing import preprocess_audio
 from backend.services.tts_pipeline import (InferenceQueueFullError,
                                            InferenceTimeoutError)
@@ -48,7 +52,7 @@ def create_dummy_wav(seconds: float = 3.0) -> bytes:
 def test_upload_valid_wav(client: TestClient, auth_headers):
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}
-    data = {"name": "My Voice"}
+    data = {"name": "My Voice", "consent_confirmed": "true"}
 
     response = client.post(
         "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
@@ -58,6 +62,126 @@ def test_upload_valid_wav(client: TestClient, auth_headers):
     assert res_data["name"] == "My Voice"
     assert res_data["status"] == "ready"
     assert "id" in res_data
+    assert "consent_confirmed_at" in res_data
+
+
+def test_upload_rejects_missing_consent(client: TestClient, auth_headers):
+    """Responsible-use safeguard: an upload with no consent field at all
+    must be rejected before any file work, not silently defaulted."""
+    files = {"file": ("test.wav", create_dummy_wav(), "audio/wav")}
+    data = {"name": "No Consent Field"}
+
+    with patch("backend.api.voice.save_upload") as save:
+        response = client.post(
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
+        )
+    assert response.status_code == 422
+    save.assert_not_called()
+
+
+def test_upload_rejects_false_consent(client: TestClient, auth_headers):
+    """An explicit consent_confirmed=false must be rejected, not accepted."""
+    files = {"file": ("test.wav", create_dummy_wav(), "audio/wav")}
+    data = {"name": "False Consent", "consent_confirmed": "false"}
+
+    with patch("backend.api.voice.save_upload") as save:
+        response = client.post(
+            "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
+        )
+    assert response.status_code == 422
+    assert "right to use" in response.json()["detail"]
+    save.assert_not_called()
+
+
+def test_upload_records_consent_timestamp(client: TestClient, auth_headers):
+    """A confirmed consent must be persisted as an auditable timestamp."""
+    files = {"file": ("test.wav", create_dummy_wav(), "audio/wav")}
+    data = {"name": "Consented Voice", "consent_confirmed": "true"}
+
+    response = client.post(
+        "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
+    )
+    assert response.status_code == 201
+    assert response.json()["consent_confirmed_at"] is not None
+
+
+def test_upload_persists_consent_timestamp_in_db(
+    client: TestClient, auth_headers, db_session
+):
+    """The stored consent is a timezone-aware, current timestamp, and it is
+    exactly what the API returns."""
+    before = datetime.now(timezone.utc)
+    files = {"file": ("test.wav", create_dummy_wav(), "audio/wav")}
+    response = client.post(
+        "/api/v1/voice/upload",
+        headers=auth_headers,
+        data={"name": "Audited Voice", "consent_confirmed": "true"},
+        files=files,
+    )
+    after = datetime.now(timezone.utc)
+    assert response.status_code == 201
+
+    row = db_session.get(VoiceProfile, uuid.UUID(response.json()["id"]))
+    stored = row.consent_confirmed_at
+    if stored.tzinfo is None:  # SQLite drops tzinfo; the value is stored as UTC
+        stored = stored.replace(tzinfo=timezone.utc)
+    assert before <= stored <= after
+    assert response.json()["consent_confirmed_at"].startswith(
+        stored.strftime("%Y-%m-%dT%H:%M:%S")
+    )
+
+
+def test_rejected_consent_leaves_no_profile_row(client: TestClient, auth_headers):
+    """A refused attestation must not create even a `failed` profile."""
+    files = {"file": ("test.wav", create_dummy_wav(), "audio/wav")}
+    response = client.post(
+        "/api/v1/voice/upload",
+        headers=auth_headers,
+        data={"name": "Refused", "consent_confirmed": "false"},
+        files=files,
+    )
+    assert response.status_code == 422
+    assert client.get("/api/v1/voice/profiles", headers=auth_headers).json() == []
+
+
+def test_failed_profile_also_records_consent(
+    client: TestClient, auth_headers, db_session, tmp_path
+):
+    """The audit trail must cover failed uploads too: the file was received
+    under the same attestation, so the `failed` row keeps the timestamp."""
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
+        "backend.api.voice.embed_speaker_async", side_effect=RuntimeError("boom")
+    ):
+        response = client.post(
+            "/api/v1/voice/upload",
+            headers=auth_headers,
+            data={"name": "Failed Consent", "consent_confirmed": "true"},
+            files={"file": ("f.wav", create_dummy_wav(), "audio/wav")},
+        )
+    assert response.status_code == 500
+
+    row = db_session.query(VoiceProfile).filter_by(name="Failed Consent").one()
+    assert row.status == "failed"
+    assert row.consent_confirmed_at is not None
+
+
+def test_voice_profile_consent_is_not_nullable(db_session):
+    """The schema, not just the API, refuses a profile with no consent."""
+    user = User(email="nc@example.com", name="NC", provider="local")
+    db_session.add(user)
+    db_session.flush()
+    with pytest.raises(IntegrityError):
+        # A savepoint keeps the failed flush from poisoning the outer
+        # per-test transaction that the fixture rolls back.
+        with db_session.begin_nested():
+            db_session.add(
+                VoiceProfile(
+                    user_id=user.id,
+                    name="No Consent",
+                    audio_sample_path="a.wav",
+                    embedding_path="a.npy",
+                )
+            )
 
 
 def test_upload_valid_mp3(client: TestClient, auth_headers):
@@ -65,7 +189,7 @@ def test_upload_valid_mp3(client: TestClient, auth_headers):
     with patch("backend.api.voice.preprocess_audio") as mock_pre:
         mock_pre.return_value = np.random.randn(32000).astype(np.float32)
         files = {"file": ("test.mp3", b"ID3 dummy mp3 data", "audio/mp3")}
-        data = {"name": "MP3 Voice"}
+        data = {"name": "MP3 Voice", "consent_confirmed": "true"}
         response = client.post(
             "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
@@ -92,7 +216,7 @@ def test_upload_acquires_preprocess_semaphore(client: TestClient, auth_headers):
     with patch("backend.api.voice.preprocess_semaphore", tracker):
         wav_data = create_dummy_wav()
         files = {"file": ("test.wav", wav_data, "audio/wav")}
-        data = {"name": "Tracked Voice"}
+        data = {"name": "Tracked Voice", "consent_confirmed": "true"}
         response = client.post(
             "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
@@ -103,7 +227,7 @@ def test_upload_acquires_preprocess_semaphore(client: TestClient, auth_headers):
 
 def test_upload_invalid_format_txt(client: TestClient, auth_headers):
     files = {"file": ("test.txt", b"hello text", "text/plain")}
-    data = {"name": "Text Voice"}
+    data = {"name": "Text Voice", "consent_confirmed": "true"}
     response = client.post(
         "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
     )
@@ -116,7 +240,7 @@ def test_upload_oversized_file(client: TestClient, auth_headers):
     with patch("backend.core.config.settings.MAX_AUDIO_SIZE_MB", 0.0001):
         wav_data = create_dummy_wav()
         files = {"file": ("test.wav", wav_data, "audio/wav")}
-        data = {"name": "Big Voice"}
+        data = {"name": "Big Voice", "consent_confirmed": "true"}
         response = client.post(
             "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
@@ -126,7 +250,7 @@ def test_upload_oversized_file(client: TestClient, auth_headers):
 
 def test_upload_empty_file(client: TestClient, auth_headers):
     files = {"file": ("test.wav", b"", "audio/wav")}
-    data = {"name": "Empty Voice"}
+    data = {"name": "Empty Voice", "consent_confirmed": "true"}
     response = client.post(
         "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
     )
@@ -143,7 +267,7 @@ def test_upload_embedding_failure_deletes_orphaned_file(
     ):
         wav_data = create_dummy_wav()
         files = {"file": ("fail.wav", wav_data, "audio/wav")}
-        data = {"name": "Fail Voice"}
+        data = {"name": "Fail Voice", "consent_confirmed": "true"}
         response = client.post(
             "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
@@ -169,7 +293,7 @@ def test_upload_queue_full_returns_429_and_deletes_orphaned_file(
     ):
         wav_data = create_dummy_wav()
         files = {"file": ("busy.wav", wav_data, "audio/wav")}
-        data = {"name": "Busy Voice"}
+        data = {"name": "Busy Voice", "consent_confirmed": "true"}
         response = client.post(
             "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
@@ -195,7 +319,7 @@ def test_upload_timeout_returns_503_and_deletes_orphaned_file(
     ):
         wav_data = create_dummy_wav()
         files = {"file": ("slow.wav", wav_data, "audio/wav")}
-        data = {"name": "Slow Voice"}
+        data = {"name": "Slow Voice", "consent_confirmed": "true"}
         response = client.post(
             "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
@@ -220,7 +344,7 @@ def test_upload_extension_derived_from_magic_bytes_not_filename(
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)):
         wav_data = create_dummy_wav()
         files = {"file": ("voice.MP3", wav_data, "audio/wav")}
-        data = {"name": "Mismatched Voice"}
+        data = {"name": "Mismatched Voice", "consent_confirmed": "true"}
         response = client.post(
             "/api/v1/voice/upload", headers=auth_headers, data=data, files=files
         )
@@ -256,7 +380,7 @@ def test_validate_audio_file_returns_extension_from_magic_bytes():
 def test_upload_unauthenticated(client: TestClient):
     wav_data = create_dummy_wav()
     files = {"file": ("test.wav", wav_data, "audio/wav")}
-    data = {"name": "No Auth"}
+    data = {"name": "No Auth", "consent_confirmed": "true"}
     response = client.post("/api/v1/voice/upload", data=data, files=files)
     assert response.status_code == 401
 
@@ -288,7 +412,7 @@ def test_list_profiles_after_upload(client: TestClient, auth_headers):
     client.post(
         "/api/v1/voice/upload",
         headers=auth_headers,
-        data={"name": "My Voice"},
+        data={"name": "My Voice", "consent_confirmed": "true"},
         files=files,
     )
 
@@ -303,7 +427,10 @@ def test_delete_profile_success(client: TestClient, auth_headers):
     wav_data = create_dummy_wav()
     files = {"file": ("delete_test.wav", wav_data, "audio/wav")}
     up_res = client.post(
-        "/api/v1/voice/upload", headers=auth_headers, data={"name": "Del"}, files=files
+        "/api/v1/voice/upload",
+        headers=auth_headers,
+        data={"name": "Del", "consent_confirmed": "true"},
+        files=files,
     )
     profile_id = up_res.json()["id"]
 
@@ -333,7 +460,7 @@ def test_delete_profile_wrong_user(client: TestClient, auth_headers):
     up_res = client.post(
         "/api/v1/voice/upload",
         headers=auth_headers,
-        data={"name": "Owner Voice"},
+        data={"name": "Owner Voice", "consent_confirmed": "true"},
         files=files,
     )
     profile_id = up_res.json()["id"]
@@ -443,7 +570,7 @@ def test_upload_rejects_unusable_audio_and_leaves_no_trace(
         response = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers,
-            data={"name": "Bad"},
+            data={"name": "Bad", "consent_confirmed": "true"},
             files={"file": ("v.wav", wav, "audio/wav")},
         )
     assert response.status_code == 422
@@ -473,7 +600,7 @@ def test_upload_never_persists_blank_embedding_as_ready(
         response = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers,
-            data={"name": "Blank"},
+            data={"name": "Blank", "consent_confirmed": "true"},
             files={"file": ("v.wav", create_dummy_wav(), "audio/wav")},
         )
     assert response.status_code == 422
@@ -514,7 +641,7 @@ def test_upload_decode_failure_leaks_nothing_and_leaves_no_orphan(
         response = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers,
-            data={"name": "Broken"},
+            data={"name": "Broken", "consent_confirmed": "true"},
             files={"file": ("v.wav", wav, "audio/wav")},
         )
     assert response.status_code == 422

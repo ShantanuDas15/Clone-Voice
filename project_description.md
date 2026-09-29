@@ -245,7 +245,7 @@ generations (id, user_id→users, voice_profile_id→voice_profiles, input_text,
 ### Voice
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/v1/voice/upload` | Upload audio sample(s), create voice profile |
+| `POST` | `/api/v1/voice/upload` | Upload audio sample(s), create voice profile. Requires the form field `consent_confirmed=true` (attestation of the right to use the voice); the timestamp is stored as `consent_confirmed_at` |
 | `GET` | `/api/v1/voice/profiles` | List user's voice profiles |
 | `DELETE` | `/api/v1/voice/profiles/{id}` | Delete a voice profile |
 

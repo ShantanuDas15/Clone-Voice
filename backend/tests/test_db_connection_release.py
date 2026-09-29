@@ -1,6 +1,7 @@
 """HARDENING_PLAN.md finding P2-M1: no DB transaction is held during inference."""
 
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import numpy as np
@@ -94,7 +95,7 @@ def test_upload_holds_no_transaction_during_embedding(
         res = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers,
-            data={"name": "Release Voice"},
+            data={"name": "Release Voice", "consent_confirmed": "true"},
             files={"file": ("test.wav", create_dummy_wav(), "audio/wav")},
         )
 
@@ -124,6 +125,7 @@ def test_load_profile_and_release_closes_session_in_one_dispatch(db_session):
         audio_sample_path="/tmp/unused.wav",
         embedding_path="/tmp/unused.npy",
         status="ready",
+        consent_confirmed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
     db_session.commit()

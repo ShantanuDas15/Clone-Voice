@@ -21,6 +21,11 @@ class VoiceProfile(Base):
     audio_sample_path = Column(Text, nullable=False)
     embedding_path = Column(Text, nullable=False)
     status = Column(String(50), nullable=False, default="ready")
+    # Responsible-use safeguard: the uploader's attestation that they have
+    # the right to use this voice sample, captured at upload time. A non-null
+    # timestamp *is* the record of consent — there is no unconsented row, so
+    # no separate boolean is needed alongside it.
+    consent_confirmed_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

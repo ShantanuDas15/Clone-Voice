@@ -100,7 +100,7 @@ def test_upload_offloads_validate_save_preprocess_and_db_to_worker_threads(
         response = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers,
-            data={"name": "Thread Check Voice"},
+            data={"name": "Thread Check Voice", "consent_confirmed": "true"},
             files={"file": ("test.wav", _create_dummy_wav(), "audio/wav")},
         )
 
@@ -132,7 +132,7 @@ def test_synthesize_offloads_db_query_embedding_load_and_persist_to_worker_threa
     upload_resp = client.post(
         "/api/v1/voice/upload",
         headers=auth_headers,
-        data={"name": "Synth Thread Voice"},
+        data={"name": "Synth Thread Voice", "consent_confirmed": "true"},
         files={"file": ("test.wav", _create_dummy_wav(), "audio/wav")},
     )
     profile_id = upload_resp.json()["id"]

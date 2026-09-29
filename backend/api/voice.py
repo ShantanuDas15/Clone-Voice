@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from typing import List
 
 import numpy as np
@@ -59,7 +60,11 @@ def _is_usable_embedding(embedding: np.ndarray) -> bool:
 
 
 async def _cleanup_failed_upload(
-    db: Session, file_path: str, user_id: uuid.UUID, name: str
+    db: Session,
+    file_path: str,
+    user_id: uuid.UUID,
+    name: str,
+    consent_confirmed_at: datetime,
 ) -> None:
     """Remove the orphaned upload and persist a `status="failed"` profile row.
 
@@ -77,6 +82,7 @@ async def _cleanup_failed_upload(
         audio_sample_path=file_path,
         embedding_path="",
         status="failed",
+        consent_confirmed_at=consent_confirmed_at,
     )
     try:
         await asyncio.to_thread(_persist_profile, db, profile)
@@ -94,6 +100,7 @@ async def _cleanup_failed_upload(
 async def upload_audio(
     request: Request,
     name: str = Form(..., min_length=1, max_length=255),
+    consent_confirmed: bool = Form(...),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -105,6 +112,17 @@ async def upload_audio(
         name = require_nonblank_name(name)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error))
+
+    # Responsible-use safeguard: require an explicit attestation that the
+    # uploader has the right to use this voice sample, before any file work.
+    # Captured once so every profile row from this request (success or
+    # failure) records the same consent timestamp.
+    if not consent_confirmed:
+        raise HTTPException(
+            status_code=422,
+            detail="You must confirm you have the right to use this voice sample.",
+        )
+    consent_confirmed_at = datetime.now(timezone.utc)
 
     # HARDENING_PLAN.md finding P2-M1: release the connection the auth lookup
     # left open in a transaction before the slow decode/embedding work. The
@@ -154,14 +172,14 @@ async def upload_audio(
         logger.warning(
             "Inference queue full — rejecting upload for user_id=%s", user_id
         )
-        await _cleanup_failed_upload(db, file_path, user_id, name)
+        await _cleanup_failed_upload(db, file_path, user_id, name, consent_confirmed_at)
         raise HTTPException(
             status_code=429,
             detail="Voice profile service is busy. Please try again shortly.",
         )
     except InferenceTimeoutError:
         logger.exception("Embedding extraction timed out for user_id=%s", user_id)
-        await _cleanup_failed_upload(db, file_path, user_id, name)
+        await _cleanup_failed_upload(db, file_path, user_id, name, consent_confirmed_at)
         raise HTTPException(
             status_code=503,
             detail="Voice profile service is temporarily overloaded. Please try again shortly.",
@@ -171,7 +189,7 @@ async def upload_audio(
             "Embedding extraction failed for user_id=%s — persisting failed profile",
             user_id,
         )
-        await _cleanup_failed_upload(db, file_path, user_id, name)
+        await _cleanup_failed_upload(db, file_path, user_id, name, consent_confirmed_at)
         raise HTTPException(
             status_code=500, detail="Failed to extract speaker embedding"
         )
@@ -182,6 +200,7 @@ async def upload_audio(
         audio_sample_path=file_path,
         embedding_path=embedding_path,
         status="ready",
+        consent_confirmed_at=consent_confirmed_at,
     )
     try:
         await asyncio.to_thread(_persist_profile, db, profile)

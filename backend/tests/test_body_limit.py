@@ -115,7 +115,7 @@ def test_upload_endpoint_rejects_oversized_body_before_parsing(
     resp = client.post(
         "/api/v1/voice/upload",
         files={"file": ("big.wav", big, "audio/wav")},
-        data={"name": "x"},
+        data={"name": "x", "consent_confirmed": "true"},
     )
     assert resp.status_code == 413
     assert resp.json() == {"detail": TOO_LARGE_DETAIL}
