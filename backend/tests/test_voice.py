@@ -13,8 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.services.audio_processing import preprocess_audio
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError)
+from backend.services.tts_pipeline import InferenceQueueFullError, InferenceTimeoutError
 
 
 @pytest.fixture
@@ -491,13 +490,14 @@ def test_delete_profile_wrong_user(client: TestClient, auth_headers):
 
 
 def test_librosa_preprocess_shape():
-    """preprocess_audio must return a 1D float32 array normalized to [-1.0, 1.0]."""
+    """preprocess_audio must return a 1D float32 array at the encoder's level."""
 
     audio = preprocess_audio("backend/tests/fixtures/sample_5sec.wav")
     assert audio is not None, "preprocess_audio returned None for a valid WAV"
     assert audio.ndim == 1, f"Expected 1D array, got {audio.ndim}D"
     assert audio.dtype == np.float32, f"Expected float32, got {audio.dtype}"
-    assert np.max(np.abs(audio)) <= 1.0, "Audio samples exceed normalized [-1, 1] range"
+    # A loud fixture is left at its own level, not scaled to full scale.
+    assert np.max(np.abs(audio)) <= 1.0, "Audio samples exceed the [-1, 1] range"
 
 
 # ---------------------------------------------------------------------------
@@ -538,10 +538,12 @@ def test_preprocess_rejects_too_little_voiced_audio(tmp_path, tone, silence):
 
 
 def test_preprocess_accepts_audio_at_minimum_voiced_duration(tmp_path):
-    """Just over the minimum passes, and comes back peak-normalised."""
+    """Just over the minimum passes, and a loud input keeps its own level."""
     audio = preprocess_audio(_wav_file(tmp_path, 2.5, 3.0))
     assert audio.ndim == 1 and len(audio) >= 2.0 * 16000
-    assert np.isclose(np.max(np.abs(audio)), 1.0)
+    # The fixture tone peaks at 0.5 (about -9 dBFS RMS), louder than the
+    # encoder's -30 dBFS, so it is not touched: no peak normalisation.
+    assert np.isclose(np.max(np.abs(audio)), 0.5, atol=0.01)
 
 
 def test_preprocess_rejects_over_max_duration_before_decoding(tmp_path):
