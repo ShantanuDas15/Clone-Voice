@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
+from backend.core.db_errors import db_unavailable, is_transient_db_error
 from backend.core.rate_limit import limiter
 from backend.core.security import get_current_user, get_verified_user
 from backend.models.generation import Generation
@@ -221,7 +222,7 @@ async def synthesize(
     )
     try:
         await asyncio.to_thread(_persist_generation, db, generation)
-    except SQLAlchemyError:
+    except SQLAlchemyError as error:
         # HARDENING_PLAN.md P2-L2: no row will ever reference this WAV, so
         # remove it instead of leaving an orphan behind.
         logger.exception(
@@ -231,6 +232,8 @@ async def synthesize(
         )
         await asyncio.to_thread(db.rollback)
         await asyncio.to_thread(_remove_quietly, out_path)
+        if is_transient_db_error(error):
+            raise db_unavailable()
         raise HTTPException(
             status_code=500, detail="Failed to save the synthesized audio"
         )

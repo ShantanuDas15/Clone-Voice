@@ -19,6 +19,7 @@ from backend.api.synthesize import router as synthesize_router
 from backend.api.voice import router as voice_router
 from backend.core import metrics
 from backend.core.body_limit import BodySizeLimitMiddleware
+from backend.core.db_errors import register_db_error_handlers
 from backend.core.config import settings
 from backend.core.database import SessionLocal
 from backend.core.migrations import check_schema_current
@@ -150,6 +151,8 @@ app = FastAPI(title="CloneVoice API", lifespan=lifespan)
 # The RateLimitExceeded handler returns a JSON 429 with a clear detail message.
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# A database outage is a 503 with Retry-After, not a bare 500.
+register_db_error_handlers(app)
 # -----------------------------------------------------------------------------
 
 
