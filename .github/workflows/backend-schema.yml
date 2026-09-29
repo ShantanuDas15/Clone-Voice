@@ -1,0 +1,101 @@
+name: backend-schema
+
+# Guards the database schema against the code (HARDENING_PLAN.md: schema
+# drift guard). On a real Postgres it applies every migration, then fails if
+# the result differs from what the ORM models declare, or if a migration
+# cannot be reversed and re-applied. It installs only the migration toolchain,
+# not torch, so it runs in about a minute instead of building the image.
+
+on:
+  # Any branch: work is merged locally after CI, not through pull requests.
+  push:
+    paths:
+      - "backend/alembic/**"
+      - "backend/alembic.ini"
+      - "backend/models/**"
+      - "backend/core/migrations.py"
+      - "backend/core/database.py"
+      - "backend/check_schema.py"
+      - "backend/requirements.txt"
+      - ".github/workflows/backend-schema.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schema-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        # The same major version docker-compose.yml runs.
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: clonevoice
+          POSTGRES_PASSWORD: clonevoice_ci
+          POSTGRES_DB: clonevoice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clonevoice"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://clonevoice:clonevoice_ci@localhost:5432/clonevoice
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The exact pins the image uses, read from requirements.txt so they can
+      # never drift from it; only the subset the migrations and models import.
+      - name: Install the migration toolchain
+        run: |
+          grep -i -E '^(alembic|sqlalchemy|psycopg2-binary|pydantic|pydantic-settings)==' backend/requirements.txt > schema-requirements.txt
+          cat schema-requirements.txt
+          test "$(wc -l < schema-requirements.txt)" = 5
+          pip install -r schema-requirements.txt
+
+      - name: Generate a throwaway JWT secret (settings require one)
+        run: echo "JWT_SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - name: Migrations apply, and the result matches the models
+        run: |
+          alembic -c backend/alembic.ini upgrade head
+          python -m backend.check_schema
+
+      # Downgrades are code too: a broken one only shows up on the day it is
+      # needed. Walk the whole chain down and back up.
+      - name: Every migration reverses and re-applies
+        run: |
+          alembic -c backend/alembic.ini downgrade base
+          alembic -c backend/alembic.ini upgrade head
+          python -m backend.check_schema
+
+      # Negative control: prove the guard can fail, so a green run means
+      # something. Drift is injected, must be reported, then removed.
+      - name: The guard fails on drift
+        run: |
+          python - <<'PY'
+          import os, psycopg2
+          conn = psycopg2.connect(os.environ["DATABASE_URL"])
+          conn.autocommit = True
+          conn.cursor().execute("ALTER TABLE users ADD COLUMN drift_probe TEXT")
+          PY
+          if python -m backend.check_schema 2> drift.err; then
+            echo "expected the injected column to be reported as drift"
+            exit 1
+          fi
+          cat drift.err
+          grep -q "drift_probe" drift.err
+          python - <<'PY'
+          import os, psycopg2
+          conn = psycopg2.connect(os.environ["DATABASE_URL"])
+          conn.autocommit = True
+          conn.cursor().execute("ALTER TABLE users DROP COLUMN drift_probe")
+          PY
+          python -m backend.check_schema
