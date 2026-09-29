@@ -5,6 +5,8 @@ Nothing here needs root or the network: privilege and ownership calls are
 patched, and the weights download is a mock.
 """
 
+import json
+import logging
 import os
 import subprocess
 import sys
@@ -318,3 +320,40 @@ def test_relative_data_dir_is_rejected():
 
 def test_weights_are_not_fetched_by_default():
     assert _cfg().FETCH_WEIGHTS_ON_START is False
+
+
+# --- Log format --------------------------------------------------------------
+
+
+def test_entrypoint_log_lines_are_json_like_the_apps():
+    handler = serve.json_log_handler()
+    record = logging.LogRecord(
+        "backend.serve", logging.INFO, __file__, 0, "Starting: %s", ("uvicorn",), None
+    )
+    payload = json.loads(handler.format(record))
+    assert payload["message"] == "Starting: uvicorn"
+    assert payload["level"] == "INFO"
+    assert payload["logger"] == "backend.serve"
+    assert "timestamp" in payload
+
+
+def test_entrypoint_errors_reach_stderr_as_json():
+    """In a clean process: a bad PORT exits 1 and says so as one JSON line."""
+    env = {
+        **os.environ,
+        "PORT": "nope",
+        "DATABASE_URL": "sqlite://",
+        "JWT_SECRET_KEY": "x" * 40,
+    }
+    result = subprocess.run(
+        [sys.executable, "-m", "backend.serve", "--dry-run"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 1
+    payload = json.loads(result.stderr.strip().splitlines()[-1])
+    assert payload["level"] == "ERROR"
+    assert "PORT" in payload["message"]

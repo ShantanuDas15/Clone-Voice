@@ -25,6 +25,55 @@ def test_configure_logging_uses_debug_level_in_development(monkeypatch) -> None:
     assert logging.getLogger().level == logging.DEBUG
 
 
+UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+
+
+def _simulate_uvicorn_default_logging() -> None:
+    """Reproduce what uvicorn does before it imports the app: its own
+    plain-text handler on each of its loggers, with propagation switched off."""
+    for name in UVICORN_LOGGERS:
+        uvicorn_logger = logging.getLogger(name)
+        uvicorn_logger.handlers = [logging.StreamHandler()]
+        uvicorn_logger.propagate = False
+
+
+def test_uvicorn_loggers_are_routed_to_the_json_root_handler() -> None:
+    """Pass 1 §4.11: uvicorn's own startup/error/access lines used to be plain
+    text next to the JSON records. After configure_logging() none of its
+    loggers may keep a handler of its own, and all must reach the root."""
+    _simulate_uvicorn_default_logging()
+
+    configure_logging()
+
+    for name in UVICORN_LOGGERS:
+        uvicorn_logger = logging.getLogger(name)
+        assert uvicorn_logger.handlers == [], name
+        assert uvicorn_logger.propagate is True, name
+
+
+def test_uvicorn_access_lines_are_emitted_as_json(capsys) -> None:
+    """End to end through the real handler: an access-log record is one JSON
+    object on stderr, carrying the standard fields."""
+    _simulate_uvicorn_default_logging()
+    configure_logging()
+
+    logging.getLogger("uvicorn.access").info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:1234",
+        "GET",
+        "/health/live",
+        "1.1",
+        200,
+    )
+
+    lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    payload = json.loads(lines[-1])
+    assert payload["logger"] == "uvicorn.access"
+    assert payload["level"] == "INFO"
+    assert payload["message"] == '127.0.0.1:1234 - "GET /health/live HTTP/1.1" 200'
+    assert "request_id" in payload
+
+
 def test_health_response_includes_request_id_header(client) -> None:
     """The correlation ID middleware must echo a request ID back to the client."""
     response = client.get("/health")

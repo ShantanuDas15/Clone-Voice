@@ -25,9 +25,13 @@ from backend.core.migrations import check_schema_current
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
-from backend.services.tts_pipeline import (drain_inflight_inference,
-                                           get_model_health, get_warmup_status,
-                                           load_models, warmup_inference)
+from backend.services.tts_pipeline import (
+    drain_inflight_inference,
+    get_model_health,
+    get_warmup_status,
+    load_models,
+    warmup_inference,
+)
 
 
 def configure_logging() -> None:
@@ -70,6 +74,15 @@ def configure_logging() -> None:
             "root": {
                 "level": level,
                 "handlers": ["console"],
+            },
+            # uvicorn installs its own plain-text handlers on these loggers
+            # (and stops them propagating) before it imports this module, so
+            # its startup, error and access lines would otherwise interleave
+            # with the JSON records. Drop those handlers and let the records
+            # flow to the root JSON handler like everything else.
+            "loggers": {
+                name: {"handlers": [], "level": "INFO", "propagate": True}
+                for name in ("uvicorn", "uvicorn.error", "uvicorn.access")
             },
         }
     )
