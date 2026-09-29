@@ -47,8 +47,14 @@ def test_dockerfile_uses_explicit_single_worker():
     """HARDENING_PLAN.md H7: the semaphore (H6) and rate limiter (M3) are
     process-local, so the image must pin exactly one uvicorn worker, not
     leave the worker count as an unstated default."""
+    from backend.serve import uvicorn_command
+
     dockerfile = _read("backend/Dockerfile")
-    assert '"--workers", "1"' in dockerfile
+    command = uvicorn_command(8000)
+    assert command[command.index("--workers") + 1] == "1"
+    assert command.count("--workers") == 1
+    # The image must start through that entrypoint, not a bare uvicorn CMD.
+    assert 'CMD ["python", "-m", "backend.serve"]' in dockerfile
     # Guard against a second, later top-level CMD instruction silently
     # overriding this with a higher worker count. Matches only an
     # instruction at the start of a line, so HEALTHCHECK's own
@@ -166,7 +172,11 @@ def test_readme_documents_the_gpu_build_override():
 def test_runtime_stage_keeps_user_and_cmd():
     """The runtime stage, not the builder, owns USER, HEALTHCHECK and CMD."""
     builder, runtime = _dockerfile_stages()
-    for instruction in ("USER appuser", "HEALTHCHECK", 'CMD ["uvicorn"'):
+    for instruction in (
+        "USER appuser",
+        "HEALTHCHECK",
+        'CMD ["python", "-m", "backend.serve"]',
+    ):
         assert instruction in runtime
         assert instruction not in builder
 
@@ -484,12 +494,12 @@ def test_docker_workflow_never_needs_real_secrets():
 
 
 def _uvicorn_graceful_timeout() -> int:
-    """Return the `--timeout-graceful-shutdown` value from the Dockerfile CMD."""
-    match = re.search(
-        r'"--timeout-graceful-shutdown",\s*"(\d+)"', _read("backend/Dockerfile")
-    )
-    assert match, "Dockerfile CMD must set --timeout-graceful-shutdown"
-    return int(match.group(1))
+    """Return the `--timeout-graceful-shutdown` value the entrypoint passes."""
+    from backend.serve import uvicorn_command
+
+    command = uvicorn_command(8000)
+    assert "--timeout-graceful-shutdown" in command
+    return int(command[command.index("--timeout-graceful-shutdown") + 1])
 
 
 def _backend_stop_grace_seconds() -> int:
@@ -517,7 +527,10 @@ def test_stop_grace_period_covers_graceful_timeout_and_inference_drain():
 
 def test_uvicorn_graceful_timeout_is_set_and_keeps_single_worker():
     """The graceful-shutdown flag is present without disturbing `--workers 1`."""
+    from backend.serve import uvicorn_command
+
     dockerfile = _read("backend/Dockerfile")
+    command = uvicorn_command(8000)
     assert _uvicorn_graceful_timeout() > 0
-    assert '"--workers", "1"' in dockerfile
+    assert command[command.index("--workers") + 1] == "1"
     assert len(re.findall(r"^CMD ", dockerfile, re.MULTILINE)) == 1

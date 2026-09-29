@@ -102,26 +102,20 @@ RUN mkdir -p backend/weights backend/uploads backend/outputs \
 
 USER appuser
 
+# The port is $PORT when the platform injects one (Railway), else 8000. The
+# shell form lets the healthcheck expand it.
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health/live || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/health/live" || exit 1
 
-# --workers 1 is load-bearing, not a placeholder default (HARDENING_PLAN.md
-# finding H7). Both the inference semaphore (services/tts_pipeline.py
-# `_inference_semaphore`, HARDENING_PLAN.md H6) and the rate limiter
-# (core/rate_limit.py, slowapi's default in-memory storage, HARDENING_PLAN.md
-# M3) are process-local state. A second uvicorn worker process would get its
-# own independent semaphore and its own independent rate-limit buckets,
-# silently doubling the real inference concurrency and the effective rate
-# limits this hardening pass relies on. Scale horizontally with multiple
-# *containers* behind a shared-state limiter (once M3's `storage_uri` fix
-# lands) instead of raising this value.
-#
-# --timeout-graceful-shutdown (HARDENING_PLAN.md finding P2-L4): on SIGTERM
-# uvicorn waits this many seconds for open requests (an in-flight synthesis)
-# before cancelling them; the lifespan shutdown then drains inference threads
-# for up to INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS (30). docker-compose's
-# `stop_grace_period` must cover both plus a margin, or Docker's default 10 s
-# SIGKILLs the process mid-drain.
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "30"]
+# The entrypoint (backend/serve.py) reads $PORT, chowns a root-owned volume and
+# drops to this user when started as root, optionally downloads the model
+# weights (FETCH_WEIGHTS_ON_START), then execs uvicorn so it stays PID 1 and
+# receives SIGTERM directly. The uvicorn flags live there, in one testable
+# place: `--workers 1` is load-bearing (the inference semaphore and the rate
+# limiter are process-local, HARDENING_PLAN.md H6/M3/H7; scale with more
+# containers behind a shared-state limiter, never a higher worker count) and
+# `--timeout-graceful-shutdown` is sized with docker-compose's
+# `stop_grace_period` and Railway's `drainingSeconds` (P2-L4).
+CMD ["python", "-m", "backend.serve"]

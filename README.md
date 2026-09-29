@@ -182,6 +182,14 @@ many requests are queued behind it:
   (~17 MB, downloaded automatically into the container user's home directory on first use —
   persist `~appuser` if you don't want to re-download it on every container recreation).
 
+## ☁️ Deploying to Railway
+
+`railway.toml` and [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md) hold the runbook:
+services, the `/data` volume, the full variable list and the checks to run after the
+first deploy. The image's entrypoint (`backend/serve.py`) reads the platform's
+`$PORT`, prepares a root-owned volume and can download the model weights on first
+boot (`FETCH_WEIGHTS_ON_START`).
+
 ## 🗺️ Roadmap
 
 - **Phase 1:** Core Backend Architecture & AI Inference Pipeline (In Progress)
