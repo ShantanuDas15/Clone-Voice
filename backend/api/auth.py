@@ -1,38 +1,41 @@
 """Authentication API routes and handlers."""
 
 import asyncio
+import hmac
 import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import (APIRouter, BackgroundTasks, Cookie, Depends,
+                     HTTPException, Request, Response, status)
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.rate_limit import limiter
-from backend.core.security import (
-    REFRESH_TOKEN_TYPE,
-    create_access_token,
-    decode_token,
-    get_current_user,
-    hash_email_for_logging,
-    hash_password,
-    verify_password,
-)
+from backend.core.security import (EMAIL_VERIFICATION_TOKEN_TYPE,
+                                   PASSWORD_RESET_TOKEN_TYPE,
+                                   REFRESH_TOKEN_TYPE, create_access_token,
+                                   create_email_verification_token,
+                                   create_password_reset_token,
+                                   decode_purpose_token, decode_token,
+                                   get_current_user, hash_email_for_logging,
+                                   hash_password, password_fingerprint,
+                                   verify_password)
 from backend.models.user import User
-from backend.schemas.auth import (
-    LoginRequest,
-    SignupRequest,
-    TokenResponse,
-    UpdateUserRequest,
-    UserOut,
-)
-from backend.services.refresh_tokens import (
-    consume_refresh_token,
-    issue_refresh_token,
-    parse_refresh_claims,
-    revoke_all_for_user,
-)
+from backend.schemas.auth import (ForgotPasswordRequest, LoginRequest,
+                                  MessageResponse, ResetPasswordRequest,
+                                  SignupRequest, TokenResponse,
+                                  UpdateUserRequest, UserOut,
+                                  VerifyEmailRequest)
+from backend.services.email_service import (send_password_reset_email,
+                                            send_verification_email)
+from backend.services.refresh_tokens import (consume_refresh_token,
+                                             issue_refresh_token,
+                                             parse_refresh_claims,
+                                             revoke_all_for_user)
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +68,13 @@ oauth.register(
     "/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
 )
 @limiter.limit(settings.AUTH_SIGNUP_RATE_LIMIT)
-def signup(request: Request, user_in: SignupRequest, db: Session = Depends(get_db)):
-    """Register a new local user and return an access token."""
+def signup(
+    request: Request,
+    user_in: SignupRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Register a new local user, email a verification link, return a token."""
     existing_user = db.query(User).filter(User.email == user_in.email).first()
     if existing_user:
         # HARDENING_PLAN.md finding L10: log the existing row's id, never the
@@ -88,6 +96,15 @@ def signup(request: Request, user_in: SignupRequest, db: Session = Depends(get_d
     db.refresh(new_user)
 
     logger.info("New user registered: user_id=%s", new_user.id)
+    # Sent after the response, so a slow or failing mail provider neither
+    # delays nor breaks signup; the user can request another link.
+    background_tasks.add_task(
+        send_verification_email,
+        new_user.id,
+        new_user.email,
+        new_user.name,
+        create_email_verification_token(new_user),
+    )
     access_token = create_access_token(data={"sub": str(new_user.id)})
     return TokenResponse(access_token=access_token)
 
@@ -178,6 +195,130 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+def _user_from_token_claims(db: Session, claims: Optional[dict]) -> Optional[User]:
+    """Load the live user a purpose token's `sub` names, or None."""
+    if not claims:
+        return None
+    try:
+        user_id = uuid.UUID(str(claims.get("sub")))
+    except ValueError:
+        return None
+    return db.query(User).filter(User.id == user_id, User.deleted_at == None).first()
+
+
+@router.post("/verify-email", response_model=MessageResponse)
+@limiter.limit(settings.AUTH_TOKEN_RATE_LIMIT)
+def verify_email(
+    request: Request, body: VerifyEmailRequest, db: Session = Depends(get_db)
+):
+    """Mark the address verified when given a valid emailed token (idempotent)."""
+    claims = decode_purpose_token(body.token, EMAIL_VERIFICATION_TOKEN_TYPE)
+    user = _user_from_token_claims(db, claims)
+    # The token is bound to the address it was sent to: it stops working if
+    # the account's email ever changes.
+    if user is None or claims.get("email") != user.email.lower():
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    if user.email_verified_at is None:
+        user.email_verified_at = datetime.now(timezone.utc)
+        db.commit()
+        logger.info("Email verified: user_id=%s", user.id)
+    return MessageResponse(detail="Email verified")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@limiter.limit(settings.AUTH_EMAIL_RATE_LIMIT)
+def resend_verification(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+):
+    """Email the signed-in user a fresh verification link."""
+    if current_user.email_verified_at is not None:
+        return MessageResponse(detail="Email already verified")
+    background_tasks.add_task(
+        send_verification_email,
+        current_user.id,
+        current_user.email,
+        current_user.name,
+        create_email_verification_token(current_user),
+    )
+    return MessageResponse(detail="Verification email sent")
+
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@limiter.limit(settings.AUTH_EMAIL_RATE_LIMIT)
+def forgot_password(
+    request: Request,
+    body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Email a reset link if the address has a local password.
+
+    The response is identical whether or not the address is registered, so
+    this cannot be used to discover which emails have accounts.
+    """
+    user = (
+        db.query(User).filter(User.email == body.email, User.deleted_at == None).first()
+    )
+    if user is not None and user.hashed_password:
+        background_tasks.add_task(
+            send_password_reset_email,
+            user.id,
+            user.email,
+            user.name,
+            create_password_reset_token(user),
+        )
+    else:
+        logger.info(
+            "Password reset requested for an address with no local password: "
+            "email_hash=%s",
+            hash_email_for_logging(body.email),
+        )
+    return MessageResponse(
+        detail="If that address has an account, a reset link has been sent"
+    )
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+@limiter.limit(settings.AUTH_TOKEN_RATE_LIMIT)
+def reset_password(
+    request: Request, body: ResetPasswordRequest, db: Session = Depends(get_db)
+):
+    """Set a new password with a valid, unused reset token."""
+    claims = decode_purpose_token(body.token, PASSWORD_RESET_TOKEN_TYPE)
+    user = _user_from_token_claims(db, claims)
+    # The fingerprint no longer matches once the password has changed, so a
+    # token cannot be replayed (or used after a Google link cleared it).
+    if (
+        user is None
+        or not user.hashed_password
+        or not hmac.compare_digest(
+            str(claims.get("pwf", "")), password_fingerprint(user.hashed_password)
+        )
+    ):
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    user.hashed_password = hash_password(body.new_password)
+    if user.email_verified_at is None:
+        # Opening the emailed link proves control of the inbox.
+        user.email_verified_at = datetime.now(timezone.utc)
+    db.commit()
+    # Every existing session is suspect if the password had to be reset.
+    revoked = revoke_all_for_user(db, user.id)
+    logger.info("Password reset, revoked %d session(s): user_id=%s", revoked, user.id)
+    return MessageResponse(detail="Password updated")
+
+
 def _sign_in_google_user(db: Session, email: str, user_info: dict) -> tuple[str, str]:
     """Find, link or create the Google user and issue a refresh token.
 
@@ -207,6 +348,12 @@ def _sign_in_google_user(db: Session, email: str, user_info: dict) -> tuple[str,
                 revoked,
                 user.id,
             )
+        if user.email_verified_at is None:
+            # Google has verified this address (the callback refuses any it
+            # has not), so the account is verified whichever way it began.
+            user.email_verified_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(user)
         logger.info("Existing user signed in via Google: user_id=%s", user.id)
     else:
         user = User(
@@ -214,6 +361,7 @@ def _sign_in_google_user(db: Session, email: str, user_info: dict) -> tuple[str,
             name=user_info.get("name") or "Google User",
             avatar_url=user_info.get("picture"),
             provider="google",
+            email_verified_at=datetime.now(timezone.utc),
         )
         db.add(user)
         db.commit()

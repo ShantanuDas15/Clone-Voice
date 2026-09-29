@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
 from backend.core.rate_limit import limiter
-from backend.core.security import get_current_user
+from backend.core.security import get_current_user, get_verified_user
 from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
@@ -92,7 +92,7 @@ def _load_profile_and_release(db: Session, profile_id) -> Optional[VoiceProfile]
 async def synthesize(
     request: Request,
     req: SynthesizeRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     db: Session = Depends(get_db),
 ):
     """Synthesize speech from text using a given voice profile."""
