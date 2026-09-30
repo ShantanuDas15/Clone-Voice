@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import uuid
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -63,6 +64,24 @@ def hash_email_for_logging(email: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
+
+@lru_cache(maxsize=1)
+def _dummy_password_hash() -> str:
+    """A real hash at the configured cost, to burn the same time as a true check."""
+    return hash_password("not-a-real-password-timing-equaliser")
+
+
+def verify_password_or_dummy(plain_password: str, hashed_password: Optional[str]) -> bool:
+    """Verify a password; with no stored hash, spend the same time and return False.
+
+    Without this, login answers in milliseconds for an unknown email and in
+    a couple of hundred for a known one, which reveals who has an account.
+    """
+    if hashed_password:
+        return verify_password(plain_password, hashed_password)
+    verify_password(plain_password, _dummy_password_hash())
+    return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

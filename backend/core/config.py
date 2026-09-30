@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import List, Literal
+from urllib.parse import urlparse
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,6 +38,9 @@ class Settings(BaseSettings):
     # unedited) gets INFO logging, not DEBUG lines carrying per-request user
     # ids and file paths. Set to "development" for verbose local debugging.
     APP_ENV: str = "production"
+    # Interactive API docs (/docs, /redoc, /openapi.json) describe every route;
+    # they are served only in development unless this is set explicitly.
+    API_DOCS_ENABLED: bool = False
     DEVICE: str = "cpu"
     # HARDENING_PLAN.md finding P2-L11: torch's CPU thread count. 0 = follow the
     # container CPU limit (cgroup quota) when it is tighter than the host's
@@ -257,6 +261,26 @@ class Settings(BaseSettings):
             raise ValueError("storage directory must not be empty")
         path = Path(v).expanduser()
         return str(path if path.is_absolute() else BASE_DIR / path)
+
+    @field_validator("ALLOWED_ORIGINS")
+    @classmethod
+    def validate_allowed_origins(cls, origins: List[str]) -> List[str]:
+        """Require exact origins: the API allows credentials, so `*` is unsafe."""
+        for origin in origins:
+            parsed = urlparse(origin)
+            exact = f"{parsed.scheme}://{parsed.netloc}"
+            if (
+                "*" in origin
+                or parsed.scheme not in ("http", "https")
+                or not parsed.netloc
+                or origin != exact
+            ):
+                raise ValueError(
+                    "ALLOWED_ORIGINS entries must be exact origins such as "
+                    "https://app.example.com (scheme and host, no wildcard, "
+                    f"path or trailing slash); got {origin!r}"
+                )
+        return origins
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod
