@@ -298,9 +298,11 @@ def test_forgot_password_is_identical_for_known_and_unknown_addresses(
     assert [m["To"] for m in outbox] == ["new@example.com"]
 
 
-def test_forgot_password_skips_accounts_without_a_local_password(
+def test_forgot_password_offers_google_accounts_a_set_password_link(
     client: TestClient, outbox
 ):
+    """A Google-only account gets a link that adds a password (see
+    test_unified_sign_in.py); the response stays identical to a known address."""
     claims = {"email": "g@example.com", "email_verified": True, "name": "G"}
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
@@ -311,7 +313,8 @@ def test_forgot_password_skips_accounts_without_a_local_password(
 
     resp = client.post("/api/v1/auth/forgot-password", json={"email": "g@example.com"})
     assert resp.status_code == 202
-    assert outbox == []
+    assert [m["To"] for m in outbox] == ["g@example.com"]
+    assert outbox[0]["Subject"] == "Set a password for your CloneVoice account"
 
 
 def test_forgot_password_rejects_malformed_email(client: TestClient):

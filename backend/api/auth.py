@@ -262,7 +262,10 @@ def forgot_password(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    """Email a reset link if the address has a local password.
+    """Email a link to set or reset the password of a known address.
+
+    A Google-only account gets the same link: following it proves control of
+    the inbox and adds email/password sign-in beside Google.
 
     The response is identical whether or not the address is registered, so
     this cannot be used to discover which emails have accounts.
@@ -270,18 +273,18 @@ def forgot_password(
     user = (
         db.query(User).filter(User.email == body.email, User.deleted_at == None).first()
     )
-    if user is not None and user.hashed_password:
+    if user is not None:
         background_tasks.add_task(
             send_password_reset_email,
             user.id,
             user.email,
             user.name,
             create_password_reset_token(user),
+            bool(user.hashed_password),
         )
     else:
         logger.info(
-            "Password reset requested for an address with no local password: "
-            "email_hash=%s",
+            "Password reset requested for an unknown address: email_hash=%s",
             hash_email_for_logging(body.email),
         )
     return MessageResponse(
@@ -299,12 +302,8 @@ def reset_password(
     user = _user_from_token_claims(db, claims)
     # The fingerprint no longer matches once the password has changed, so a
     # token cannot be replayed (or used after a Google link cleared it).
-    if (
-        user is None
-        or not user.hashed_password
-        or not hmac.compare_digest(
-            str(claims.get("pwf", "")), password_fingerprint(user.hashed_password)
-        )
+    if user is None or not hmac.compare_digest(
+        str(claims.get("pwf", "")), password_fingerprint(user.hashed_password)
     ):
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
@@ -330,24 +329,38 @@ def _sign_in_google_user(db: Session, email: str, user_info: dict) -> tuple[str,
     if user:
         if user.provider == "local":
             user.provider = "google"
-            # HARDENING_PLAN.md finding P2-H1: local signup never verified
-            # email ownership, while Google just did. Drop the password so
-            # whoever registered the address first can't keep signing in.
-            user.hashed_password = None
+            # HARDENING_PLAN.md finding P2-H1: an *unverified* local signup
+            # never proved ownership of the address, while Google just did.
+            # Drop its password so whoever registered the address first can't
+            # keep signing in. A *verified* account already proved the inbox
+            # (by the emailed link), so it is the same owner: keep the password
+            # and let the person sign in either way.
+            owner_already_proven = user.email_verified_at is not None
+            if not owner_already_proven:
+                user.hashed_password = None
             if not user.avatar_url:
                 user.avatar_url = user_info.get("picture")
             db.commit()
             db.refresh(user)
-            # A session the squatter already holds must not outlive the link
-            # (the password alone isn't the only way in: refresh cookies work
-            # for up to REFRESH_TOKEN_EXPIRE_DAYS). Google-to-Google sign-ins
-            # leave other devices alone; only this first link revokes.
-            revoked = revoke_all_for_user(db, user.id)
-            logger.info(
-                "Linked Google to local account, revoked %d session(s): user_id=%s",
-                revoked,
-                user.id,
-            )
+            if owner_already_proven:
+                logger.info(
+                    "Linked Google to verified local account, kept password: "
+                    "user_id=%s",
+                    user.id,
+                )
+            else:
+                # A session the squatter already holds must not outlive the
+                # link (the password alone isn't the only way in: refresh
+                # cookies work for up to REFRESH_TOKEN_EXPIRE_DAYS).
+                # Google-to-Google sign-ins leave other devices alone; only
+                # this first link revokes.
+                revoked = revoke_all_for_user(db, user.id)
+                logger.info(
+                    "Linked Google to unverified local account, revoked %d "
+                    "session(s): user_id=%s",
+                    revoked,
+                    user.id,
+                )
         if user.email_verified_at is None:
             # Google has verified this address (the callback refuses any it
             # has not), so the account is verified whichever way it began.

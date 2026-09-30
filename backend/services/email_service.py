@@ -45,17 +45,29 @@ def build_verification_message(to: str, name: str, token: str) -> EmailMessage:
     return message
 
 
-def build_password_reset_message(to: str, name: str, token: str) -> EmailMessage:
-    """Compose the password-reset email."""
+def build_password_reset_message(
+    to: str, name: str, token: str, has_password: bool = True
+) -> EmailMessage:
+    """Compose the password-reset email (or the set-a-password one)."""
     minutes = settings.PASSWORD_RESET_EXPIRE_MINUTES
     message = EmailMessage()
-    message["Subject"] = "Reset your CloneVoice password"
+    message["Subject"] = (
+        "Reset your CloneVoice password"
+        if has_password
+        else "Set a password for your CloneVoice account"
+    )
+    ask = (
+        "Someone asked to reset the password for this account. To choose a new "
+        "one, open:"
+        if has_password
+        else "This account signs in with Google. To also sign in with your email "
+        "and a password, open:"
+    )
     message["From"] = settings.EMAIL_FROM
     message["To"] = to
     message.set_content(
         f"Hi {name},\n\n"
-        "Someone asked to reset the password for this account. To choose a new "
-        "one, open:\n\n"
+        f"{ask}\n\n"
         f"{_link('reset-password', token)}\n\n"
         f"The link works once and expires in {minutes} minutes. If you did not "
         "ask for this, ignore this message: your password has not changed.\n"
@@ -136,7 +148,7 @@ def send_verification_email(user_id: uuid.UUID, to: str, name: str, token: str) 
 
 
 def send_password_reset_email(
-    user_id: uuid.UUID, to: str, name: str, token: str
+    user_id: uuid.UUID, to: str, name: str, token: str, has_password: bool = True
 ) -> None:
-    """Send the password-reset link; never raises."""
-    _safe_deliver(build_password_reset_message(to, name, token), user_id)
+    """Send the password-reset (or set-a-password) link; never raises."""
+    _safe_deliver(build_password_reset_message(to, name, token, has_password), user_id)

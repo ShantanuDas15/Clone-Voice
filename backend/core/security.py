@@ -113,16 +113,19 @@ def decode_token(token: str, expected_type: str = ACCESS_TOKEN_TYPE) -> dict:
     return payload
 
 
-def password_fingerprint(hashed_password: str) -> str:
+def password_fingerprint(hashed_password: Optional[str]) -> str:
     """Keyed, truncated digest of a stored password hash.
 
     A password-reset token carries this; it stops matching the moment the
     password changes, which makes the token single-use without a table. It is
     keyed with the JWT secret so a token never discloses anything about the
-    hash it was derived from.
+    hash it was derived from. An account with no password yet (Google-only)
+    fingerprints the empty string, so its token dies the moment one is set.
     """
     return hmac.new(
-        settings.JWT_SECRET_KEY.encode(), hashed_password.encode(), hashlib.sha256
+        settings.JWT_SECRET_KEY.encode(),
+        (hashed_password or "").encode(),
+        hashlib.sha256,
     ).hexdigest()[:24]
 
 
@@ -149,7 +152,7 @@ def create_email_verification_token(user: User) -> str:
 
 
 def create_password_reset_token(user: User) -> str:
-    """Single-use token to set a new password; `user` must have a password."""
+    """Single-use token to set (or reset) the account's password."""
     return _create_purpose_token(
         {"sub": str(user.id), "pwf": password_fingerprint(user.hashed_password)},
         PASSWORD_RESET_TOKEN_TYPE,
