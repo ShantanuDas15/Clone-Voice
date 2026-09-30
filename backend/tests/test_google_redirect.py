@@ -22,7 +22,12 @@ def _callback(client: TestClient, user_info=None, error=None):
         return client.get("/api/v1/auth/google/callback?code=c&state=s")
 
 
-GOOD = {"email": "redir@example.com", "email_verified": True, "name": "R"}
+GOOD = {
+    "email": "redir@example.com",
+    "email_verified": True,
+    "sub": "sub-redir",
+    "name": "R",
+}
 
 
 def test_success_redirects_into_the_web_app_with_a_cookie(client: TestClient):

@@ -133,6 +133,24 @@ An immutable audit trail and history log of every synthesized audio clip.
 
 ---
 
+### 4. `user_identities` Table
+Links an external sign-in identity (today: a Google account) to a user. Google sign-in finds the user by `provider_subject` (Google's stable account id, the `sub` claim), never by email once the identity exists, because an address can change hands while the account id cannot. A user may also keep a password: `users.hashed_password` is independent of this table.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `UUID` | `PK` | Unique identifier. |
+| `user_id` | `UUID` | `NOT NULL`, `FK -> users(id)` | Owner. `ON DELETE CASCADE`. Indexed. |
+| `provider` | `VARCHAR(50)` | `NOT NULL` | Identity provider (`google`). |
+| `provider_subject` | `VARCHAR(255)` | `NOT NULL` | The provider's stable account id. |
+| `email` | `VARCHAR(255)` | `NOT NULL` | Address the provider reported at link time (audit only). |
+| `created_at` / `updated_at` | `TIMESTAMPTZ` | `NOT NULL`, `DEFAULT NOW()` | Audit timestamps. |
+| `deleted_at` | `TIMESTAMPTZ` | `NULL` | Soft delete marker (unlinking is not implemented; a soft-deleted row keeps its subject reserved). |
+
+**Constraints**: `UNIQUE (provider, provider_subject)`.
+Users who signed in with Google before this table existed have no row; theirs is created on their next Google sign-in.
+
+---
+
 ## 📈 Scalability & Evolution Path
 
 To ensure the database can scale elegantly when transitioning from V1.0 to enterprise-grade operations:

@@ -78,7 +78,8 @@ variable is missing, the container stops with an error that names it.
 - **Google sign-in:** the browser goes to `GET /api/v1/auth/google`; the callback
   then redirects to `FRONTEND_URL/auth/callback` with the refresh cookie set, or to
   `FRONTEND_URL/login?error=<code>` (`google_failed`, `google_no_email`,
-  `google_email_unverified`). The page at `/auth/callback` calls
+  `google_email_unverified`, `google_account_conflict` when the address already belongs to
+  an account linked to a different Google account). The page at `/auth/callback` calls
   `POST /api/v1/auth/refresh` (with credentials) to obtain its access token; no token
   is ever placed in a URL.
 - **Same site:** the refresh cookie is `SameSite=Lax`, so it is only sent when the web
