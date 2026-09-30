@@ -177,6 +177,9 @@ class Settings(BaseSettings):
     # `consent_confirmed_at`, so a consent can be traced to the exact wording
     # in force. Bump it whenever the terms text changes.
     TERMS_VERSION: str = "2026-09-30"
+    # Where the terms text is published (shown by the client next to the
+    # consent checkbox). Blank until the page exists.
+    TERMS_URL: str = ""
     # HARDENING_PLAN.md finding L5: the engine previously had no
     # pool_pre_ping, pool sizing, or connect timeout, so a stale pooled
     # connection (e.g. after a DB restart or an idle-connection reap by the

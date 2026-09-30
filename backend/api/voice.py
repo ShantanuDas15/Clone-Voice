@@ -5,7 +5,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
@@ -104,6 +104,7 @@ async def upload_audio(
     request: Request,
     name: str = Form(..., min_length=1, max_length=255),
     consent_confirmed: bool = Form(...),
+    terms_version: Optional[str] = Form(None, max_length=50),
     file: UploadFile = File(...),
     current_user: User = Depends(get_verified_user),
     db: Session = Depends(get_db),
@@ -124,6 +125,16 @@ async def upload_audio(
         raise HTTPException(
             status_code=422,
             detail="You must confirm you have the right to use this voice sample.",
+        )
+    # The attestation is only meaningful against the wording the user saw. A
+    # client that says which version it showed must match the current one;
+    # otherwise the terms changed under it and it has to ask again. Omitting
+    # the field is still accepted (the current version is recorded).
+    if terms_version is not None and terms_version != settings.TERMS_VERSION:
+        raise HTTPException(
+            status_code=409,
+            detail="The terms have changed (current version "
+            f"{settings.TERMS_VERSION}). Review them and confirm again.",
         )
     consent_confirmed_at = datetime.now(timezone.utc)
 
