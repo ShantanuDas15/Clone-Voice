@@ -9,6 +9,7 @@ class VoiceProfileOut(BaseModel):
     name: str
     status: str
     consent_confirmed_at: datetime
+    terms_version: str
     created_at: datetime
 
     model_config = {"from_attributes": True}

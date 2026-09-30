@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
+from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.db_errors import db_unavailable, is_transient_db_error
 from backend.core.rate_limit import limiter
@@ -84,6 +85,7 @@ async def _cleanup_failed_upload(
         embedding_path="",
         status="failed",
         consent_confirmed_at=consent_confirmed_at,
+        terms_version=settings.TERMS_VERSION,
     )
     try:
         await asyncio.to_thread(_persist_profile, db, profile)
@@ -202,6 +204,7 @@ async def upload_audio(
         embedding_path=embedding_path,
         status="ready",
         consent_confirmed_at=consent_confirmed_at,
+        terms_version=settings.TERMS_VERSION,
     )
     try:
         await asyncio.to_thread(_persist_profile, db, profile)

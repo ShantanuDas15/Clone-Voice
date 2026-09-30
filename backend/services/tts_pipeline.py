@@ -699,6 +699,28 @@ def vocode(mel: np.ndarray) -> np.ndarray:
     return np.clip(result, -1.0, 1.0).astype(np.float32)
 
 
+PROVENANCE_SOFTWARE = "CloneVoice"
+PROVENANCE_COMMENT = "AI-generated synthetic speech (voice clone)"
+
+
+def _write_wav_with_provenance(
+    file_path: str, waveform: np.ndarray, sample_rate: int
+) -> None:
+    """Write a 16-bit mono WAV whose metadata marks it as synthetic speech."""
+    with sf.SoundFile(
+        file_path,
+        mode="w",
+        samplerate=sample_rate,
+        channels=1,
+        format="WAV",
+        subtype="PCM_16",
+    ) as out:
+        out.title = "Synthetic speech"
+        out.software = PROVENANCE_SOFTWARE
+        out.comment = PROVENANCE_COMMENT
+        out.write(waveform)
+
+
 def save_output(
     waveform: np.ndarray, sample_rate: int, user_id: str
 ) -> tuple[str, float]:
@@ -712,7 +734,7 @@ def save_output(
     if waveform.ndim > 1:
         waveform = waveform.squeeze()
 
-    sf.write(file_path, waveform, sample_rate)
+    _write_wav_with_provenance(file_path, waveform, sample_rate)
 
     duration = len(waveform) / sample_rate
     return file_path, float(duration)
