@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Literal
 from urllib.parse import urlparse
 
+from limits import parse as parse_rate_limit
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -100,6 +101,14 @@ class Settings(BaseSettings):
     # Silent token renewal by every signed-in client; generous, but bounded so
     # the endpoint cannot be used to hammer the database.
     AUTH_REFRESH_RATE_LIMIT: str = "60/minute"
+    # SEC-3: failed password checks allowed per account (login, and the
+    # password re-check on account erasure) before it answers 429 for the
+    # rest of the window. Complements the per-IP AUTH_LOGIN_RATE_LIMIT, which
+    # cannot stop many clients guessing one account.
+    AUTH_PASSWORD_FAILURE_LIMIT: str = "10/15 minutes"
+    # SEC-3: per-IP ceiling for the ordinary signed-in and redirect endpoints
+    # (profile, history, logout, Google redirect/callback), which had none.
+    API_RATE_LIMIT: str = "120/minute"
 
     # HARDENING_PLAN.md finding P2-H1: local signup does not prove ownership of
     # the address. When True (the fail-safe default), an account whose email is
@@ -210,6 +219,24 @@ class Settings(BaseSettings):
         """Reject negative thread counts; 0 means auto."""
         if v < 0:
             raise ValueError("TORCH_NUM_THREADS must be >= 0 (0 = auto)")
+        return v
+
+    @field_validator(
+        "AUTH_LOGIN_RATE_LIMIT",
+        "AUTH_SIGNUP_RATE_LIMIT",
+        "AUTH_EMAIL_RATE_LIMIT",
+        "AUTH_TOKEN_RATE_LIMIT",
+        "AUTH_REFRESH_RATE_LIMIT",
+        "AUTH_PASSWORD_FAILURE_LIMIT",
+        "API_RATE_LIMIT",
+    )
+    @classmethod
+    def rate_limit_is_parseable(cls, v: str) -> str:
+        """Fail at startup on a malformed limit, not on the first request."""
+        try:
+            parse_rate_limit(v)
+        except ValueError:
+            raise ValueError(f"not a valid rate limit: {v!r} (e.g. '10/minute')")
         return v
 
     @field_validator("EMAIL_VERIFICATION_EXPIRE_HOURS", "PASSWORD_RESET_EXPIRE_MINUTES")

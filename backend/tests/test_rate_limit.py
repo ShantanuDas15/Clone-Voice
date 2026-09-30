@@ -213,15 +213,17 @@ def test_auth_limits_are_per_client_behind_trusted_proxy(
 ):
     """With one trusted proxy, distinct X-Forwarded-For clients get own buckets."""
     monkeypatch.setattr(settings, "TRUSTED_PROXY_COUNT", 1)
-    body = {"email": "nobody@example.com", "password": "Wrong-pass-1"}
 
-    def attempt(ip: str) -> int:
+    def attempt(ip: str, email: str) -> int:
+        body = {"email": email, "password": "Wrong-pass-1"}
         return client.post(
             "/api/v1/auth/login", json=body, headers={"X-Forwarded-For": ip}
         ).status_code
 
-    assert [attempt("203.0.113.1") for _ in range(11)][-1] == 429
-    assert attempt("203.0.113.2") == 401  # a different client is unaffected
+    assert [attempt("203.0.113.1", "a@example.com") for _ in range(11)][-1] == 429
+    # A different client is unaffected. (It targets another account: the same
+    # account from another IP is what the per-account throttle now stops.)
+    assert attempt("203.0.113.2", "b@example.com") == 401
 
 
 def test_client_ip_ignores_forwarded_for_without_trusted_proxy(monkeypatch):

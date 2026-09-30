@@ -17,6 +17,9 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.login_throttle import (clear_failures, email_identity,
+                                         ensure_not_throttled, record_failure,
+                                         user_identity)
 from backend.core.rate_limit import limiter
 from backend.core.security import (EMAIL_VERIFICATION_TOKEN_TYPE,
                                    PASSWORD_RESET_TOKEN_TYPE,
@@ -129,6 +132,8 @@ def login(
     db: Session = Depends(get_db),
 ):
     """Authenticate a local user and return access + refresh tokens."""
+    identity = email_identity(user_in.email)
+    ensure_not_throttled(identity)
     user = (
         db.query(User)
         .filter(User.email == user_in.email, User.deleted_at.is_(None))
@@ -141,6 +146,7 @@ def login(
         user_in.password, user.hashed_password if user else None
     )
     if not user or not password_ok:
+        record_failure(identity)
         # HARDENING_PLAN.md finding L10: no DB row here on an unknown email,
         # so there's no user_id to log — a salted, non-reversible hash lets
         # repeated attempts on the same address still correlate in logs
@@ -151,6 +157,7 @@ def login(
         )
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
+    clear_failures(identity)
     logger.info("User logged in: user_id=%s", user.id)
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = issue_refresh_token(db, user.id)
@@ -197,8 +204,12 @@ def refresh(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(settings.API_RATE_LIMIT)
 def logout(
-    response: Response, refresh_token: str = Cookie(None), db: Session = Depends(get_db)
+    request: Request,
+    response: Response,
+    refresh_token: str = Cookie(None),
+    db: Session = Depends(get_db),
 ):
     """Revoke the caller's refresh token and clear the cookie (idempotent)."""
     claims = parse_refresh_claims(refresh_token) if refresh_token else None
@@ -211,7 +222,8 @@ def logout(
 
 
 @router.get("/me", response_model=UserOut)
-def get_me(current_user: User = Depends(get_current_user)):
+@limiter.limit(settings.API_RATE_LIMIT)
+def get_me(request: Request, current_user: User = Depends(get_current_user)):
     """Return the current authenticated user's profile."""
     return current_user
 
@@ -483,6 +495,7 @@ def _sign_in_google_user(
 
 
 @router.get("/google")
+@limiter.limit(settings.API_RATE_LIMIT)
 async def google_login(request: Request):
     """Redirect user to Google OAuth consent screen."""
     redirect_uri = settings.GOOGLE_REDIRECT_URI or str(
@@ -507,6 +520,7 @@ def _google_failure(code: str) -> RedirectResponse:
 
 
 @router.get("/google/callback", include_in_schema=False)
+@limiter.limit(settings.API_RATE_LIMIT)
 async def google_callback(request: Request, db: Session = Depends(get_db)):
     """Finish the Google sign-in and hand the browser back to the web app.
 
@@ -556,7 +570,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
 
 @router.patch("/me", response_model=UserOut)
+@limiter.limit(settings.API_RATE_LIMIT)
 def update_me(
+    request: Request,
     user_update: UpdateUserRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -585,10 +601,15 @@ def delete_me(
     cannot erase someone's data); a Google-only account has none, so its
     signed-in session is the proof. Not reversible.
     """
-    if current_user.hashed_password and not verify_password_or_dummy(
-        body.password or "", current_user.hashed_password
-    ):
-        raise HTTPException(status_code=403, detail="Incorrect password")
+    identity = user_identity(current_user.id)
+    ensure_not_throttled(identity)
+    if current_user.hashed_password:
+        if not verify_password_or_dummy(
+            body.password or "", current_user.hashed_password
+        ):
+            record_failure(identity)
+            raise HTTPException(status_code=403, detail="Incorrect password")
+        clear_failures(identity)
 
     user_id = current_user.id
     erase_account(db, current_user)
