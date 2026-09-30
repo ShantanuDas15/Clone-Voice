@@ -16,6 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from backend.api.auth import router as auth_router
 from backend.api.synthesize import router as synthesize_router
+from backend.api.terms import router as terms_router
 from backend.api.voice import router as voice_router
 from backend.core import metrics
 from backend.core.body_limit import BodySizeLimitMiddleware
@@ -215,6 +216,7 @@ app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
 API_V1_PREFIX = "/api/v1"
 
 app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/auth", tags=["auth"])
+app.include_router(terms_router, prefix=f"{API_V1_PREFIX}/terms", tags=["terms"])
 app.include_router(voice_router, prefix=f"{API_V1_PREFIX}/voice", tags=["voice"])
 app.include_router(
     synthesize_router, prefix=f"{API_V1_PREFIX}/synthesize", tags=["synthesize"]
