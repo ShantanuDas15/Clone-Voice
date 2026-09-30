@@ -12,6 +12,7 @@ from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import (APIRouter, BackgroundTasks, Cookie, Depends,
                      HTTPException, Request, Response, status)
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
@@ -27,6 +28,7 @@ from backend.core.security import (EMAIL_VERIFICATION_TOKEN_TYPE,
                                    hash_password, password_fingerprint,
                                    verify_password)
 from backend.models.user import User
+from backend.models.user_identity import UserIdentity
 from backend.schemas.auth import (ForgotPasswordRequest, LoginRequest,
                                   MessageResponse, ResetPasswordRequest,
                                   SignupRequest, TokenResponse,
@@ -326,68 +328,144 @@ def reset_password(
     return MessageResponse(detail="Password updated")
 
 
-def _sign_in_google_user(db: Session, email: str, user_info: dict) -> tuple[str, str]:
+GOOGLE_PROVIDER = "google"
+
+
+class GoogleSignInRefused(Exception):
+    """Google sign-in must not go ahead; `code` is the login-page error code."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def _link_google_to_existing_user(user: User, user_info: dict) -> bool:
+    """Apply the account-linking rules; return True if sessions must be revoked.
+
+    Only a `local` account changes. HARDENING_PLAN.md finding P2-H1: an
+    *unverified* local signup never proved ownership of the address, while
+    Google just did, so its password is dropped (whoever registered the
+    address first must not keep signing in) and its sessions are revoked. A
+    *verified* account already proved the inbox, so it is the same owner: the
+    password stays and the person can sign in either way. A legacy Google
+    account (no identity row yet) is left as it is.
+    """
+    if user.provider != "local":
+        return False
+    user.provider = GOOGLE_PROVIDER
+    if not user.avatar_url:
+        user.avatar_url = user_info.get("picture")
+    if user.email_verified_at is not None:
+        logger.info(
+            "Linked Google to verified local account, kept password: user_id=%s",
+            user.id,
+        )
+        return False
+    user.hashed_password = None
+    return True
+
+
+def _sign_in_google_user(
+    db: Session, subject: str, email: str, user_info: dict
+) -> tuple[str, str]:
     """Find, link or create the Google user and issue a refresh token.
+
+    The user is found by the Google account id (`subject`), never by email
+    alone once an identity exists: an address can change hands, an account id
+    cannot. Only the first sign-in of an account with no identity row yet (a
+    new user, a local signup, or a Google user from before identities) falls
+    back to the email, and it records the identity in the same transaction.
+    Raises `GoogleSignInRefused` when the sign-in must not proceed.
 
     All blocking DB work for the callback lives here so the async route can run
     it off the event loop (HARDENING_PLAN.md finding P2-L5). Returns the user's
     id (as a string) and the new refresh token.
     """
-    user = db.query(User).filter(User.email == email).first()
-    if user:
-        if user.provider == "local":
-            user.provider = "google"
-            # HARDENING_PLAN.md finding P2-H1: an *unverified* local signup
-            # never proved ownership of the address, while Google just did.
-            # Drop its password so whoever registered the address first can't
-            # keep signing in. A *verified* account already proved the inbox
-            # (by the emailed link), so it is the same owner: keep the password
-            # and let the person sign in either way.
-            owner_already_proven = user.email_verified_at is not None
-            if not owner_already_proven:
-                user.hashed_password = None
-            if not user.avatar_url:
-                user.avatar_url = user_info.get("picture")
-            db.commit()
-            db.refresh(user)
-            if owner_already_proven:
-                logger.info(
-                    "Linked Google to verified local account, kept password: "
-                    "user_id=%s",
-                    user.id,
-                )
-            else:
-                # A session the squatter already holds must not outlive the
-                # link (the password alone isn't the only way in: refresh
-                # cookies work for up to REFRESH_TOKEN_EXPIRE_DAYS).
-                # Google-to-Google sign-ins leave other devices alone; only
-                # this first link revokes.
-                revoked = revoke_all_for_user(db, user.id)
-                logger.info(
-                    "Linked Google to unverified local account, revoked %d "
-                    "session(s): user_id=%s",
-                    revoked,
-                    user.id,
-                )
-        if user.email_verified_at is None:
-            # Google has verified this address (the callback refuses any it
-            # has not), so the account is verified whichever way it began.
-            user.email_verified_at = datetime.now(timezone.utc)
-            db.commit()
-            db.refresh(user)
+    identity = (
+        db.query(UserIdentity)
+        .filter(
+            UserIdentity.provider == GOOGLE_PROVIDER,
+            UserIdentity.provider_subject == subject,
+        )
+        .first()
+    )
+    revoke_sessions = False
+    if identity is not None:
+        user = (
+            db.query(User)
+            .filter(User.id == identity.user_id, User.deleted_at.is_(None))
+            .first()
+        )
+        if user is None:
+            logger.warning("Google sign-in for a deleted account refused")
+            raise GoogleSignInRefused("google_failed")
         logger.info("Existing user signed in via Google: user_id=%s", user.id)
     else:
-        user = User(
-            email=email,
-            name=user_info.get("name") or "Google User",
-            avatar_url=user_info.get("picture"),
-            provider="google",
-            email_verified_at=datetime.now(timezone.utc),
+        user = db.query(User).filter(User.email == email).first()
+        if user is None:
+            user = User(
+                email=email,
+                name=user_info.get("name") or "Google User",
+                avatar_url=user_info.get("picture"),
+                provider=GOOGLE_PROVIDER,
+                email_verified_at=datetime.now(timezone.utc),
+            )
+            db.add(user)
+            db.flush()
+            logger.info("New user created via Google OAuth: user_id=%s", user.id)
+        else:
+            already_linked = (
+                db.query(UserIdentity.id)
+                .filter(
+                    UserIdentity.user_id == user.id,
+                    UserIdentity.provider == GOOGLE_PROVIDER,
+                )
+                .first()
+            )
+            if already_linked is not None:
+                # This address belongs to an account already tied to a
+                # different Google account: never hand it to this one.
+                logger.warning(
+                    "Google sign-in refused, address already linked to another "
+                    "Google account: user_id=%s",
+                    user.id,
+                )
+                raise GoogleSignInRefused("google_account_conflict")
+            revoke_sessions = _link_google_to_existing_user(user, user_info)
+        db.add(
+            UserIdentity(
+                user_id=user.id,
+                provider=GOOGLE_PROVIDER,
+                provider_subject=subject,
+                email=email,
+            )
         )
-        db.add(user)
+
+    if user.email_verified_at is None:
+        # Google has verified this address (the callback refuses any it has
+        # not), so the account is verified whichever way it began.
+        user.email_verified_at = datetime.now(timezone.utc)
+    try:
         db.commit()
-        db.refresh(user)
-        logger.info("New user created via Google OAuth: user_id=%s", user.id)
+    except IntegrityError:
+        # A concurrent first sign-in recorded this identity (or address)
+        # first; the next attempt finds it.
+        db.rollback()
+        logger.warning("Google identity was linked concurrently; sign-in refused")
+        raise GoogleSignInRefused("google_failed")
+    db.refresh(user)
+
+    if revoke_sessions:
+        # A session the squatter already holds must not outlive the link (the
+        # password alone isn't the only way in: refresh cookies work for up to
+        # REFRESH_TOKEN_EXPIRE_DAYS). Only this first link revokes.
+        revoked = revoke_all_for_user(db, user.id)
+        logger.info(
+            "Linked Google to unverified local account, revoked %d session(s): "
+            "user_id=%s",
+            revoked,
+            user.id,
+        )
 
     refresh_token = issue_refresh_token(db, user.id)
     return str(user.id), refresh_token
@@ -425,7 +503,8 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     never JSON. Success sets the refresh cookie and lands on
     `GOOGLE_SUCCESS_PATH`; the client then calls `POST /refresh` for its
     access token, so no token ever appears in a URL. Failure lands on
-    `GOOGLE_FAILURE_PATH?error=<code>`.
+    `GOOGLE_FAILURE_PATH?error=<code>`, where the code is `google_failed`,
+    `google_no_email`, `google_email_unverified` or `google_account_conflict`.
     """
     try:
         token = await oauth.google.authorize_access_token(request)
@@ -447,9 +526,17 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         logger.warning("Google sign-in rejected: email not verified by provider")
         return _google_failure("google_email_unverified")
 
-    _, refresh_token = await asyncio.to_thread(
-        _sign_in_google_user, db, email, user_info
-    )
+    subject = user_info.get("sub")
+    if not isinstance(subject, str) or not 0 < len(subject) <= 255:
+        logger.warning("Google sign-in rejected: no usable account id (sub)")
+        return _google_failure("google_failed")
+
+    try:
+        _, refresh_token = await asyncio.to_thread(
+            _sign_in_google_user, db, subject, email, user_info
+        )
+    except GoogleSignInRefused as refused:
+        return _google_failure(refused.code)
 
     response = _frontend_redirect(GOOGLE_SUCCESS_PATH)
     _set_refresh_cookie(response, refresh_token)

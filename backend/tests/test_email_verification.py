@@ -303,7 +303,12 @@ def test_forgot_password_offers_google_accounts_a_set_password_link(
 ):
     """A Google-only account gets a link that adds a password (see
     test_unified_sign_in.py); the response stays identical to a known address."""
-    claims = {"email": "g@example.com", "email_verified": True, "name": "G"}
+    claims = {
+        "email": "g@example.com",
+        "email_verified": True,
+        "sub": "sub-" + "g@example.com",
+        "name": "G",
+    }
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
         new_callable=AsyncMock,
@@ -468,7 +473,12 @@ def test_reset_token_is_useless_after_google_link_clears_the_password(
 ):
     _signup(client)
     token = _request_reset(client, outbox)
-    claims = {"email": "new@example.com", "email_verified": True, "name": "Owner"}
+    claims = {
+        "email": "new@example.com",
+        "email_verified": True,
+        "sub": "sub-" + "new@example.com",
+        "name": "Owner",
+    }
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
         new_callable=AsyncMock,
@@ -487,7 +497,12 @@ def test_reset_token_is_useless_after_google_link_clears_the_password(
 
 
 def test_google_accounts_are_verified(client: TestClient, db_session):
-    claims = {"email": "g@example.com", "email_verified": True, "name": "G"}
+    claims = {
+        "email": "g@example.com",
+        "email_verified": True,
+        "sub": "sub-" + "g@example.com",
+        "name": "G",
+    }
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
         new_callable=AsyncMock,
@@ -502,7 +517,12 @@ def test_google_link_verifies_an_unverified_local_account(
 ):
     _signup(client)
     assert _user(db_session, "new@example.com").email_verified_at is None
-    claims = {"email": "new@example.com", "email_verified": True, "name": "Owner"}
+    claims = {
+        "email": "new@example.com",
+        "email_verified": True,
+        "sub": "sub-" + "new@example.com",
+        "name": "Owner",
+    }
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
         new_callable=AsyncMock,

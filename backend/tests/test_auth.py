@@ -269,6 +269,7 @@ def test_google_callback_new_user(client: TestClient):
     mock_user_info = {
         "email": "newgoogleuser@example.com",
         "email_verified": True,
+        "sub": "sub-" + "newgoogleuser@example.com",
         "name": "Google User",
         "picture": "http://example.com/pic.jpg",
     }
@@ -316,6 +317,7 @@ def test_google_callback_existing_local(client: TestClient):
     mock_user_info = {
         "email": "localgoogle@example.com",
         "email_verified": True,
+        "sub": "sub-" + "localgoogle@example.com",
         "name": "Google User",
         "picture": "http://example.com/pic.jpg",
     }
@@ -358,7 +360,12 @@ def test_google_link_revokes_local_password(client: TestClient):
         == 200
     )
 
-    claims = {"email": email, "email_verified": True, "name": "Real Owner"}
+    claims = {
+        "email": email,
+        "email_verified": True,
+        "sub": "sub-" + email,
+        "name": "Real Owner",
+    }
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
         new_callable=AsyncMock,
@@ -376,7 +383,12 @@ def test_google_link_revokes_local_password(client: TestClient):
 
 def _google_callback(client: TestClient, email: str):
     """Run the Google callback with a mocked, email-verified Google identity."""
-    claims = {"email": email, "email_verified": True, "name": "Real Owner"}
+    claims = {
+        "email": email,
+        "email_verified": True,
+        "sub": "sub-" + email,
+        "name": "Real Owner",
+    }
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
         new_callable=AsyncMock,
@@ -445,6 +457,7 @@ def test_google_callback_does_not_log_raw_email(
     mock_user_info = {
         "email": email,
         "email_verified": True,
+        "sub": "sub-" + email,
         "name": "Google User",
         "picture": "http://example.com/pic.jpg",
     }

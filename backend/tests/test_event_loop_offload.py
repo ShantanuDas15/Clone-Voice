@@ -187,9 +187,9 @@ def test_google_callback_runs_db_work_off_the_event_loop_thread(client):
     real_sign_in = auth_module._sign_in_google_user
     real_set_cookie = auth_module._set_refresh_cookie
 
-    def tracking_sign_in(db, email, user_info):
+    def tracking_sign_in(db, subject, email, user_info):
         threads["db_work"] = threading.get_ident()
-        return real_sign_in(db, email, user_info)
+        return real_sign_in(db, subject, email, user_info)
 
     def tracking_set_cookie(response, token):
         # Called inline in the async handler: this is the event-loop thread.
@@ -199,6 +199,7 @@ def test_google_callback_runs_db_work_off_the_event_loop_thread(client):
     user_info = {
         "email": "offload-google@example.com",
         "email_verified": True,
+        "sub": "sub-" + "offload-google@example.com",
         "name": "Offload Google",
     }
     with patch(

@@ -22,7 +22,12 @@ NEW_PASSWORD = "BrandNewPass456!"
 
 def _google(client: TestClient, email: str = EMAIL):
     """Run the Google callback for an email-verified Google identity."""
-    claims = {"email": email, "email_verified": True, "name": "Owner"}
+    claims = {
+        "email": email,
+        "email_verified": True,
+        "sub": "sub-" + email,
+        "name": "Owner",
+    }
     with patch(
         "backend.api.auth.oauth.google.authorize_access_token",
         new_callable=AsyncMock,
