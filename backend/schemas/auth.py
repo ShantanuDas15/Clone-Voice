@@ -64,6 +64,13 @@ class UpdateUserRequest(BaseModel):
         return require_nonblank_name(value) if value is not None else value
 
 
+class DeleteAccountRequest(BaseModel):
+    """Re-authentication for account erasure; `password` is required when the
+    account has one (Google-only accounts have none)."""
+
+    password: Optional[str] = Field(None, max_length=LOGIN_PASSWORD_MAX_LENGTH)
+
+
 class MessageResponse(BaseModel):
     detail: str
 
