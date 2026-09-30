@@ -4,6 +4,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.sql import func
 from sqlalchemy.types import Uuid
 
+from backend.core.config import settings
 from backend.core.database import Base
 
 
@@ -26,6 +27,11 @@ class VoiceProfile(Base):
     # timestamp *is* the record of consent — there is no unconsented row, so
     # no separate boolean is needed alongside it.
     consent_confirmed_at = Column(DateTime(timezone=True), nullable=False)
+    # The acceptable-use terms version the uploader attested to (RU-2). Rows
+    # that predate versioning carry the literal "legacy".
+    terms_version = Column(
+        String(50), nullable=False, default=lambda: settings.TERMS_VERSION
+    )
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

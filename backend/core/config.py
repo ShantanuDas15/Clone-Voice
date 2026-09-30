@@ -172,6 +172,11 @@ class Settings(BaseSettings):
     # eligible for the normal age-based cleanup (the DB row is kept). 0 or
     # negative keeps every output forever.
     OUTPUT_RETENTION_DAYS: float = 30
+    # Responsible use (RU-2): the version of the acceptable-use terms a voice
+    # sample upload attests to. Stored on every voice profile beside
+    # `consent_confirmed_at`, so a consent can be traced to the exact wording
+    # in force. Bump it whenever the terms text changes.
+    TERMS_VERSION: str = "2026-09-30"
     # HARDENING_PLAN.md finding L5: the engine previously had no
     # pool_pre_ping, pool sizing, or connect timeout, so a stale pooled
     # connection (e.g. after a DB restart or an idle-connection reap by the

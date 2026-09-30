@@ -164,6 +164,51 @@ def test_failed_profile_also_records_consent(
     assert row.consent_confirmed_at is not None
 
 
+def test_upload_records_terms_version(client: TestClient, auth_headers, db_session):
+    """The consent is stored with the terms version in force, and returned."""
+    with patch("backend.core.config.settings.TERMS_VERSION", "2099-01-01"):
+        response = client.post(
+            "/api/v1/voice/upload",
+            headers=auth_headers,
+            data={"name": "Versioned Voice", "consent_confirmed": "true"},
+            files={"file": ("test.wav", create_dummy_wav(), "audio/wav")},
+        )
+    assert response.status_code == 201
+    assert response.json()["terms_version"] == "2099-01-01"
+    row = db_session.get(VoiceProfile, uuid.UUID(response.json()["id"]))
+    assert row.terms_version == "2099-01-01"
+
+
+def test_failed_profile_also_records_terms_version(
+    client: TestClient, auth_headers, db_session, tmp_path
+):
+    """A failed upload was received under the same terms, so it keeps them."""
+    with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
+        "backend.api.voice.embed_speaker_async", side_effect=RuntimeError("boom")
+    ):
+        client.post(
+            "/api/v1/voice/upload",
+            headers=auth_headers,
+            data={"name": "Failed Terms", "consent_confirmed": "true"},
+            files={"file": ("f.wav", create_dummy_wav(), "audio/wav")},
+        )
+    row = db_session.query(VoiceProfile).filter_by(name="Failed Terms").one()
+    assert row.terms_version
+
+
+def test_rejected_consent_does_not_record_terms(
+    client: TestClient, auth_headers, db_session
+):
+    """No consent, no row: a terms version is never stored on its own."""
+    client.post(
+        "/api/v1/voice/upload",
+        headers=auth_headers,
+        data={"name": "No Terms", "consent_confirmed": "false"},
+        files={"file": ("t.wav", create_dummy_wav(), "audio/wav")},
+    )
+    assert db_session.query(VoiceProfile).filter_by(name="No Terms").count() == 0
+
+
 def test_voice_profile_consent_is_not_nullable(db_session):
     """The schema, not just the API, refuses a profile with no consent."""
     user = User(email="nc@example.com", name="NC", provider="local")

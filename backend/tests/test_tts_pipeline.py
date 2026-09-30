@@ -74,6 +74,24 @@ def test_save_output_creates_file():
     os.remove(path)
 
 
+def test_save_output_marks_file_as_synthetic():
+    """The WAV metadata must identify the audio as AI-generated, and the
+    audio itself must still read back at the right rate and length."""
+    import soundfile as sf
+
+    wav = (np.random.randn(16000) * 0.1).astype(np.float32)
+    path, _ = save_output(wav, 16000, "test_user")
+    try:
+        with sf.SoundFile(path) as f:
+            assert f.samplerate == 16000
+            assert f.channels == 1
+            assert len(f) == 16000
+            assert f.software.startswith("CloneVoice")
+            assert "AI-generated" in f.comment
+    finally:
+        os.remove(path)
+
+
 def test_save_output_returns_duration():
     """save_output duration must match waveform length / sample rate."""
     wav = np.random.randn(8000).astype(np.float32)
