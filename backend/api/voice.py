@@ -12,7 +12,6 @@ from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
                      UploadFile, status)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
 
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -27,6 +26,7 @@ from backend.services.audio_processing import (preprocess_audio,
                                                preprocess_semaphore,
                                                save_upload,
                                                validate_audio_file)
+from backend.services.erasure import erase_voice_profile, remove_files
 from backend.services.tts_pipeline import (InferenceQueueFullError,
                                            InferenceTimeoutError,
                                            embed_speaker_async)
@@ -281,7 +281,9 @@ def delete_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Voice profile not found")
 
-    profile.deleted_at = func.now()
+    # SEC-2: the cloned outputs and the voice's own files go with the profile.
+    files = erase_voice_profile(db, profile)
     db.commit()
+    remove_files(files)
     logger.info("Voice profile soft-deleted: id=%s by user_id=%s", pid, current_user.id)
     return {"status": "deleted"}

@@ -29,13 +29,14 @@ from backend.core.security import (EMAIL_VERIFICATION_TOKEN_TYPE,
                                    verify_password, verify_password_or_dummy)
 from backend.models.user import User
 from backend.models.user_identity import UserIdentity
-from backend.schemas.auth import (ForgotPasswordRequest, LoginRequest,
-                                  MessageResponse, ResetPasswordRequest,
-                                  SignupRequest, TokenResponse,
-                                  UpdateUserRequest, UserOut,
+from backend.schemas.auth import (DeleteAccountRequest, ForgotPasswordRequest,
+                                  LoginRequest, MessageResponse,
+                                  ResetPasswordRequest, SignupRequest,
+                                  TokenResponse, UpdateUserRequest, UserOut,
                                   VerifyEmailRequest)
 from backend.services.email_service import (send_password_reset_email,
                                             send_verification_email)
+from backend.services.erasure import erase_account, remove_user_storage
 from backend.services.refresh_tokens import (consume_refresh_token,
                                              issue_refresh_token,
                                              parse_refresh_claims,
@@ -567,3 +568,31 @@ def update_me(
         db.commit()
         db.refresh(current_user)
     return current_user
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(settings.AUTH_LOGIN_RATE_LIMIT)
+def delete_me(
+    request: Request,
+    response: Response,
+    body: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Erase the account and every voice sample, embedding and output it owns.
+
+    An account with a password must repeat it (a stolen access token alone
+    cannot erase someone's data); a Google-only account has none, so its
+    signed-in session is the proof. Not reversible.
+    """
+    if current_user.hashed_password and not verify_password_or_dummy(
+        body.password or "", current_user.hashed_password
+    ):
+        raise HTTPException(status_code=403, detail="Incorrect password")
+
+    user_id = current_user.id
+    erase_account(db, current_user)
+    remove_user_storage(user_id)
+    response.delete_cookie(
+        key="refresh_token", httponly=True, secure=True, samesite="lax"
+    )
