@@ -106,7 +106,8 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     # Base URL of the web app; emailed links point at
-    # {FRONTEND_URL}/verify-email?token=... and /reset-password?token=...
+    # {FRONTEND_URL}/verify-email#token=... and /reset-password#token=...
+    # (the token is in the URL fragment, so it never reaches a server log).
     FRONTEND_URL: str = "http://localhost:3000"
     # How outgoing mail is delivered. "disabled" (the default) sends nothing
     # and logs that fact; "console" logs the message INCLUDING its link, for

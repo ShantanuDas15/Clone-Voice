@@ -82,6 +82,12 @@ variable is missing, the container stops with an error that names it.
   an account linked to a different Google account). The page at `/auth/callback` calls
   `POST /api/v1/auth/refresh` (with credentials) to obtain its access token; no token
   is ever placed in a URL.
+- **Emailed links:** they open `FRONTEND_URL/verify-email#token=...` and
+  `FRONTEND_URL/reset-password#token=...`, with the token in the URL fragment so it never
+  reaches a server log or a `Referer` header. Each page must read the token from
+  `location.hash`, remove it at once with `history.replaceState`, be served with
+  `Referrer-Policy: no-referrer`, and then call `POST /verify-email` or
+  `POST /reset-password` with it in the JSON body.
 - **Same site:** the refresh cookie is `SameSite=Lax`, so it is only sent when the web
   app and the API share a registrable domain (for example `app.example.com` and
   `api.example.com`) or when the web app proxies API calls. Use custom domains; a

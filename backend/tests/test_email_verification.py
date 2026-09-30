@@ -57,10 +57,20 @@ def _signup(client: TestClient, email: str = "new@example.com") -> dict:
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
+def _plain(message: EmailMessage) -> str:
+    """The plain-text part of a (multipart) message."""
+    return message.get_body(("plain",)).get_content()
+
+
+def _html(message: EmailMessage) -> str:
+    """The HTML part of a (multipart) message."""
+    return message.get_body(("html",)).get_content()
+
+
 def _token_in(message: EmailMessage) -> str:
     """Extract the token query parameter from the link in a message."""
-    link = re.search(r"https?://\S+", message.get_content()).group(0)
-    return parse_qs(urlparse(link).query)["token"][0]
+    link = re.search(r"https?://\S+", _plain(message)).group(0)
+    return parse_qs(urlparse(link).fragment)["token"][0]
 
 
 def _user(db_session, email: str) -> User:
@@ -87,7 +97,7 @@ def test_signup_sends_verification_link(client: TestClient, outbox, db_session):
     assert len(outbox) == 1
     message = outbox[0]
     assert message["To"] == "new@example.com"
-    link = urlparse(re.search(r"https?://\S+", message.get_content()).group(0))
+    link = urlparse(re.search(r"https?://\S+", _plain(message)).group(0))
     assert link.path == "/verify-email"
     assert f"{link.scheme}://{link.netloc}" == settings.FRONTEND_URL.rstrip("/")
 
@@ -565,10 +575,10 @@ def test_messages_carry_a_link_and_the_expiry(monkeypatch):
     verify = email_service.build_verification_message("to@example.com", "Ann", "a b")
     reset = email_service.build_password_reset_message("to@example.com", "Ann", "tok")
 
-    assert "https://app.example.com/verify-email?token=a+b" in verify.get_content()
-    assert "https://app.example.com/reset-password?token=tok" in reset.get_content()
-    assert "24 hours" in verify.get_content()
-    assert "30 minutes" in reset.get_content()
+    assert "https://app.example.com/verify-email#token=a+b" in _plain(verify)
+    assert "https://app.example.com/reset-password#token=tok" in _plain(reset)
+    assert "24 hours" in _plain(verify)
+    assert "30 minutes" in _plain(reset)
     assert verify["From"] == "CloneVoice <no-reply@example.com>"
 
 
@@ -624,7 +634,8 @@ def test_resend_backend_posts_json_with_bearer_key(monkeypatch):
     body = json.loads(request.data)
     assert body["to"] == ["to@example.com"]
     assert body["subject"] == "Verify your CloneVoice email address"
-    assert "verify-email?token=tok" in body["text"]
+    assert "verify-email#token=tok" in body["text"]
+    assert "verify-email#token=tok" in body["html"]
     assert urlopen.call_args.kwargs["timeout"] == email_service.DELIVERY_TIMEOUT_SECONDS
 
 
@@ -758,3 +769,73 @@ def test_long_but_legal_password_round_trips(client: TestClient):
         "/api/v1/auth/login", json={"email": "long@example.com", "password": password}
     )
     assert resp.status_code == 200
+
+
+# --- HTML alternative and fragment token (plan item AU-5) ---------------------
+
+
+def test_messages_are_multipart_with_plain_and_html_parts():
+    for message in (
+        email_service.build_verification_message("to@example.com", "Ann", "tok"),
+        email_service.build_password_reset_message("to@example.com", "Ann", "tok"),
+        email_service.build_password_reset_message(
+            "to@example.com", "Ann", "tok", has_password=False
+        ),
+    ):
+        assert message.get_content_type() == "multipart/alternative"
+        assert message.get_body(("plain",)) is not None
+        assert message.get_body(("html",)) is not None
+
+
+def test_html_button_and_text_link_are_the_same_url():
+    message = email_service.build_password_reset_message("to@example.com", "Ann", "tok")
+    plain_url = re.search(r"https?://\S+", _plain(message)).group(0)
+    assert f'href="{plain_url}"' in _html(message)
+    assert "Reset password" in _html(message)
+
+
+def test_html_part_escapes_the_recipient_name():
+    """A name is user input: it must never become markup in the email."""
+    message = email_service.build_verification_message(
+        "to@example.com", '<script>alert("x")</script>', "tok"
+    )
+    body = _html(message)
+    assert "<script>" not in body
+    assert "&lt;script&gt;" in body
+
+
+def test_html_part_escapes_the_token_in_the_link():
+    message = email_service.build_verification_message(
+        "to@example.com", "Ann", '"><img src=x>'
+    )
+    assert "<img" not in _html(message)
+
+
+def test_links_carry_the_token_in_the_fragment_not_the_query():
+    """The fragment is never sent to a server, so no log or Referer holds it."""
+    message = email_service.build_password_reset_message(
+        "to@example.com", "Ann", "secret-token"
+    )
+    url = urlparse(re.search(r"https?://\S+", _plain(message)).group(0))
+    assert url.query == ""
+    assert parse_qs(url.fragment) == {"token": ["secret-token"]}
+
+
+def test_set_password_message_uses_its_own_button_and_subject():
+    message = email_service.build_password_reset_message(
+        "to@example.com", "Ann", "tok", has_password=False
+    )
+    assert message["Subject"] == "Set a password for your CloneVoice account"
+    assert "Set password" in _html(message)
+    assert "signs in with Google" in _plain(message)
+
+
+def test_smtp_sends_the_multipart_message(monkeypatch):
+    monkeypatch.setattr(settings, "EMAIL_BACKEND", "smtp")
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.com")
+    monkeypatch.setattr(settings, "SMTP_STARTTLS", False)
+    with patch("backend.services.email_service.smtplib.SMTP") as smtp_cls:
+        smtp = smtp_cls.return_value.__enter__.return_value
+        email_service.deliver(_message())
+    sent = smtp.send_message.call_args.args[0]
+    assert sent.get_content_type() == "multipart/alternative"
