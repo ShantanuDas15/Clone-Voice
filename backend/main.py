@@ -184,11 +184,32 @@ def resolve_session_secret_key(session_secret_key: str, jwt_secret_key: str) -> 
     return jwt_secret_key
 
 
+# The session cookie only carries Google's login state between the redirect to
+# Google and the callback, so it needs to live minutes, not Starlette's
+# two-week default.
+OAUTH_STATE_MAX_AGE_SECONDS = 600
+
+
+def session_cookie_options(app_env: str) -> dict:
+    """Cookie attributes for the OAuth-state session cookie.
+
+    `Secure` everywhere except local development (plain http). `SameSite=Lax`
+    is required, not just a default: Google returns the browser with a
+    cross-site top-level GET, which Lax still sends and Strict would drop.
+    """
+    return {
+        "max_age": OAUTH_STATE_MAX_AGE_SECONDS,
+        "same_site": "lax",
+        "https_only": app_env != "development",
+    }
+
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=resolve_session_secret_key(
         settings.SESSION_SECRET_KEY, settings.JWT_SECRET_KEY
     ),
+    **session_cookie_options(settings.APP_ENV),
 )
 
 # Reject oversized bodies before multipart parsing spools them to disk (M5).

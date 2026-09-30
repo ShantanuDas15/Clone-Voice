@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     # forgot-password) and for the ones that consume an emailed token.
     AUTH_EMAIL_RATE_LIMIT: str = "5/hour"
     AUTH_TOKEN_RATE_LIMIT: str = "20/minute"
+    # Silent token renewal by every signed-in client; generous, but bounded so
+    # the endpoint cannot be used to hammer the database.
+    AUTH_REFRESH_RATE_LIMIT: str = "60/minute"
 
     # HARDENING_PLAN.md finding P2-H1: local signup does not prove ownership of
     # the address. When True (the fail-safe default), an account whose email is
