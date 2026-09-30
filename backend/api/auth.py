@@ -153,8 +153,12 @@ def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
+@limiter.limit(settings.AUTH_REFRESH_RATE_LIMIT)
 def refresh(
-    response: Response, refresh_token: str = Cookie(None), db: Session = Depends(get_db)
+    request: Request,
+    response: Response,
+    refresh_token: str = Cookie(None),
+    db: Session = Depends(get_db),
 ):
     """Rotate a refresh token and issue a new access token."""
     if not refresh_token:
