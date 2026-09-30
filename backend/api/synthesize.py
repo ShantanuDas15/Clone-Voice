@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.db_errors import db_unavailable, is_transient_db_error
 from backend.core.rate_limit import limiter
@@ -244,7 +245,9 @@ async def synthesize(
 
 
 @router.get("/history", response_model=List[GenerationOut])
+@limiter.limit(settings.API_RATE_LIMIT)
 def get_history(
+    request: Request,
     limit: int = Query(50, ge=1),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),

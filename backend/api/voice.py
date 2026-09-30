@@ -239,7 +239,9 @@ async def upload_audio(
 
 
 @router.get("/profiles", response_model=List[VoiceProfileOut])
+@limiter.limit(settings.API_RATE_LIMIT)
 def get_profiles(
+    request: Request,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """List all active voice profiles for the current user."""
@@ -257,7 +259,9 @@ def get_profiles(
 
 
 @router.delete("/profiles/{profile_id}")
+@limiter.limit(settings.API_RATE_LIMIT)
 def delete_profile(
+    request: Request,
     profile_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
