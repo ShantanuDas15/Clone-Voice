@@ -6,10 +6,12 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlencode
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import (APIRouter, BackgroundTasks, Cookie, Depends,
                      HTTPException, Request, Response, status)
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
@@ -40,6 +42,12 @@ from backend.services.refresh_tokens import (consume_refresh_token,
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Where the Google callback sends the browser, relative to FRONTEND_URL. The
+# web app must serve both: the first calls POST /refresh, the second shows the
+# `error` query code.
+GOOGLE_SUCCESS_PATH = "/auth/callback"
+GOOGLE_FAILURE_PATH = "/login"
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
@@ -394,11 +402,31 @@ async def google_login(request: Request):
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
-@router.get("/google/callback", response_model=TokenResponse)
-async def google_callback(
-    request: Request, response: Response, db: Session = Depends(get_db)
-):
-    """Handle the Google OAuth callback and return tokens."""
+def _frontend_redirect(path: str, **query: str) -> RedirectResponse:
+    """Redirect the browser into the web app (target comes from settings only)."""
+    url = f"{settings.FRONTEND_URL.rstrip('/')}{path}"
+    if query:
+        url = f"{url}?{urlencode(query)}"
+    response = RedirectResponse(url, status_code=status.HTTP_302_FOUND)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _google_failure(code: str) -> RedirectResponse:
+    """Send the browser back to the login page with a stable error code."""
+    return _frontend_redirect(GOOGLE_FAILURE_PATH, error=code)
+
+
+@router.get("/google/callback", include_in_schema=False)
+async def google_callback(request: Request, db: Session = Depends(get_db)):
+    """Finish the Google sign-in and hand the browser back to the web app.
+
+    This is a top-level browser navigation, so it answers with a redirect,
+    never JSON. Success sets the refresh cookie and lands on
+    `GOOGLE_SUCCESS_PATH`; the client then calls `POST /refresh` for its
+    access token, so no token ever appears in a URL. Failure lands on
+    `GOOGLE_FAILURE_PATH?error=<code>`.
+    """
     try:
         token = await oauth.google.authorize_access_token(request)
         user_info = token.get("userinfo")
@@ -406,26 +434,26 @@ async def google_callback(
             user_info = await oauth.google.parse_id_token(request, token)
     except OAuthError as error:
         logger.warning("OAuth error during Google callback: %s", error.error)
-        raise HTTPException(status_code=400, detail=f"OAuth error: {error.error}")
+        return _google_failure("google_failed")
     except Exception:
         logger.exception("Unexpected error during Google OAuth callback")
-        raise HTTPException(status_code=400, detail="Invalid code or state")
+        return _google_failure("google_failed")
 
     email = user_info.get("email")
     if not email:
-        raise HTTPException(status_code=400, detail="No email provided by Google")
+        return _google_failure("google_no_email")
 
     if user_info.get("email_verified") is not True:
         logger.warning("Google sign-in rejected: email not verified by provider")
-        raise HTTPException(status_code=400, detail="Google email is not verified")
+        return _google_failure("google_email_unverified")
 
-    user_id, refresh_token = await asyncio.to_thread(
+    _, refresh_token = await asyncio.to_thread(
         _sign_in_google_user, db, email, user_info
     )
-    access_token = create_access_token(data={"sub": user_id})
 
+    response = _frontend_redirect(GOOGLE_SUCCESS_PATH)
     _set_refresh_cookie(response, refresh_token)
-    return TokenResponse(access_token=access_token)
+    return response
 
 
 @router.patch("/me", response_model=UserOut)

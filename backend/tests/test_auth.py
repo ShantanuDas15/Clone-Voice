@@ -2,6 +2,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def _access_token_after_google(client: TestClient, response) -> str:
+    """Do what the web app does after the Google redirect: POST /refresh.
+
+    The callback answers with a redirect and sets the refresh cookie; the
+    access token is only ever obtained through /refresh, never from a URL.
+    """
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/auth/callback")
+    # The cookie is Secure, so the plain-http test client won't replay it on
+    # its own; hand it over the way a browser on https would.
+    client.cookies.clear()
+    client.cookies.set("refresh_token", response.cookies["refresh_token"])
+    refresh = client.post("/api/v1/auth/refresh")
+    assert refresh.status_code == 200
+    return refresh.json()["access_token"]
+
+
 def test_health_endpoint(client: TestClient):
     response = client.get("/health")
     assert response.status_code == 200
@@ -271,13 +288,11 @@ def test_google_callback_new_user(client: TestClient):
                 "/api/v1/auth/google/callback?code=mock_code&state=mock_state"
             )
 
-            assert response.status_code == 200
-            data = response.json()
-            assert "access_token" in data
             assert "refresh_token" in response.cookies
+            assert "access_token" not in response.headers["location"]
 
             # Verify it's actually in DB as google provider
-            token = data["access_token"]
+            token = _access_token_after_google(client, response)
             me_resp = client.get(
                 "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
             )
@@ -318,12 +333,8 @@ def test_google_callback_existing_local(client: TestClient):
                 "/api/v1/auth/google/callback?code=mock_code&state=mock_state"
             )
 
-            assert response.status_code == 200
-            data = response.json()
-            assert "access_token" in data
-
             # Check provider changed to google
-            token = data["access_token"]
+            token = _access_token_after_google(client, response)
             me_resp = client.get(
                 "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
             )
@@ -354,7 +365,7 @@ def test_google_link_revokes_local_password(client: TestClient):
         return_value={"userinfo": claims},
     ):
         assert (
-            client.get("/api/v1/auth/google/callback?code=c&state=s").status_code == 200
+            client.get("/api/v1/auth/google/callback?code=c&state=s").status_code == 302
         )
 
     resp = client.post(
@@ -396,7 +407,7 @@ def test_google_link_revokes_squatters_refresh_token(client: TestClient):
     assert squatter
 
     resp = _google_callback(client, email)
-    assert resp.status_code == 200
+    assert resp.status_code == 302
     owner = resp.cookies.get("refresh_token")
 
     assert _refresh_with(client, squatter).status_code == 401
@@ -452,7 +463,7 @@ def test_google_callback_does_not_log_raw_email(
                     "/api/v1/auth/google/callback?code=mock_code&state=mock_state"
                 )
 
-    assert response.status_code == 200
+    assert response.status_code == 302
     log_text = "\n".join(r.getMessage() for r in caplog.records)
     assert email not in log_text
     assert "user_id=" in log_text
@@ -485,8 +496,10 @@ def test_google_callback_rejects_unverified_email(client: TestClient, claims):
         ) as mock_auth:
             mock_auth.return_value = {"userinfo": user_info}
             response = client.get("/api/v1/auth/google/callback?code=c&state=s")
-        assert response.status_code == 400
-        assert "not verified" in response.json()["detail"]
+        assert response.status_code == 302
+        assert response.headers["location"].endswith(
+            "/login?error=google_email_unverified"
+        )
         assert "refresh_token" not in response.cookies
 
     # Victim's local account untouched, and login with password still works.
@@ -514,8 +527,9 @@ def test_google_callback_invalid_code(client: TestClient):
             "/api/v1/auth/google/callback?code=bad_code&state=mock_state"
         )
 
-        assert response.status_code == 400
-        assert "OAuth error" in response.json()["detail"]
+        assert response.status_code == 302
+        assert response.headers["location"].endswith("/login?error=google_failed")
+        assert "refresh_token" not in response.cookies
 
 
 def test_update_me(client: TestClient):

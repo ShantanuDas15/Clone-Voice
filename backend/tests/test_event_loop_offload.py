@@ -212,6 +212,5 @@ def test_google_callback_runs_db_work_off_the_event_loop_thread(client):
     ):
         resp = client.get("/api/v1/auth/google/callback?code=c&state=s")
 
-    assert resp.status_code == 200
-    assert "access_token" in resp.json()
+    assert resp.status_code == 302
     assert threads["db_work"] != threads["loop"]
