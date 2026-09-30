@@ -31,6 +31,20 @@ def email_verification_off_by_default(monkeypatch):
     monkeypatch.setattr(settings, "REQUIRE_EMAIL_VERIFICATION", False)
 
 
+@pytest.fixture(autouse=True)
+def no_real_email_by_default(monkeypatch):
+    """Never let a test reach a real mail provider, whatever backend/.env says.
+
+    Settings are read from the developer's own `.env`, which may hold a live
+    Resend key; without this every signup in the suite would call the real
+    API. Tests that exercise a transport select it and patch its network
+    boundary themselves (see test_email_verification.py).
+    """
+    monkeypatch.setattr(settings, "EMAIL_BACKEND", "disabled")
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "")
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+
+
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 # Session-scoped engine — one connection kept alive for the entire test session.

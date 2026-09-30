@@ -93,7 +93,7 @@ def test_google_only_account_can_add_a_password(client: TestClient, outbox):
 
     client.post("/api/v1/auth/forgot-password", json={"email": EMAIL})
     assert len(outbox) == 1
-    assert "signs in with Google" in outbox[0].get_content()
+    assert "signs in with Google" in outbox[0].get_body(("plain",)).get_content()
     token = _token_in(outbox[0])
 
     resp = client.post(
