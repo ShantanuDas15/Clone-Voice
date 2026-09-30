@@ -73,6 +73,19 @@ root, it chowns `/data` to uid 1000 and immediately drops to that user before it
 downloads weights or starts uvicorn, so the API process is never root. If the
 variable is missing, the container stops with an error that names it.
 
+## Contract with the web app
+
+- **Google sign-in:** the browser goes to `GET /api/v1/auth/google`; the callback
+  then redirects to `FRONTEND_URL/auth/callback` with the refresh cookie set, or to
+  `FRONTEND_URL/login?error=<code>` (`google_failed`, `google_no_email`,
+  `google_email_unverified`). The page at `/auth/callback` calls
+  `POST /api/v1/auth/refresh` (with credentials) to obtain its access token; no token
+  is ever placed in a URL.
+- **Same site:** the refresh cookie is `SameSite=Lax`, so it is only sent when the web
+  app and the API share a registrable domain (for example `app.example.com` and
+  `api.example.com`) or when the web app proxies API calls. Use custom domains; a
+  `*.up.railway.app` API with a differently hosted web app will not receive the cookie.
+
 ## Checks after the first deploy
 
 - The deployment turns green (the health check is `/health/ready`).

@@ -52,10 +52,10 @@ def test_verified_local_account_keeps_password_after_google_link(
     _verify_by_email(client, outbox)
     assert _password_login(client).status_code == 200
 
-    assert _google(client).status_code == 200
+    assert _google(client).status_code == 302
 
     assert _password_login(client).status_code == 200
-    assert _google(client).status_code == 200
+    assert _google(client).status_code == 302
 
 
 def test_verified_link_does_not_revoke_existing_sessions(client: TestClient, outbox):
@@ -77,13 +77,13 @@ def test_unverified_local_account_still_loses_password_on_google_link(
 ):
     """The squatter defence is unchanged for an address nobody has proven."""
     _signup(client, EMAIL)
-    assert _google(client).status_code == 200
+    assert _google(client).status_code == 302
     assert _password_login(client).status_code == 401
 
 
 def test_google_only_account_can_add_a_password(client: TestClient, outbox):
     """Sign in with Google first, then set a password by email."""
-    assert _google(client).status_code == 200
+    assert _google(client).status_code == 302
     assert _password_login(client).status_code == 401  # no password yet
 
     client.post("/api/v1/auth/forgot-password", json={"email": EMAIL})
@@ -98,7 +98,7 @@ def test_google_only_account_can_add_a_password(client: TestClient, outbox):
     assert resp.status_code == 200
 
     assert _password_login(client, NEW_PASSWORD).status_code == 200
-    assert _google(client).status_code == 200  # Google still works
+    assert _google(client).status_code == 302  # Google still works
 
 
 def test_set_password_token_is_single_use(client: TestClient, outbox):

@@ -244,7 +244,7 @@ generations (id, user_id→users, voice_profile_id→voice_profiles, input_text,
 | `POST` | `/api/v1/auth/forgot-password` | Email a reset link; the response never reveals whether the address exists |
 | `POST` | `/api/v1/auth/reset-password` | Set a new password with a single-use token; revokes every session |
 | `GET` | `/api/v1/auth/google` | Initiate Google OAuth flow |
-| `GET` | `/api/v1/auth/google/callback` | Handle OAuth callback |
+| `GET` | `/api/v1/auth/google/callback` | Finish OAuth: sets the refresh cookie and redirects to `FRONTEND_URL/auth/callback` (or `/login?error=<code>`) |
 
 ### Voice
 | Method | Endpoint | Description |

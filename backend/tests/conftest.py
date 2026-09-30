@@ -110,7 +110,7 @@ def client(db_session, monkeypatch):
     # same in-memory test engine `TestingSessionLocal` uses, so it still runs
     # against the test DB instead of the real DATABASE_URL.
     monkeypatch.setattr(main_module, "SessionLocal", TestingSessionLocal)
-    yield TestClient(app)
+    yield TestClient(app, follow_redirects=False)
     app.dependency_overrides.clear()
 
 
