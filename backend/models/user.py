@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import JSON, Column, DateTime, String, Text
+from sqlalchemy import JSON, CheckConstraint, Column, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.types import Uuid
@@ -12,6 +12,11 @@ JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
 
 class User(Base):
     __tablename__ = "users"
+    # Emails are stored lower-case (see NormalizedEmail), so the unique index
+    # on `email` is also case-insensitive; the database refuses anything else.
+    __table_args__ = (
+        CheckConstraint("email = lower(email)", name="ck_users_email_lowercase"),
+    )
 
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, index=True, nullable=False)

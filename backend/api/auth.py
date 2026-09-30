@@ -26,7 +26,7 @@ from backend.core.security import (EMAIL_VERIFICATION_TOKEN_TYPE,
                                    decode_purpose_token, decode_token,
                                    get_current_user, hash_email_for_logging,
                                    hash_password, password_fingerprint,
-                                   verify_password)
+                                   verify_password, verify_password_or_dummy)
 from backend.models.user import User
 from backend.models.user_identity import UserIdentity
 from backend.schemas.auth import (ForgotPasswordRequest, LoginRequest,
@@ -128,12 +128,18 @@ def login(
     db: Session = Depends(get_db),
 ):
     """Authenticate a local user and return access + refresh tokens."""
-    user = db.query(User).filter(User.email == user_in.email).first()
-    if (
-        not user
-        or not user.hashed_password
-        or not verify_password(user_in.password, user.hashed_password)
-    ):
+    user = (
+        db.query(User)
+        .filter(User.email == user_in.email, User.deleted_at.is_(None))
+        .first()
+    )
+    # Always spend one bcrypt verification, even for an unknown email or an
+    # account with no password, so response time does not reveal which
+    # addresses are registered.
+    password_ok = verify_password_or_dummy(
+        user_in.password, user.hashed_password if user else None
+    )
+    if not user or not password_ok:
         # HARDENING_PLAN.md finding L10: no DB row here on an unknown email,
         # so there's no user_id to log — a salted, non-reversible hash lets
         # repeated attempts on the same address still correlate in logs
@@ -525,6 +531,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     email = user_info.get("email")
     if not email:
         return _google_failure("google_no_email")
+    email = email.strip().lower()
 
     if user_info.get("email_verified") is not True:
         logger.warning("Google sign-in rejected: email not verified by provider")

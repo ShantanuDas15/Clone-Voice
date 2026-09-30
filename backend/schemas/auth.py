@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, field_validator
 
 from backend.core.validators import require_nonblank_name
 
@@ -10,13 +10,18 @@ from backend.core.validators import require_nonblank_name
 # 500 from any endpoint that hashes or verifies a password. New passwords are
 # capped far lower (bcrypt only uses the first 72 bytes anyway); the login cap
 # is passlib's own limit so an existing long password can still sign in.
+# Addresses are stored and compared in lower case: `Bob@x.com` and `bob@x.com`
+# reach the same inbox, so they must be the same account. Applied to every
+# email a client sends (the database also refuses a non-lower-case row).
+NormalizedEmail = Annotated[EmailStr, AfterValidator(lambda value: value.lower())]
+
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 LOGIN_PASSWORD_MAX_LENGTH = 4096
 
 
 class SignupRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     password: str = Field(
         ..., min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH
     )
@@ -29,7 +34,7 @@ class SignupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     password: str = Field(..., max_length=LOGIN_PASSWORD_MAX_LENGTH)
 
 
@@ -68,7 +73,7 @@ class VerifyEmailRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class ResetPasswordRequest(BaseModel):

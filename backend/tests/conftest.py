@@ -1,6 +1,12 @@
 """Shared test fixtures for the CloneVoice backend test suite."""
 
-import pytest
+import os
+
+# The API schema is off outside development; several tests read /openapi.json.
+# Set before `backend.main` is imported below (settings are read at import).
+os.environ.setdefault("API_DOCS_ENABLED", "true")
+
+import pytest  # noqa: E402
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker

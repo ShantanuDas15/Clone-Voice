@@ -145,7 +145,22 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutting down.")
 
 
-app = FastAPI(title="CloneVoice API", lifespan=lifespan)
+def docs_settings(app_env: str, enabled: bool) -> dict:
+    """FastAPI kwargs that switch the interactive docs and schema off.
+
+    On only in development or when `API_DOCS_ENABLED` is set: the schema lists
+    every route and parameter, which is not for the public internet.
+    """
+    if enabled or app_env == "development":
+        return {}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+app = FastAPI(
+    title="CloneVoice API",
+    lifespan=lifespan,
+    **docs_settings(settings.APP_ENV, settings.API_DOCS_ENABLED),
+)
 
 # --- Rate limiting -----------------------------------------------------------
 # Attach the limiter so SlowAPI can access it from any route.

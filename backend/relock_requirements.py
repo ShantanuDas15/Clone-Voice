@@ -71,8 +71,8 @@ def main() -> int:
             "cpu",
             "-c",
             CONSTRAINTS.name,
-            "--output-file",
-            "-",
+            # No --output-file: uv 0.11 treats "-" as a literal filename and
+            # drops a stray `backend/-`; the lock text is read from stdout.
             REQUIREMENTS.name,
         ],
         cwd=BACKEND_DIR,
