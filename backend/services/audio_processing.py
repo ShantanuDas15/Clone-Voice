@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import uuid
+from typing import Optional
 
 import librosa
 import numpy as np
@@ -29,16 +30,42 @@ ENCODER_TARGET_DBFS = -30.0
 preprocess_semaphore = asyncio.Semaphore(settings.PREPROCESS_MAX_CONCURRENCY)
 
 
+# Declared media types accepted for each container the content can be.
+_MIME_TYPES_BY_EXTENSION = {
+    ".wav": {"audio/wav", "audio/x-wav", "audio/wave"},
+    ".mp3": {"audio/mpeg", "audio/mp3"},
+    ".webm": {"audio/webm"},
+}
+_SNIFF_BYTES = 64
+_MP3_SIGNATURES = (b"ID3", b"\xff\xfb", b"\xff\xfa", b"\xff\xf3")
+_EBML_MAGIC = b"\x1a\x45\xdf\xa3"
+
+
+def _media_type(file: UploadFile) -> str:
+    """The declared media type without parameters (``audio/webm;codecs=opus``)."""
+    return (file.content_type or "").split(";", 1)[0].strip().lower()
+
+
+def sniff_audio_extension(head: bytes) -> Optional[str]:
+    """Return the extension the leading bytes of a file imply, else ``None``.
+
+    Stricter than the first four bytes alone: a ``RIFF`` file must be a WAVE
+    (not an AVI or WebP), and an EBML file must declare the ``webm`` doctype
+    (not Matroska, which can carry video).
+    """
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return ".wav"
+    if head.startswith(_MP3_SIGNATURES):
+        return ".mp3"
+    if head[:4] == _EBML_MAGIC and b"webm" in head:
+        return ".webm"
+    return None
+
+
 def validate_audio_file(file: UploadFile) -> str:
-    """Validate MIME type, size, and magic bytes; return the extension the magic bytes imply."""
-    allowed_mimes = [
-        "audio/wav",
-        "audio/x-wav",
-        "audio/mpeg",
-        "audio/mp3",
-        "audio/webm",
-    ]
-    if file.content_type not in allowed_mimes:
+    """Validate type, size and content; return the extension the content implies."""
+    declared = _media_type(file)
+    if not any(declared in types for types in _MIME_TYPES_BY_EXTENSION.values()):
         raise HTTPException(
             status_code=422, detail="Invalid audio format. Allowed: WAV, MP3, WEBM."
         )
@@ -56,25 +83,19 @@ def validate_audio_file(file: UploadFile) -> str:
             detail=f"File too large. Max allowed is {settings.MAX_AUDIO_SIZE_MB}MB.",
         )
 
-    magic = file.file.read(4)
+    head = file.file.read(_SNIFF_BYTES)
     file.file.seek(0)
-    is_wav = magic.startswith(b"RIFF")
-    is_mp3 = (
-        magic.startswith(b"ID3")
-        or magic.startswith(b"\xff\xfb")
-        or magic.startswith(b"\xff\xfa")
-        or magic.startswith(b"\xff\xf3")
-    )
-    is_webm = magic.startswith(b"\x1a\x45\xdf\xa3")
-
-    if is_wav:
-        return ".wav"
-    if is_mp3:
-        return ".mp3"
-    if is_webm:
-        return ".webm"
-
-    raise HTTPException(status_code=422, detail="Invalid file signature (magic bytes).")
+    extension = sniff_audio_extension(head)
+    if extension is None:
+        raise HTTPException(
+            status_code=422, detail="Invalid file signature (magic bytes)."
+        )
+    if declared not in _MIME_TYPES_BY_EXTENSION[extension]:
+        raise HTTPException(
+            status_code=422,
+            detail="File content does not match its declared audio type.",
+        )
+    return extension
 
 
 def save_upload(file: UploadFile, user_id: str, ext: str) -> str:
@@ -123,7 +144,22 @@ def preprocess_audio(file_path: str) -> np.ndarray:
                 ),
             )
 
-        y, sr = librosa.load(file_path, sr=SAMPLE_RATE)
+        # Decode at most the limit plus one second: the duration above comes
+        # from the file's own header, which an attacker controls, so the
+        # decode itself must be bounded too.
+        y, sr = librosa.load(
+            file_path,
+            sr=SAMPLE_RATE,
+            duration=settings.MAX_AUDIO_DURATION_SECONDS + 1.0,
+        )
+        if len(y) / SAMPLE_RATE > settings.MAX_AUDIO_DURATION_SECONDS:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Audio too long. Max allowed duration is "
+                    f"{settings.MAX_AUDIO_DURATION_SECONDS:g} seconds."
+                ),
+            )
         y_trimmed, _ = librosa.effects.trim(y, top_db=30)
 
         voiced_seconds = len(y_trimmed) / SAMPLE_RATE
