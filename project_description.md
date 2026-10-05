@@ -238,7 +238,7 @@ generations (id, user_id→users, voice_profile_id→voice_profiles, input_text,
 | `POST` | `/api/v1/auth/signup` | Register with email + password |
 | `POST` | `/api/v1/auth/login` | Login → returns JWT |
 | `POST` | `/api/v1/auth/refresh` | Refresh access token |
-| `GET` | `/api/v1/auth/me` | Get current user profile (`email_verified_at` is null until verified) |
+| `GET` | `/api/v1/auth/me` | Get current user profile (`email_verified_at` is null until verified; `has_password` says whether password sign-in exists) |
 | `POST` | `/api/v1/auth/verify-email` | Confirm an address with the emailed token (idempotent) |
 | `POST` | `/api/v1/auth/resend-verification` | Email the signed-in user a fresh verification link |
 | `POST` | `/api/v1/auth/forgot-password` | Email a reset link; the response never reveals whether the address exists |
