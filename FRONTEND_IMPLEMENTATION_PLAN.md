@@ -1,6 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** PLAN ONLY — no frontend code exists (`README.md` > Getting Started, step 4: "not yet implemented").
+> **Backend dependencies done:** BD-1 and BD-2 (milestone FE-1, commit `155049e`, 2026-10-05). G-01 and G-02 are resolved; F20 is unblocked. BD-3…BD-6 remain open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
 > Anything not found in the repo is labelled **Assumption:** or **Proposal:**.
@@ -100,7 +101,7 @@ Backend support: **Full** = endpoint + data sufficient; **Partial** = works with
 | F17 | Generate speech from text + profile | `POST /synthesize` `synthesize.py:92-244` | Generation | **Partial** — synchronous, no progress/cancel; result id only in a CORS-hidden header (G-02, G-03) |
 | F18 | Play / download the just-generated audio | same response body (`audio/wav`) `synthesize.py:242-244` | Generation | Full via `Blob` |
 | F19 | Browse generation history | `GET /synthesize/history` `synthesize.py:247-290` | Generation | **Partial** — no total, no profile name, no status, failed rows appear (G-09) |
-| F20 | Play / download a past generation | **none** | Generation | **Missing** (G-01, Blocker) |
+| F20 | Play / download a past generation | `GET /synthesize/{generation_id}/audio` (added in FE-1, `backend/api/synthesize.py`); `audio_available` on history items | Generation | **Full** (410 once the file expires, G-10) |
 | F21 | Edit display name | `PATCH /auth/me` `auth.py:572-586` | User | Full |
 | F22 | Delete my account | `DELETE /auth/me` (JSON body) `auth.py:589-619` | all user data | **Partial** — UI cannot tell if a password is required (G-07) |
 | F23 | Service-down / degraded banner | `GET /health/ready` `main.py:316-351` | — | Full (optional) |
@@ -115,8 +116,8 @@ Backend support: **Full** = endpoint + data sufficient; **Partial** = works with
 
 | ID | Sev | Finding | Evidence |
 |---|---|---|---|
-| **G-01** | **Blocker** for F20 | **No endpoint returns the audio of a past generation.** History items carry only `output_filename` (a basename), and the only route that returns audio is the one-shot `POST /synthesize`. No static mount or download route exists. A history list can show text and duration but cannot replay or download. | `synthesize.py:276-288,242-244`; `schemas/synthesize.py:69-77`; `main.py:252-259` (only 4 routers); grep for `StaticFiles` found nothing |
-| **G-02** | High | **The new generation's id is unreadable from the browser.** The id appears only in `Content-Disposition: …filename="synthesized_<id>.wav"`, and CORS has no `expose_headers`, so a cross-origin `fetch`/Axios cannot read that header (Content-Disposition is not CORS-safelisted — browser platform rule). `X-Request-ID` is likewise not exposed (middleware source has no Access-Control logic). Result: the UI cannot link the fresh result to its history row, nor quote a request id in error reports. | `synthesize.py:242-244`; `main.py:238-244,250`; library inspection |
+| **G-01** | ✅ **Resolved by FE-1** (`155049e`): `GET /synthesize/{id}/audio` + `audio_available`. Was: Blocker for F20 | **No endpoint returns the audio of a past generation.** History items carry only `output_filename` (a basename), and the only route that returns audio is the one-shot `POST /synthesize`. No static mount or download route exists. A history list can show text and duration but cannot replay or download. | `synthesize.py:276-288,242-244`; `schemas/synthesize.py:69-77`; `main.py:252-259` (only 4 routers); grep for `StaticFiles` found nothing |
+| **G-02** | ✅ **Resolved by FE-1** (`155049e`): `expose_headers` set. Was: High | **The new generation's id is unreadable from the browser.** The id appears only in `Content-Disposition: …filename="synthesized_<id>.wav"`, and CORS has no `expose_headers`, so a cross-origin `fetch`/Axios cannot read that header (Content-Disposition is not CORS-safelisted — browser platform rule). `X-Request-ID` is likewise not exposed (middleware source has no Access-Control logic). Result: the UI cannot link the fresh result to its history row, nor quote a request id in error reports. | `synthesize.py:242-244`; `main.py:238-244,250`; library inspection |
 | **G-03** | High | **Synthesis is one long synchronous request** with no job id, progress, or server-side cancel. Worst case is two stages × 30 s (+ up to 10 s waiting for the inference slot), and on CPU hosts a maximum-length request can exceed the per-stage 30 s. Hosting-proxy/idle timeouts are not in the repo. The roadmap item "progress indicator during synthesis" is unbuilt. | `config.py:143-158`; `synthesize.py:151-207`; `README.md` > Resource Requirements; `RAILWAY_DEPLOYMENT.md` > Not covered here; `project_description.md:292` |
 | **G-04** | Medium→High | **Error bodies have four shapes and no machine-readable codes.** (a) `HTTPException` → `{"detail": "<string>"}`; (b) FastAPI validation 422 → `{"detail": [ {loc,msg,type}, … ]}` (no custom handler is registered; only `RateLimitExceeded` and `SQLAlchemyError`); (c) slowapi 429 → `{"error": "Rate limit exceeded: …"}`; (d) any other unhandled exception → Starlette's plain-text 500 (**Inferred**). Distinct conditions share one status and are told apart only by English text: e.g. 409 "terms changed" vs 409 "profile not ready"; 403 "Email address not verified" vs 403 "Incorrect password" vs 403 "Not authorized to use this voice profile". | `main.py:168-171`; `slowapi._rate_limit_exceeded_handler` (inspected); `voice.py:133-138`; `synthesize.py:117-127`; `security.py:227-230`; `auth.py:611` |
 | **G-05** | Medium | **Retry hints are mostly absent.** Only the DB-outage 503 and the per-account login/erase throttle send `Retry-After`. The "service busy" 429 and "overloaded" 503 from inference (and from upload) do not. slowapi's own 429 sends no rate-limit headers because `Limiter` is built without `headers_enabled` (library default `False`). | `db_errors.py:38-44`; `login_throttle.py:45-55`; `synthesize.py:162-179`; `voice.py:190-200`; `rate_limit.py:49-55` |
@@ -146,8 +147,8 @@ Backend support: **Full** = endpoint + data sufficient; **Partial** = works with
 ### 4.3 Backend dependencies the plan needs (proposed backend milestones, **not** frontend work)
 | ID | Closes | Ask | Priority |
 |---|---|---|---|
-| BD-1 | G-01, G-10 | Authenticated `GET /api/v1/synthesize/{id}/audio` (owner-checked, returns WAV or 404/410 when expired); optionally add `audio_available` to `GenerationOut`. | **Required for F20** |
-| BD-2 | G-02 | CORS `expose_headers=["Content-Disposition","X-Request-ID","Retry-After"]`; or add `generation_id` to a response header. | Required for F17↔F19 linking |
+| BD-1 ✅ `155049e` | G-01, G-10 | Authenticated `GET /api/v1/synthesize/{id}/audio` (owner-checked, returns WAV or 404/410 when expired); optionally add `audio_available` to `GenerationOut`. | **Required for F20** |
+| BD-2 ✅ `155049e` | G-02 | CORS `expose_headers=["Content-Disposition","X-Request-ID","Retry-After"]`; or add `generation_id` to a response header. | Required for F17↔F19 linking |
 | BD-3 | G-04, G-05 | Stable machine `code` in error bodies; consistent `{detail, code}` for 422/429; `Retry-After` on busy/overloaded; `headers_enabled=True`. | Strongly recommended |
 | BD-4 | G-06 | Set the refresh cookie in `/signup`. | Recommended (client workaround exists) |
 | BD-5 | G-07 | Add `has_password` (and `providers`) to `UserOut`. | Recommended (workaround exists) |

@@ -257,7 +257,8 @@ generations (id, user_id→users, voice_profile_id→voice_profiles, input_text,
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/v1/synthesize` | Generate speech from text + voice profile ID |
-| `GET` | `/api/v1/synthesize/history` | List user's generated audio history |
+| `GET` | `/api/v1/synthesize/history` | List user's generated audio history (each item has `audio_available`) |
+| `GET` | `/api/v1/synthesize/{generation_id}/audio` | Download a past generation's WAV (404 not yours/not found, 410 expired) |
 
 ---
 
