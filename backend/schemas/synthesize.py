@@ -72,6 +72,7 @@ class GenerationOut(BaseModel):
     input_text: str
     output_filename: str
     duration_seconds: Optional[float] = None
+    audio_available: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
