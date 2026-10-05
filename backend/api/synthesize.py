@@ -8,7 +8,7 @@ from uuid import UUID
 
 import numpy as np
 import torch
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -22,10 +22,12 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           free_gpu_memory,
-                                           run_inference_pipeline)
+from backend.services.tts_pipeline import (
+    InferenceQueueFullError,
+    InferenceTimeoutError,
+    free_gpu_memory,
+    run_inference_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -265,19 +267,28 @@ async def synthesize(
 @limiter.limit(settings.API_RATE_LIMIT)
 def get_history(
     request: Request,
+    response: Response,
     limit: int = Query(50, ge=1),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return paginated synthesis history for the current user."""
+    """Return paginated synthesis history for the current user.
+
+    The size of the whole history (not just this page) is sent in the
+    ``X-Total-Count`` header, so a client can tell when it has reached the end.
+    """
     if limit > 50:
         limit = 50
 
-    generations = (
+    visible = (
         db.query(Generation)
         .join(VoiceProfile, Generation.voice_profile_id == VoiceProfile.id)
         .filter(Generation.user_id == current_user.id, VoiceProfile.deleted_at == None)
+    )
+    response.headers["X-Total-Count"] = str(visible.count())
+    generations = (
+        visible.with_entities(Generation, VoiceProfile.name)
         .order_by(Generation.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -289,7 +300,7 @@ def get_history(
     )
 
     results = []
-    for gen in generations:
+    for gen, profile_name in generations:
         filename = (
             os.path.basename(gen.output_audio_path) if gen.output_audio_path else ""
         )
@@ -297,6 +308,8 @@ def get_history(
             GenerationOut(
                 id=gen.id,
                 voice_profile_id=gen.voice_profile_id,
+                voice_profile_name=profile_name,
+                status=gen.status,
                 input_text=gen.input_text,
                 output_filename=filename,
                 duration_seconds=gen.duration_seconds,

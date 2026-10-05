@@ -85,10 +85,11 @@ oauth.register(
 def signup(
     request: Request,
     user_in: SignupRequest,
+    response: Response,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    """Register a new local user, email a verification link, return a token."""
+    """Register a new local user, email a verification link, sign them in."""
     existing_user = db.query(User).filter(User.email == user_in.email).first()
     if existing_user:
         # HARDENING_PLAN.md finding L10: log the existing row's id, never the
@@ -120,6 +121,9 @@ def signup(
         create_email_verification_token(new_user),
     )
     access_token = create_access_token(data={"sub": str(new_user.id)})
+    # Same session as /login: without the cookie the access token could never
+    # be renewed, and a reload would sign the new user out.
+    _set_refresh_cookie(response, issue_refresh_token(db, new_user.id))
     return TokenResponse(access_token=access_token)
 
 

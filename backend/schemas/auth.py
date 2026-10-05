@@ -49,6 +49,7 @@ class UserOut(BaseModel):
     name: str
     avatar_url: Optional[str] = None
     provider: str
+    has_password: bool
     email_verified_at: Optional[datetime] = None
     created_at: datetime
 
