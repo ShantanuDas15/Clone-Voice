@@ -138,9 +138,9 @@ def test_erasing_an_account_removes_all_data_and_scrubs_the_row(client, db_sessi
 def test_erasure_clears_the_refresh_cookie_and_revokes_every_session(
     client, db_session
 ):
-    headers = _signup(client)  # logging in issues a refresh token
+    headers = _signup(client)  # signup and login each issue a refresh token
     live = db_session.query(RefreshToken).filter(RefreshToken.revoked_at.is_(None))
-    assert live.count() == 1
+    assert live.count() == 2
 
     response = _delete_me(client, headers, password=PASSWORD)
 

@@ -5,8 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 from unidecode import unidecode
 
-from backend.services.sv2tts.synthesizer.utils.symbols import \
-    symbols as _sv2tts_symbols
+from backend.services.sv2tts.synthesizer.utils.symbols import symbols as _sv2tts_symbols
 
 # The real Tacotron2 checkpoint's embedding table only has one row per symbol
 # in this exact set (HARDENING_PLAN.md finding H2). "_" (pad) and "~" (eos)
@@ -69,6 +68,8 @@ class SynthesizeRequest(BaseModel):
 class GenerationOut(BaseModel):
     id: UUID
     voice_profile_id: UUID
+    voice_profile_name: str
+    status: str
     input_text: str
     output_filename: str
     duration_seconds: Optional[float] = None

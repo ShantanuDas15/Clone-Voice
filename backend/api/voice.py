@@ -244,12 +244,13 @@ def get_profiles(
     request: Request,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """List all active voice profiles for the current user."""
+    """List all active voice profiles for the current user, newest first."""
     profiles = (
         db.query(VoiceProfile)
         .filter(
             VoiceProfile.user_id == current_user.id, VoiceProfile.deleted_at == None
         )
+        .order_by(VoiceProfile.created_at.desc())
         .all()
     )
     logger.debug(

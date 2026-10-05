@@ -243,8 +243,14 @@ app.add_middleware(
     allow_headers=["*"],
     # Not CORS-safelisted, so a browser script can only read them if listed:
     # the web app needs the generation id in Content-Disposition, the request
-    # id for error reports and Retry-After to back off.
-    expose_headers=["Content-Disposition", "X-Request-ID", "Retry-After"],
+    # id for error reports, Retry-After to back off and X-Total-Count to page
+    # through history.
+    expose_headers=[
+        "Content-Disposition",
+        "X-Request-ID",
+        "Retry-After",
+        "X-Total-Count",
+    ],
 )
 
 # Correlation/request ID middleware — added last so it wraps every other

@@ -38,3 +38,8 @@ class User(Base):
         nullable=False,
     )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def has_password(self) -> bool:
+        """True when the account can sign in with an email and password."""
+        return bool(self.hashed_password)
