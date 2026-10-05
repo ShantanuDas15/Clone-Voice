@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 from typing import List, Optional
+from uuid import UUID
 
 import numpy as np
 import torch
@@ -87,6 +88,22 @@ def _load_profile_and_release(db: Session, profile_id) -> Optional[VoiceProfile]
     profile = db.query(VoiceProfile).filter(VoiceProfile.id == profile_id).first()
     db.close()
     return profile
+
+
+def _output_file(output_path: Optional[str]) -> Optional[str]:
+    """Return the real path of a stored output WAV, or None if it is unusable.
+
+    Unusable means no path recorded (a failed generation), a path that resolves
+    outside ``OUTPUT_DIR``, or a file that is gone (pruned after the retention
+    window, see ``OUTPUT_RETENTION_DAYS``).
+    """
+    if not output_path:
+        return None
+    real = os.path.realpath(output_path)
+    base = os.path.realpath(settings.OUTPUT_DIR)
+    if not real.startswith(base + os.sep) or not os.path.isfile(real):
+        return None
+    return real
 
 
 @router.post("", response_class=FileResponse)
@@ -283,8 +300,47 @@ def get_history(
                 input_text=gen.input_text,
                 output_filename=filename,
                 duration_seconds=gen.duration_seconds,
+                audio_available=_output_file(gen.output_audio_path) is not None,
                 created_at=gen.created_at,
             )
         )
 
     return results
+
+
+@router.get("/{generation_id}/audio", response_class=FileResponse)
+@limiter.limit(settings.API_RATE_LIMIT)
+def get_generation_audio(
+    request: Request,
+    generation_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the WAV of one of the caller's own completed generations.
+
+    404 covers an unknown id, someone else's generation, a deleted one and a
+    failed one alike, so ids cannot be probed. 410 means the generation exists
+    but its file has expired and been pruned.
+    """
+    generation = (
+        db.query(Generation)
+        .filter(
+            Generation.id == generation_id,
+            Generation.user_id == current_user.id,
+            Generation.deleted_at.is_(None),
+            Generation.status == "completed",
+        )
+        .first()
+    )
+    if generation is None:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    path = _output_file(generation.output_audio_path)
+    if path is None:
+        raise HTTPException(
+            status_code=410, detail="The audio for this generation has expired"
+        )
+
+    return FileResponse(
+        path, media_type="audio/wav", filename=f"synthesized_{generation.id}.wav"
+    )
