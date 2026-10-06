@@ -31,6 +31,9 @@ export function UserMenu() {
       <Link href="/dashboard" className="underline-offset-4 hover:underline">
         Dashboard
       </Link>
+      <Link href="/profile" className="underline-offset-4 hover:underline">
+        Voices
+      </Link>
       <span className="text-muted-foreground">{user?.name}</span>
       <button
         type="button"
