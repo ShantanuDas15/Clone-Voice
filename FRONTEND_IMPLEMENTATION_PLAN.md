@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06; Phases 5-8 not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-06.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 and Phase 5 (FE-P5, `40a05a7`) 2026-10-07; Phases 6-8 not started. See the Task Status Log below.
+> **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -490,8 +490,8 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 2 — Email lifecycle, Google | 🟡 Partial | `a6c2913` | All app code and unit/integration tests done; real-email and real-Google e2e not done. Details below. |
 | 3 — Voice profiles | 🟡 Partial | `9b131dc` | All app code and unit/integration tests done; e2e and real-backend upload not done. Details below. |
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
-| 5 — History & account | ⬜ | | Next step. |
-| 6 — In-browser recording | ⬜ | | |
+| 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
+| 6 — In-browser recording | ⬜ | | Next step. |
 | 7 — Hardening | ⬜ | | |
 | 8 — Release | ⬜ | | |
 
@@ -599,6 +599,27 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 3. The cooldown uses fixed defaults because the "service busy" 429 sends no `Retry-After` (G-05, BD-3 still open).
 4. As in Phase 3, unverified users get a notice rather than a disabled form (server answers 403 with a mapped message).
 5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-3 e2e.
+
+### FE-P5 — Phase 5 (2026-10-07, branch `feat/FE-P5-history-account`, commit `40a05a7`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| History client | ✅ | `lib/api/history.ts`: `limit`/`offset`, total from `X-Total-Count` (exposed since FE-1), `has_more` from the total (page fullness if the header is unreadable; an empty page always stops), audio blob fetch with the bearer header. |
+| History list (F19) | ✅ | `components/history-list.tsx` + `hooks/use-history.ts` (`useInfiniteQuery` on `HISTORY_KEY`, so synthesis/profile deletion already invalidate it): skeleton, empty, error + retry, "Load more", rows de-duplicated by `id`, long text truncated with an expander, voice name from the API (BD-6), locale timestamps, failed rows shown as "Failed — no audio" (Q6 decided: show, labelled). |
+| Past-audio playback (F20) | ✅ | Lazy fetch on **Play** (auth header), autoplay in the shared `AudioPlayer`, object URL revoked on unmount (asserted); 404/410 or `audio_available=false` → "expired after 30 days" copy; other errors → alert + retry. |
+| Name edit (F21) | ✅ | `components/account-section.tsx`: zod 1-255 trimmed (blank never sent), optimistic update with rollback, server 422 shown on the field; only `{name}` is ever sent. |
+| Account display (F6) | ✅ | Email, sign-in method (uses `has_password`, G-07), member-since. |
+| Delete account (F22) | ✅ | Typed `DELETE` confirmation; password field only when `has_password` (omitted body field for Google-only); JSON body on DELETE (G-12, asserted); 403 → "incorrect password", 429 → `Retry-After` countdown; success clears session, query cache and other tabs, then routes home; network/timeout failure → re-reads `/me` (401 = it succeeded). |
+| `/profile` page | ✅ | Now sections: create voice, voices, history, account; nav link renamed "Account". |
+
+**Verification run (local, Node 24):** `npm test` → 16 files, **188 tests passed** (21 new), zero failures/warnings, two consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK (`/profile` 183 kB first-load JS). Backend untouched, suite not re-run. Exit criteria: no duplicate rows across pages ✅ (asserted); account deletion leaves no cached data ✅ (asserted); F20 works (BD-1 shipped) with expiry clearly communicated ✅.
+
+**Deviations and open items from FE-P5**
+1. **No Playwright e2e, nothing run against the real backend** (generate → appears in history → play; rename; delete account → login fails). Real WAV playback is untestable in jsdom.
+2. No dedicated "goodbye" page: after deletion the user gets a toast and lands on `/`.
+3. The in-dialog account-deletion UI is a plain inline `alertdialog` (no focus trap), consistent with the Phase 3 delete confirmation; revisit in the Phase 7 a11y audit.
+4. History is not bounded by a virtualised list (not needed at ≤ 50 rows per page, but "Load more" accumulates).
+5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-4 e2e.
 
 ---
 

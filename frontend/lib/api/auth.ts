@@ -71,3 +71,17 @@ export async function resetPassword(input: { token: string; newPassword: string 
 export function googleStartUrl(baseUrl: string): string {
   return `${baseUrl}/auth/google`;
 }
+
+/** Change the display name. Never send `null`: the server treats it as a no-op. */
+export async function updateName(name: string): Promise<User> {
+  const { data } = await http.patch<User>("/auth/me", { name });
+  return data;
+}
+
+/**
+ * Erase the account. DELETE carries a JSON body (G-12). The password is required only for
+ * accounts that have one; Google-only accounts omit it.
+ */
+export async function deleteAccount(password?: string): Promise<void> {
+  await http.delete("/auth/me", { data: password ? { password } : {} });
+}

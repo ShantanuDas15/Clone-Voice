@@ -6,10 +6,11 @@ interface AudioPlayerProps {
   src: string;
   filename: string;
   label: string;
+  autoPlay?: boolean;
 }
 
 /** Native, keyboard-accessible player plus a download link; surfaces load errors instead of failing silently. */
-export function AudioPlayer({ src, filename, label }: AudioPlayerProps) {
+export function AudioPlayer({ src, filename, label, autoPlay }: AudioPlayerProps) {
   const [failed, setFailed] = useState(false);
   return (
     <div className="space-y-2">
@@ -21,6 +22,7 @@ export function AudioPlayer({ src, filename, label }: AudioPlayerProps) {
         // eslint-disable-next-line jsx-a11y/media-has-caption -- synthesized speech; the source text is shown beside it
         <audio
           controls
+          autoPlay={autoPlay}
           src={src}
           aria-label={label}
           onError={() => setFailed(true)}
