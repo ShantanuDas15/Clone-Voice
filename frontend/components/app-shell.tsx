@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { VerificationBanner } from "@/components/verification-banner";
 import { UserMenu } from "@/components/user-menu";
 import { DegradedBanner } from "@/components/degraded-banner";
 
@@ -15,6 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <DegradedBanner />
+      <VerificationBanner />
       <header className="border-b border-border">
         <nav
           aria-label="Primary"

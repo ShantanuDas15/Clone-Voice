@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth-provider";
 import { TextField } from "@/components/form-fields";
+import { GoogleButton } from "@/components/google-button";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { type SignupValues, signupSchema } from "@/lib/validation/auth";
@@ -64,6 +65,7 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
+      <GoogleButton />
       <TextField
         label="Name"
         autoComplete="name"
