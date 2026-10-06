@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) and the first slice of Phase 7 (FE-P7, `bc5210f`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) and its e2e/real-backend slice (FE-P7b, `e1a8561`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f` | CSP (report-only), jsdom axe audit, security guardrail tests done; browser a11y/perf/e2e/chaos/Sentry/contract tests not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561` | CSP, jsdom axe audit, guardrail tests, and a Playwright suite (18 tests) against the real backend and weights done; browser a11y/perf/chaos/cross-browser/Sentry/contract tests not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -656,6 +656,34 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 1. **CSP never exercised in a real browser.** It is report-only for that reason. Next's inline bootstrap, `next/font`/style injection or the blob audio element could still produce violations; the soak (browse every flow, read console reports, then set `CSP_ENFORCE=1`) is outstanding, so **Definition of Done item 6 is not yet met**. There is no `report-uri`, so violations are visible only in the browser console.
 2. Static prerendering is lost (every page is server-rendered on demand) as the price of nonces; fine for this client-gated app, worth a Lighthouse check.
 3. Still open: Lighthouse CI, Playwright suites (Phases 1-6 e2e, multi-tab, chaos, cross-browser), Sentry with PII scrubber, OpenAPI contract tests, removing superseded workarounds, viewport check, Q8 (Next upgrade), CI never run on GitHub.
+
+### FE-P7b — Phase 7, e2e against the real backend (2026-10-07, branch `feat/FE-P7b-e2e`, commit `e1a8561`)
+
+First run of the frontend against the **real FastAPI backend with real SV2TTS weights** (SQLite, `EMAIL_BACKEND=console`, rate limits raised so a fast suite is not throttled) in real Chromium. Recipe in `frontend/e2e/README.md`; run with `npm run test:e2e`.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Phase 1 e2e | ✅ | `e2e/auth.spec.ts`: signup → reload keeps session → logout → login; **no JWT in local/session storage or readable cookies** (asserted); one generic wrong-password message; **two tabs reloading simultaneously 5 times never log each other out and logout propagates**; a forced 401 mid-session recovers silently. The `Secure` refresh cookie **does work on `http://localhost` in Chromium** (G-13, Chromium half). |
+| Phase 2 e2e | ✅ | `e2e/email.spec.ts`: real emailed verification link (decoded from the console MIME message) clears the banner and is idempotent, fragment stripped; forgot → real reset link → password changed, **another browser's session dies**, old password refused, token reuse refused; Google error pages; fragment-less token page. |
+| Phase 3 e2e | ✅ | `e2e/voice.spec.ts`: unverified upload refused with a verify message; **real upload of `sample_5sec.wav` creates a Ready profile** (real embedding), then delete; 0-byte file and fake `.wav` rejected; consent required (zero requests without it). |
+| Phase 4 e2e | ✅ | `e2e/synthesis.spec.ts`: **real synthesis** → one request, decodable `blob:` WAV (duration > 0.3 s), download named `synthesized_<uuid>.wav` (generation id via CORS-exposed header), shows in history, replays through the authed endpoint; server-refused text shown on the field. ~7 s end to end on this CPU for a short sentence. |
+| Phase 5 e2e | ✅ | `e2e/account.spec.ts`: rename persists across reload; delete with wrong password refused, then correct password deletes and login fails afterwards. |
+| Phase 6 e2e | 🟡 | `e2e/recording.spec.ts` (Chromium fake microphone): Stop disabled until 5 s, preview shown, one upload sent. **Real Chromium WEBM passes the server's container check** (Unverified #6 resolved for Chromium; first bytes are a valid EBML/`webm` header), but this sandbox has **no ffmpeg**, so the server answered `422 "Could not process this audio file"` (`NoBackendError` from librosa). Decoding a real recording therefore remains unverified until run on a host with ffmpeg (the Docker image installs it). Firefox and Safari not run. |
+| CSP soak | ✅ | `e2e/csp.spec.ts` browses every public page, the app, real playback and recording and fails on any `securitypolicyviolation` or console CSP report. **First run found two real violations** (below); after the fixes the whole suite passes both report-only **and with `CSP_ENFORCE=1`**. |
+
+**Defects the real run found, now fixed with regression tests**
+1. **Sign-out / account deletion landed on `/login?next=/profile`.** `AuthGate` redirected to sign-in as soon as the session cleared, beating the caller's `router.replace("/")`. Now `signedOutOnPurpose` makes the gate go home; an expired session still goes to sign-in with a return path (`tests/auth-gate.test.tsx`).
+2. **A freshly uploaded voice did not appear in the list** until a window-focus refetch (success never invalidated the profiles query; only failures did). Unit tests had missed it because they mocked the list separately (`tests/voice-profiles.test.tsx` now renders form and list together; verified to fail without the fix).
+3. **CSP: zod 4's `new Function` JIT probe** was reported as an `unsafe-eval` violation on every page. Fixed with `z.config({ jitless: true })` (`lib/zod-setup.ts`, imported before any schema).
+4. **CSP: sonner injects an un-nonced `<style>`** (it has no nonce option). Allowed by two `sha256` hashes (the empty element and its stylesheet), not `unsafe-inline`; `tests/csp.test.ts` recomputes the hash from the installed sonner so an upgrade that changes its CSS fails a test.
+
+**Verification run (local, Node 24, Chromium headless shell 153):** `npm test` → 22 files, **233 tests passed** (5 new), zero failures/warnings, two consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK. `npx playwright test` → **18 passed**, in both report-only and `CSP_ENFORCE=1` modes. Backend source untouched (its suite not re-run); the backend ran with a scratch SQLite DB outside the repo.
+
+**Open items from FE-P7b**
+1. **CSP Definition-of-Done item 6 is now met in Chromium** but the default stays report-only: flip `CSP_ENFORCE=1` in the deployed environment once Firefox/Safari have been browsed (not done) and a `report-uri` is chosen.
+2. e2e is **not in CI** (needs the backend, its weights and a console-mail log); CI still runs only the MSW suite. SQLite was used instead of Postgres.
+3. Recording decode on a real host (ffmpeg), Firefox/Safari runs, the rest of Phase 7 (Lighthouse, chaos/offline, Sentry, OpenAPI contract tests, axe in a real browser for colour contrast and focus order), the Phase 0 viewport check, Q8 and CI-never-run-on-GitHub.
+4. Unmeasured: real-CPU synthesis latency for long (500-char) texts and behind a proxy (Q3/Q4).
 
 ---
 

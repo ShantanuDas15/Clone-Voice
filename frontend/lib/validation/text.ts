@@ -1,3 +1,4 @@
+import "@/lib/zod-setup";
 import { z } from "zod";
 
 /** Mirrors `SynthesizeRequest.text`: 1-500 characters (the character-set check stays server-side). */

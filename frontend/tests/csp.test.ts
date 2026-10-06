@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { buildCsp, cspHeaderName, generateNonce } from "@/lib/csp";
+import { STYLE_HASHES, buildCsp, cspHeaderName, generateNonce } from "@/lib/csp";
 
 const opts = { nonce: "abc123", apiOrigin: "https://api.example.com" };
 
@@ -46,5 +49,26 @@ describe("csp helpers", () => {
     const a = generateNonce();
     expect(a).toMatch(/^[A-Za-z0-9+/=]+$/);
     expect(generateNonce()).not.toBe(a);
+  });
+});
+
+describe("style hashes", () => {
+  const sha = (text: string) => `'sha256-${createHash("sha256").update(text).digest("base64")}'`;
+
+  it("allow exactly the installed sonner's injected stylesheet and its empty element", () => {
+    const bundle = readFileSync(
+      path.resolve(__dirname, "../node_modules/sonner/dist/index.mjs"),
+      "utf8",
+    );
+    const literal = /__insertCSS\("((?:[^"\\]|\\.)*)"\)/.exec(bundle)?.[1];
+    expect(literal).toBeTruthy();
+    const css = JSON.parse(`"${literal}"`) as string;
+    expect(STYLE_HASHES).toContain(sha(css));
+    expect(STYLE_HASHES).toContain(sha(""));
+  });
+
+  it("keeps scripts free of hashes and unsafe keywords", () => {
+    expect(buildCsp(opts)).toMatch(/style-src [^;]*'sha256-/);
+    expect(buildCsp(opts)).not.toMatch(/script-src [^;]*sha256/);
   });
 });

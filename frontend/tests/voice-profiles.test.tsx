@@ -184,6 +184,29 @@ describe("UploadVoiceForm", () => {
     return user;
   }
 
+  it("refreshes the voice list after a successful upload (found by the e2e run)", async () => {
+    let created = false;
+    server.use(
+      mswHttp.get(`${API}/voice/profiles`, () =>
+        HttpResponse.json(created ? [profile({ name: "Fresh voice" })] : []),
+      ),
+    );
+    const post = vi.spyOn(http, "post").mockImplementation(async () => {
+      created = true;
+      return { data: fixtures.profile };
+    });
+    wrap(
+      <>
+        <UploadVoiceForm />
+        <VoiceProfileList />
+      </>,
+    );
+    expect(await screen.findByText(/haven't created a voice/i)).toBeInTheDocument();
+    await fillAndSubmit({ name: "Fresh voice" });
+    expect(await screen.findByText("Fresh voice", { selector: "p" })).toBeInTheDocument();
+    post.mockRestore();
+  });
+
   it("uploads multipart with consent and the terms version, then confirms", async () => {
     // jsdom's XHR hands MSW an unserialisable FormData, so inspect the request at the client instead.
     const post = vi.spyOn(http, "post").mockResolvedValue({ data: fixtures.profile });

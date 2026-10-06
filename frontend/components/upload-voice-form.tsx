@@ -106,6 +106,7 @@ export function UploadVoiceForm() {
     setProgress(0);
     try {
       const profile = await upload.mutateAsync();
+      void client.invalidateQueries({ queryKey: PROFILES_KEY }); // show the new voice (found by e2e)
       setCreated(profile.name);
       setName("");
       setFile(null);

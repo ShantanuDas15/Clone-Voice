@@ -27,6 +27,8 @@ export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 interface AuthContextValue {
   status: AuthStatus;
   user: User | null;
+  /** True after the user chose to sign out or deleted the account (so gates go home, not to /login). */
+  signedOutOnPurpose: boolean;
   login: (input: { email: string; password: string }) => Promise<void>;
   signup: (input: { email: string; password: string; name: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -59,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<User | null>(null);
+  const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
 
   const endSession = useCallback(() => {
     setUser(null);
@@ -92,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const establish = useCallback(async (token: string) => {
     setAccessToken(token);
+    setSignedOutOnPurpose(false);
     setUser(await authApi.fetchMe());
     setStatus("authenticated");
   }, []);
@@ -117,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       user,
+      signedOutOnPurpose,
       login: async (input) => establish(await authApi.login(input)),
       signup: async (input) => establish(await authApi.signup(input)),
       logout: async () => {
@@ -125,17 +130,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           // Offline logout still clears local state; the cookie expires on its own.
         }
+        setSignedOutOnPurpose(true);
         clearSession();
         endSession();
       },
       refreshUser,
       applyUser: setUser,
       discardSession: () => {
+        setSignedOutOnPurpose(true);
         clearSession();
         endSession();
       },
     }),
-    [status, user, establish, endSession, refreshUser],
+    [status, user, signedOutOnPurpose, establish, endSession, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
