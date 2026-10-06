@@ -13,6 +13,7 @@ import {
 
 import * as authApi from "@/lib/api/auth";
 import type { User } from "@/lib/api/auth";
+import { clearDraft } from "@/lib/draft";
 import {
   clearSession,
   initSessionSync,
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const endSession = useCallback(() => {
     setUser(null);
     setStatus("unauthenticated");
+    clearDraft();
     queryClient.clear(); // R16: no cached data survives sign-out.
   }, [queryClient]);
 
