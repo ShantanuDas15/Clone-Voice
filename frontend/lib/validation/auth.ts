@@ -46,3 +46,15 @@ export const resetSchema = z
 
 export type ForgotValues = z.infer<typeof forgotSchema>;
 export type ResetValues = z.infer<typeof resetSchema>;
+
+export const nameSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Enter your name")
+    .max(NAME_MAX, `Name must be at most ${NAME_MAX} characters`),
+});
+export type NameValues = z.infer<typeof nameSchema>;
+
+/** The exact word a user must type to confirm account erasure. */
+export const DELETE_CONFIRMATION = "DELETE";

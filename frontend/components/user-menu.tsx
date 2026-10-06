@@ -32,7 +32,7 @@ export function UserMenu() {
         Dashboard
       </Link>
       <Link href="/profile" className="underline-offset-4 hover:underline">
-        Voices
+        Account
       </Link>
       <span className="text-muted-foreground">{user?.name}</span>
       <button

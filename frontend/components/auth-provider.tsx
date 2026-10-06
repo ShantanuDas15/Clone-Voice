@@ -32,6 +32,10 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   /** Re-read `/auth/me` (e.g. after verifying email). Silent on failure. */
   refreshUser: () => Promise<void>;
+  /** Replace the cached user (after a profile edit or an optimistic rollback). */
+  applyUser: (user: User) => void;
+  /** End the local session without calling the API (the account no longer exists). */
+  discardSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -125,6 +129,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         endSession();
       },
       refreshUser,
+      applyUser: setUser,
+      discardSession: () => {
+        clearSession();
+        endSession();
+      },
     }),
     [status, user, establish, endSession, refreshUser],
   );
