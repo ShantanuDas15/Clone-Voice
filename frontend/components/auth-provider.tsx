@@ -29,6 +29,8 @@ interface AuthContextValue {
   login: (input: { email: string; password: string }) => Promise<void>;
   signup: (input: { email: string; password: string; name: string }) => Promise<void>;
   logout: () => Promise<void>;
+  /** Re-read `/auth/me` (e.g. after verifying email). Silent on failure. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -88,6 +90,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("authenticated");
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      setUser(await authApi.fetchMe());
+    } catch {
+      // Keep the current view; a 401 already ended the session via the HTTP client.
+    }
+  }, []);
+
+  // R11: pick up an email verified in another tab/browser when the user returns.
+  const needsVerification = status === "authenticated" && user !== null && !user.email_verified_at;
+  useEffect(() => {
+    if (!needsVerification) return;
+    const onFocus = () => void refreshUser();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [needsVerification, refreshUser]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
@@ -103,8 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearSession();
         endSession();
       },
+      refreshUser,
     }),
-    [status, user, establish, endSession],
+    [status, user, establish, endSession, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -31,3 +31,18 @@ export const signupSchema = z.object({
 
 export type LoginValues = z.infer<typeof loginSchema>;
 export type SignupValues = z.infer<typeof signupSchema>;
+
+export const forgotSchema = z.object({ email });
+
+export const resetSchema = z
+  .object({
+    password: z
+      .string()
+      .min(PASSWORD_MIN, `Password must be at least ${PASSWORD_MIN} characters`)
+      .max(PASSWORD_MAX, `Password must be at most ${PASSWORD_MAX} characters`),
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords don't match" });
+
+export type ForgotValues = z.infer<typeof forgotSchema>;
+export type ResetValues = z.infer<typeof resetSchema>;

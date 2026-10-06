@@ -8,6 +8,8 @@ import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth-provider";
 import { TextField } from "@/components/form-fields";
+import { GoogleButton } from "@/components/google-button";
+import { googleErrorMessage } from "@/lib/auth/google-errors";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { sanitizeNext } from "@/lib/auth/next-path";
 import { ApiError } from "@/lib/errors";
@@ -18,6 +20,7 @@ export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = sanitizeNext(params.get("next"));
+  const callbackError = googleErrorMessage(params.get("error"));
   const inFlight = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -54,6 +57,12 @@ export function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
+      {callbackError && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {callbackError}
+        </p>
+      )}
+      <GoogleButton />
       <TextField
         label="Email"
         type="email"
@@ -80,6 +89,11 @@ export function LoginForm() {
       >
         {isSubmitting ? "Signing in…" : "Sign in"}
       </button>
+      <p className="text-sm">
+        <Link href="/forgot-password" className="underline">
+          Forgot your password?
+        </Link>
+      </p>
       <p className="text-sm text-muted-foreground">
         New here?{" "}
         <Link href="/signup" className="underline">
