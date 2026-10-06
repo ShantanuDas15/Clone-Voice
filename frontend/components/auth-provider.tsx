@@ -1,0 +1,117 @@
+"use client";
+
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import * as authApi from "@/lib/api/auth";
+import type { User } from "@/lib/api/auth";
+import {
+  clearSession,
+  initSessionSync,
+  refreshAccessToken,
+  setAccessToken,
+  subscribe,
+} from "@/lib/auth/session";
+
+export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+
+interface AuthContextValue {
+  status: AuthStatus;
+  user: User | null;
+  login: (input: { email: string; password: string }) => Promise<void>;
+  signup: (input: { email: string; password: string; name: string }) => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+// One bootstrap per page load, shared by React Strict Mode's double effect (G-22).
+let bootstrapPromise: Promise<User | null> | null = null;
+
+async function bootstrap(): Promise<User | null> {
+  const token = await refreshAccessToken();
+  if (!token) return null;
+  return authApi.fetchMe();
+}
+
+/** Test helper: allow a fresh bootstrap. */
+export function __resetBootstrapForTests(): void {
+  bootstrapPromise = null;
+}
+
+/** Holds the in-memory session state; bootstraps via `/auth/refresh` on mount (plan §5.3). */
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<AuthStatus>("loading");
+  const [user, setUser] = useState<User | null>(null);
+
+  const endSession = useCallback(() => {
+    setUser(null);
+    setStatus("unauthenticated");
+    queryClient.clear(); // R16: no cached data survives sign-out.
+  }, [queryClient]);
+
+  useEffect(() => {
+    let active = true;
+    initSessionSync();
+    bootstrapPromise ??= bootstrap();
+    bootstrapPromise
+      .then((me) => {
+        if (!active) return;
+        setUser(me);
+        setStatus(me ? "authenticated" : "unauthenticated");
+      })
+      .catch(() => {
+        // API unreachable at startup: show the signed-out UI rather than a stuck skeleton.
+        if (active) setStatus("unauthenticated");
+      });
+    const unsubscribe = subscribe((event) => {
+      if (event === "cleared") endSession();
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [endSession]);
+
+  const establish = useCallback(async (token: string) => {
+    setAccessToken(token);
+    setUser(await authApi.fetchMe());
+    setStatus("authenticated");
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      status,
+      user,
+      login: async (input) => establish(await authApi.login(input)),
+      signup: async (input) => establish(await authApi.signup(input)),
+      logout: async () => {
+        try {
+          await authApi.logout();
+        } catch {
+          // Offline logout still clears local state; the cookie expires on its own.
+        }
+        clearSession();
+        endSession();
+      },
+    }),
+    [status, user, establish, endSession],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
+  return ctx;
+}

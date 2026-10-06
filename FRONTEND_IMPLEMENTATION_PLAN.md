@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (foundation) implemented as milestone FE-P0 (`63d2bd4`, 2026-10-06); Phases 1-8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) and Phase 1 (FE-P1, `36a424f`) implemented 2026-10-06; Phases 2-8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-06.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -486,8 +486,8 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | Phase | Status | Commit | Notes |
 |---|---|---|---|
 | 0 — Foundation & contracts | 🟡 Partial | `63d2bd4` | Tasks 1-7 and 9 done; task 8 (CI) partly; Playwright e2e and OpenAPI type generation not done. Details below. |
-| 1 — Signup, login, session core | ⬜ | | Next step. |
-| 2 — Email lifecycle, Google | ⬜ | | |
+| 1 — Signup, login, session core | 🟡 Partial | `36a424f` | All app code and unit/integration tests done; Playwright e2e and real-backend run not done. Details below. |
+| 2 — Email lifecycle, Google | ⬜ | | Next step. |
 | 3 — Voice profiles | ⬜ | | |
 | 4 — Synthesis | ⬜ | | |
 | 5 — History & account | ⬜ | | |
@@ -516,6 +516,25 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 2. **Q1/Q2 assumed, not confirmed.** Work followed the plan's own assumption ("drop NextAuth"; backend gate treated as met since FE-1/FE-2 landed). BD-3 (stable error codes) is still open, so the string→`kind` table remains in `lib/errors.ts`.
 3. **Not done from Phase 0:** Playwright e2e ("app boots, banner on 503"), ADR for "no NextAuth", Lighthouse/viewport checks at 320/768/1280 px (layout is responsive by construction but not measured), OpenAPI-generation CI job.
 4. Phase 0 exit criteria are therefore **not fully met** (CI not yet green on GitHub; viewport check pending).
+
+### FE-P1 — Phase 1 (2026-10-06, branch `feat/FE-P1-auth-session`, commit `36a424f`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| Session core, single-flight refresh + cross-tab Web Lock/BroadcastChannel (G-22) | ✅ | `lib/auth/session.ts`. Token is module memory only. A tab that waited on the lock adopts a token broadcast meanwhile instead of refreshing. |
+| Axios 401 interceptor: one refresh, one retry, concurrent callers share it | ✅ | `lib/api/http.ts`; auth endpoints excluded; a request whose token was already replaced retries without refreshing; failed refresh ends the session. |
+| `AuthProvider` bootstrap (`/refresh` then `/me`), Strict-Mode guard | ✅ | `components/auth-provider.tsx`; signed-out is silent (no toast); unreachable API falls back to signed-out UI. |
+| `AuthGate` (client-side), skeleton during bootstrap, `?next=` redirect | ✅ | `components/auth-gate.tsx`, `app/(app)/layout.tsx`, placeholder `/dashboard`. |
+| `next` sanitizer (open-redirect) | ✅ | `lib/auth/next-path.ts`; rejects absolute, `//`, backslash, control chars. |
+| Signup / login forms (react-hook-form + zod mirroring backend bounds) | ✅ | 409 → email error + sign-in link; 422 → fields; 429 → `Retry-After` copy; 401 → one generic message (G-19); one request per submit. Signup uses the FE-2 cookie, so no re-login workaround. |
+| Landing CTA (F1), header user menu, logout (offline-safe, cache cleared, cross-tab) | ✅ | `app/page.tsx`, `components/user-menu.tsx`. |
+
+**Verification run (local, Node 24):** `npm test` → 10 files, **84 tests passed**, zero failures and zero warnings; `typecheck`, `lint`, `format:check` clean; `npm run build` OK (`/login` 156 kB first-load JS). Backend untouched, suite not re-run. Exit-criteria status: reload keeps session (bootstrap test) ✅; 100-iteration concurrent-refresh test never nulls a session ✅ (unit level against MSW); no token in storage ✅ (asserted in jsdom).
+
+**Open items from FE-P1**
+1. **No Playwright e2e and no run against the real backend.** The e2e set (signup → reload → logout, two-tab session, expired-token recovery) and the real-cookie behaviour (`Secure` on `http://localhost`, G-13) are **unverified**; the cross-tab lock is only tested with a fake `navigator.locks`. Next to build when the e2e harness is added (Phase 7 or sooner).
+2. Phase 1 edge cases not built: unverified-email banner (belongs to Phase 2), ambiguous-timeout signup guidance beyond the 409 link, "refresh replay after grace → forced logout message".
+3. Carried over: Q8 (Next 14 advisories), Phase 0 gaps (CI unrun, viewport check).
 
 ---
 
