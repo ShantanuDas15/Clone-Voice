@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) and Phase 3 (FE-P3, `9b131dc`) implemented 2026-10-06; Phases 4-8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06; Phases 5-8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-06.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -489,8 +489,8 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 1 — Signup, login, session core | 🟡 Partial | `36a424f` | All app code and unit/integration tests done; Playwright e2e and real-backend run not done. Details below. |
 | 2 — Email lifecycle, Google | 🟡 Partial | `a6c2913` | All app code and unit/integration tests done; real-email and real-Google e2e not done. Details below. |
 | 3 — Voice profiles | 🟡 Partial | `9b131dc` | All app code and unit/integration tests done; e2e and real-backend upload not done. Details below. |
-| 4 — Synthesis | ⬜ | | Next step. |
-| 5 — History & account | ⬜ | | |
+| 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
+| 5 — History & account | ⬜ | | Next step. |
 | 6 — In-browser recording | ⬜ | | |
 | 7 — Hardening | ⬜ | | |
 | 8 — Release | ⬜ | | |
@@ -577,6 +577,28 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 3. Real **413** behaviour (may surface as a network error) is only simulated; progress-bar rendering at real speeds is untested.
 4. No cross-tab `profiles-changed` broadcast; tabs resync on window-focus refetch instead.
 5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-2 e2e.
+
+### FE-P4 — Phase 4 (2026-10-06, branch `feat/FE-P4-synthesis`, commit `91efb3d`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| Synthesis client | ✅ | `lib/api/synthesize.ts`: JSON body, `responseType: "blob"`, 120 s timeout, abortable. Filename and **generation id** come from `Content-Disposition` (exposed by FE-1), so the G-02 heuristic match against history is not needed and was not built. |
+| Text rules (R6) | ✅ | `lib/validation/text.ts`: trimmed 1-500; live counter; emoji pre-warning only; the server's 422 text is shown verbatim on the text field. |
+| `TextToSpeechForm` on `/dashboard` | ✅ | Voice select (ready profiles only), textarea, elapsed-time progress with honest "a minute or more" copy, **Cancel**, `beforeunload` warning only while running, one request per submit (asserted), never auto-retried. |
+| Error handling (R3/R13) | ✅ | 404/403/409 → message and profile list refetched; 403 unverified; 422 list-detail → text field; 429 (both `{error}` and `{detail}` shapes) and "service busy" → countdown that disables the button (`Retry-After` if sent, else 60 s / 15 s); 503, 500; JSON error bodies inside Blobs are decoded. |
+| Ambiguous failures (R7/R9) | ✅ | Timeout/network drop does not claim failure ("may still have been generated, check History") and invalidates history; Cancel aborts only the browser request, says so, and invalidates history. |
+| Player + download (R15) | ✅ | `components/audio-player.tsx` (native controls, labelled, decode-error state that keeps Download), labelled "AI-generated voice"; object URL revoked on replace and on unmount (asserted); client filename fallback. |
+| Form state survives re-login (R2) | ✅ | In-memory draft (`lib/draft.ts`, never persisted; cleared on sign-out). |
+| Success invalidates history | ✅ | Asserted. |
+
+**Verification run (local, Node 24):** `npm test` → 15 files, **167 tests passed**, zero failures/warnings, stable over three consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK (`/dashboard` 156 kB first-load JS). A test fix en route: the `AuthProvider` was missing its `clearDraft` import, caught by the existing logout/reset tests. Backend untouched, suite not re-run. Exit criteria: one request per submit ✅ (asserted); cancel leaves the UI idle and history refreshed ✅; object URLs revoked ✅; every R3 status has a tested message ✅ (404, 403, 409, 422, 429 x2, 503, 500, network).
+
+**Open items from FE-P4**
+1. **Never run against real weights or the real backend.** Actual latency, the browser's real behaviour with a long-held request behind a proxy (Q3/Q4), and real WAV playback are **unverified**; no Playwright e2e (generate → play → download → regenerate; 6th request in a minute).
+2. jsdom cannot play audio, so playback is only tested by the player's error state and link wiring.
+3. The cooldown uses fixed defaults because the "service busy" 429 sends no `Retry-After` (G-05, BD-3 still open).
+4. As in Phase 3, unverified users get a notice rather than a disabled form (server answers 403 with a mapped message).
+5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-3 e2e.
 
 ---
 
