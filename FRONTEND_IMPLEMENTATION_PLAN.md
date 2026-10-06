@@ -1,6 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** PLAN ONLY — no frontend code exists (`README.md` > Getting Started, step 4: "not yet implemented").
+> **Status:** IN PROGRESS — Phase 0 (foundation) implemented as milestone FE-P0 (`63d2bd4`, 2026-10-06); Phases 1-8 not started. See the Task Status Log below.
+> **Last reviewed:** 2026-10-06.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -478,6 +479,46 @@ Reverse check (every phase item maps to a feature): Phase 0 → F23 + infrastruc
 
 ---
 
+## Task Status Log
+
+Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ Not started.
+
+| Phase | Status | Commit | Notes |
+|---|---|---|---|
+| 0 — Foundation & contracts | 🟡 Partial | `63d2bd4` | Tasks 1-7 and 9 done; task 8 (CI) partly; Playwright e2e and OpenAPI type generation not done. Details below. |
+| 1 — Signup, login, session core | ⬜ | | Next step. |
+| 2 — Email lifecycle, Google | ⬜ | | |
+| 3 — Voice profiles | ⬜ | | |
+| 4 — Synthesis | ⬜ | | |
+| 5 — History & account | ⬜ | | |
+| 6 — In-browser recording | ⬜ | | |
+| 7 — Hardening | ⬜ | | |
+| 8 — Release | ⬜ | | |
+
+### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| 1 Scaffold Next 14 + TS strict + Tailwind, ESLint, Prettier, `tsc` | ✅ | `npm run typecheck`, `lint`, `format:check` clean; `npm run build` succeeds (87.5 kB first-load JS on `/`). shadcn/ui **not** added: no component needs it yet (`cn` helper in `lib/utils.ts`; add primitives per phase). |
+| 2 Axios client | ✅ | `lib/api/http.ts`: `withCredentials`, 15 s default / 120 s long timeout, every failure becomes `ApiError`. `X-Request-ID` captured when exposed (BD-2 shipped). |
+| 3 `ApiError` normalizer | ✅ | `lib/errors.ts`; `tests/errors.test.ts` covers `{detail:str}`, `{detail:[…]}`, `{error:str}`, Blob JSON, Blob text, empty, network, timeout, cancel, 5xx text suppression, 403/409 string→kind table, `Retry-After`. |
+| 4 Query provider (R5), Sonner, error boundaries, theme tokens | ✅ | `lib/query.ts` (retry only network/502/503/504, max 2, mutations never); `app/error.tsx`, `global-error.tsx`; light/dark CSS tokens. |
+| 5 MSW handlers + Vitest/RTL | ✅ | `mocks/handlers.ts` covers every endpoint in §3; `onUnhandledRequest: "error"` so tests cannot reach live services. |
+| 6 Env validation | ✅ | `lib/env.ts` + `tests/env.test.ts`; the app and build fail fast without `NEXT_PUBLIC_API_BASE_URL`. |
+| 7 Local dev recipe | ✅ | `frontend/README.md`, `frontend/.env.example`. |
+| 8 CI | 🟡 | `.github/workflows/frontend.yml` (format, lint, typecheck, test, build) **not yet run on GitHub**. OpenAPI type-generation job not written. |
+| 9 App shell | ✅ | skip-link, header, footer, `DegradedBanner` (F23/R17) with tests for 503, healthy and probe-failure. |
+
+**Verification run (local, Node 24):** `npm test` → 5 files, 36 tests passed, zero failures; `typecheck`, `lint`, `format:check` clean; `npm run build` OK with `NEXT_PUBLIC_API_BASE_URL` set. Backend untouched, so the backend suite was not re-run.
+
+**Open items from FE-P0**
+1. **Security audit — Next 14.x.** `npm audit --omit=dev` reports 1 critical/1 high (Next 14.2.35 and its bundled postcss); fixes exist only in Next 15/16. The plan mandates Next 14 (Doc), so the upgrade is an **owner decision (new Q8)**; the CI audit step is `continue-on-error` until decided. Dev-only advisories (vitest → tinypool/vite) do not ship. This blocks Definition of Done item 8.
+2. **Q1/Q2 assumed, not confirmed.** Work followed the plan's own assumption ("drop NextAuth"; backend gate treated as met since FE-1/FE-2 landed). BD-3 (stable error codes) is still open, so the string→`kind` table remains in `lib/errors.ts`.
+3. **Not done from Phase 0:** Playwright e2e ("app boots, banner on 503"), ADR for "no NextAuth", Lighthouse/viewport checks at 320/768/1280 px (layout is responsive by construction but not measured), OpenAPI-generation CI job.
+4. Phase 0 exit criteria are therefore **not fully met** (CI not yet green on GitHub; viewport check pending).
+
+---
+
 ## 9. Definition of Done (release checklist)
 
 **Functional**
@@ -520,6 +561,7 @@ Reverse check (every phase item maps to a feature): Phase 0 → F23 + infrastruc
 | **Q5** | Should multi-clip profiles (docs: 1-3 clips) and M4A/OGG/MP4 input (Safari recording) be added to the backend? | Today single-file WAV/MP3/WEBM only (G-08); affects Phase 3 and 6 scope. |
 | **Q6** | In history, show or hide failed generations (G-09)? | UI/list behaviour; or fix server-side via BD-6. |
 | **Q7** | Is a "processing" voice-profile status ever going to exist? | Docs list it (`DATABASE_DESIGN.md` > `voice_profiles`); the reviewed upload code never sets it. Determines whether polling a profile is needed. |
+| **Q8** | Next 14.x has unfixed advisories (fixes only in Next 15/16). Upgrade, or accept the risk for now? | The Doc mandates Next 14; blocks Definition of Done item 8. |
 
 ### Unverified (could not be confirmed from the repo)
 1. **Hosting behaviour:** Railway/edge proxy request timeouts and body-size limits; whether `X-Forwarded-*` is set as `TRUSTED_PROXY_COUNT=1` assumes (`RAILWAY_DEPLOYMENT.md:53`, "confirm in staging").
