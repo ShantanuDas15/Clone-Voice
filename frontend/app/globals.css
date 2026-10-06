@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222 20% 12%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 38%;
+  --border: 220 13% 88%;
+  --primary: 243 75% 50%;
+  --primary-foreground: 0 0% 100%;
+  --warning: 38 92% 90%;
+  --warning-foreground: 26 80% 22%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 222 20% 8%;
+    --foreground: 210 20% 96%;
+    --muted: 222 15% 14%;
+    --muted-foreground: 215 14% 70%;
+    --border: 222 12% 22%;
+    --primary: 243 90% 72%;
+    --primary-foreground: 222 20% 8%;
+    --warning: 38 60% 16%;
+    --warning-foreground: 38 90% 85%;
+  }
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
