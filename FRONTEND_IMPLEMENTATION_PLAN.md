@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) and Phase 2 (FE-P2, `a6c2913`) implemented 2026-10-06; Phases 3-8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) and Phase 3 (FE-P3, `9b131dc`) implemented 2026-10-06; Phases 4-8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-06.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -488,8 +488,8 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 0 — Foundation & contracts | 🟡 Partial | `63d2bd4` | Tasks 1-7 and 9 done; task 8 (CI) partly; Playwright e2e and OpenAPI type generation not done. Details below. |
 | 1 — Signup, login, session core | 🟡 Partial | `36a424f` | All app code and unit/integration tests done; Playwright e2e and real-backend run not done. Details below. |
 | 2 — Email lifecycle, Google | 🟡 Partial | `a6c2913` | All app code and unit/integration tests done; real-email and real-Google e2e not done. Details below. |
-| 3 — Voice profiles | ⬜ | | Next step. |
-| 4 — Synthesis | ⬜ | | |
+| 3 — Voice profiles | 🟡 Partial | `9b131dc` | All app code and unit/integration tests done; e2e and real-backend upload not done. Details below. |
+| 4 — Synthesis | ⬜ | | Next step. |
 | 5 — History & account | ⬜ | | |
 | 6 — In-browser recording | ⬜ | | |
 | 7 — Hardening | ⬜ | | |
@@ -555,6 +555,28 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 2. The Google start link returns raw JSON on a 429 (plan §7 Phase 2 risk); not mitigated.
 3. Real email delivery still depends on the backend's verified sending domain (`HARDENING_PLAN.md` §4 item 2).
 4. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1 e2e.
+
+### FE-P3 — Phase 3 (2026-10-06, branch `feat/FE-P3-voice-profiles`, commit `9b131dc`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| Typed voice API client | ✅ | `lib/api/voice.ts`: list (sorted newest first client-side, G-09), upload (multipart built by the browser, File's own MIME untouched, 120 s timeout, `onUploadProgress`), delete. |
+| Client-side file pre-check (R6/R8) | ✅ | `lib/validation/audio.ts`: 0 B, 25 MB + 1 B, type/extension mismatch, parameterised MIME (`audio/webm;codecs=opus`). Content sniffing stays server-side. |
+| `AudioUploader` (drag-drop, keyboard, announced errors) | ✅ | `components/audio-uploader.tsx`. |
+| Consent + terms version | ✅ | Required checkbox (no request without it); shows the version from `GET /terms`; link or fallback text when `url` is null (G-18); 409 → consent reset, terms refetched, message. |
+| Upload form + failure handling | ✅ | Progress bar then "Analysing…"; mapped messages for 403/422 (field and string)/429 busy and rate-limit/503/500/timeout; a network drop reads as "may be too large" (R8); one request per submit; **no auto-retry** (asserted); `beforeunload` warning only while running (R9); list is resynced after every failure so `failed` rows appear (G-11). |
+| Profile list | ✅ | Skeleton, empty, error + retry, status chips, failed-row hint, locale timestamps; confirmed delete (warns generations are erased), optimistic removal with rollback, 404 counted as gone, history cache invalidated. |
+| `VoiceProfileSelect` for Phase 4 | ✅ | Ready profiles only; empty-state link to `/profile`. |
+| `/profile` page + nav link | ✅ | `app/(app)/profile/page.tsx` holds the Voices section; account and history join in Phase 5. |
+
+**Verification run (local, Node 24):** `npm test` → 14 files, **141 tests passed**, zero failures/warnings; `typecheck`, `lint`, `format:check` clean; `npm run build` OK (`/profile` 166 kB first-load JS). Backend untouched, suite not re-run. Exit criteria: every upload failure resyncs the list ✅; no auto-retry of POST ✅ (asserted); consent cannot be bypassed ✅ (asserted).
+
+**Deviations and open items from FE-P3**
+1. **Unverified users are not hard-blocked.** The plan says to disable the form; the form instead shows a notice with a resend link and lets the server answer 403 (mapped to a clear message). Reason: `REQUIRE_EMAIL_VERIFICATION=false` is a supported dev setting and the client cannot read it, so disabling would lock out those environments. Revisit if the owner prefers the strict behaviour.
+2. **Multipart body not asserted at the wire.** jsdom's XHR gives MSW an unreadable `FormData`, so the field names/values are asserted at the Axios call instead (`name`, `consent_confirmed`, `terms_version`, `file`, File type, timeout). A real upload against the backend is **unverified**; no Playwright e2e exists (the plan's `sample_5sec.wav` upload, 0-byte and renamed-text-file cases remain to build).
+3. Real **413** behaviour (may surface as a network error) is only simulated; progress-bar rendering at real speeds is untested.
+4. No cross-tab `profiles-changed` broadcast; tabs resync on window-focus refetch instead.
+5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-2 e2e.
 
 ---
 
