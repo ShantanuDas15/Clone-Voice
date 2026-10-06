@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) and Phase 6 (FE-P6, `67aac76`) implemented 2026-10-07; Phases 7-8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) and the first slice of Phase 7 (FE-P7, `bc5210f`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,8 +492,8 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | ⬜ | | Next step. |
-| 8 — Release | ⬜ | | |
+| 7 — Hardening | 🟡 Partial | `bc5210f` | CSP (report-only), jsdom axe audit, security guardrail tests done; browser a11y/perf/e2e/chaos/Sentry/contract tests not done. Details below. |
+| 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
 
@@ -639,6 +639,23 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 3. A recording is capped at 120 s (plan: "well under 300 s"); minimum 5 s is the plan's own assumption.
 4. A noisy or silent take is still rejected by the server only after a full upload (422, shown verbatim).
 5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-5 e2e.
+
+### FE-P7 — Phase 7, first slice (2026-10-07, branch `feat/FE-P7-hardening`, commit `bc5210f`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| 1 Security headers + CSP | 🟡 | `middleware.ts` + `lib/csp.ts`: per-request nonce; `script-src 'self' 'nonce-…' 'strict-dynamic'` (no `unsafe-inline`/`unsafe-eval`, eval only in dev), `style-src` nonce, `connect-src 'self' <API origin>`, `media-src 'self' blob:`, `img-src` + Google avatar host, `object-src 'none'`, `frame-ancestors 'none'`, `base-uri`/`form-action 'self'`. Root layout is `force-dynamic` so Next stamps the nonce. **Verified against a running `next start`:** header present, the nonce in the header matches the `nonce=` on the page's scripts and differs per request, `/verify-email` still sends `Referrer-Policy: no-referrer`, and `CSP_ENFORCE=1` switches the header to enforcing `Content-Security-Policy`. Ships **report-only** by default (the plan's soak step); enforcement is a server env flip. |
+| 2 Accessibility audit | 🟡 | `tests/a11y.test.tsx`: axe-core on login, signup, forgot-password, upload (plain and with errors), recorder, profile list (and with delete dialog open), synthesis form, history, account (with delete dialog): zero serious/critical violations; a canary test proves the detector flags an unlabeled input. jsdom has no layout, so **colour-contrast, focus order, zoom and the NVDA/VoiceOver pass are not covered**. |
+| 7/8 Guardrails (DoD 5, 7, 9) | 🟡 | `tests/hardening.test.ts` scans app source: no `dangerouslySetInnerHTML`, no `localStorage`/`sessionStorage`/`indexedDB`/`document.cookie`, only the two documented `NEXT_PUBLIC_*` variables, no `console.*`. |
+| Reduced motion | ✅ | Already present (`globals.css` `prefers-reduced-motion`). |
+| 3 Lighthouse budgets, 4 chaos tests, 5 multi-tab e2e, 6 Sentry/web-vitals, 7 OpenAPI contract tests | ⬜ | Not started (need Playwright, a real backend, or a Sentry project). |
+
+**Verification run (local, Node 24):** `npm test` → 21 files, **228 tests passed** (23 new), zero failures/warnings, two consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK (all routes now dynamic, `ƒ`; middleware 26.9 kB). `axe-core` added as an explicit devDependency (was already installed transitively). `npm audit --omit=dev` is unchanged: 1 critical + 1 high, both Next 14 / its bundled PostCSS (Q8). Backend untouched, suite not re-run.
+
+**Open items from FE-P7**
+1. **CSP never exercised in a real browser.** It is report-only for that reason. Next's inline bootstrap, `next/font`/style injection or the blob audio element could still produce violations; the soak (browse every flow, read console reports, then set `CSP_ENFORCE=1`) is outstanding, so **Definition of Done item 6 is not yet met**. There is no `report-uri`, so violations are visible only in the browser console.
+2. Static prerendering is lost (every page is server-rendered on demand) as the price of nonces; fine for this client-gated app, worth a Lighthouse check.
+3. Still open: Lighthouse CI, Playwright suites (Phases 1-6 e2e, multi-tab, chaos, cross-browser), Sentry with PII scrubber, OpenAPI contract tests, removing superseded workarounds, viewport check, Q8 (Next upgrade), CI never run on GitHub.
 
 ---
 
