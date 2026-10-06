@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
@@ -12,7 +13,16 @@ import { fetchTerms } from "@/lib/api/terms";
 import { uploadProfile } from "@/lib/api/voice";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
+import { detectRecordingSupport } from "@/lib/recording";
 import { voiceNameSchema } from "@/lib/validation/audio";
+
+// The recorder (MediaRecorder, permissions) loads only when someone chooses to record (§5.10).
+const Recorder = dynamic(() => import("@/components/recorder").then((m) => m.Recorder), {
+  ssr: false,
+  loading: () => <p className="text-sm text-muted-foreground">Loading recorder…</p>,
+});
+
+type SampleMode = "file" | "record";
 
 /** Copy for an upload failure, by kind (R3/R8). Network drops mid-upload usually mean a too-large body. */
 function uploadErrorMessage(e: ApiError): string {
@@ -46,7 +56,16 @@ export function UploadVoiceForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [created, setCreated] = useState<string | null>(null);
+  const [mode, setMode] = useState<SampleMode>("file");
+  const [recorderKey, setRecorderKey] = useState(0);
+  const [recordingUnavailable, setRecordingUnavailable] = useState<string | null>(null);
   const inFlight = useRef(false);
+
+  // Feature-detect after mount (R10): the server render cannot know the browser's capabilities.
+  useEffect(() => {
+    const support = detectRecordingSupport();
+    setRecordingUnavailable(support.supported ? null : support.reason);
+  }, []);
 
   const upload = useMutation({
     mutationFn: () =>
@@ -90,6 +109,7 @@ export function UploadVoiceForm() {
       setCreated(profile.name);
       setName("");
       setFile(null);
+      setRecorderKey((k) => k + 1); // a fresh recorder for the next voice
       setConsent(false);
     } catch (err) {
       if (!(err instanceof ApiError)) throw err;
@@ -132,7 +152,43 @@ export function UploadVoiceForm() {
         disabled={pending}
         error={nameError}
       />
-      <AudioUploader file={file} onChange={setFile} disabled={pending} error={fileError} />
+      <fieldset className="space-y-3" disabled={pending}>
+        <legend className="sr-only">Sample source</legend>
+        {recordingUnavailable === null ? (
+          <div role="radiogroup" aria-label="How to add a sample" className="flex gap-2 text-sm">
+            {(["file", "record"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                onClick={() => {
+                  setMode(m);
+                  setFile(null);
+                  setFileError(undefined);
+                }}
+                className={`min-h-11 rounded border px-4 ${mode === m ? "border-primary bg-muted font-medium" : "border-border"}`}
+              >
+                {m === "file" ? "Upload a file" : "Record now"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">{recordingUnavailable}</p>
+        )}
+        {mode === "record" && recordingUnavailable === null ? (
+          <>
+            <Recorder key={recorderKey} onChange={setFile} disabled={pending} />
+            {fileError && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {fileError}
+              </p>
+            )}
+          </>
+        ) : (
+          <AudioUploader file={file} onChange={setFile} disabled={pending} error={fileError} />
+        )}
+      </fieldset>
 
       <div>
         <label className="flex items-start gap-2 text-sm">

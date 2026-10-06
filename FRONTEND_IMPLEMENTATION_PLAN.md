@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 and Phase 5 (FE-P5, `40a05a7`) 2026-10-07; Phases 6-8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) and Phase 6 (FE-P6, `67aac76`) implemented 2026-10-07; Phases 7-8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -491,8 +491,8 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 3 — Voice profiles | 🟡 Partial | `9b131dc` | All app code and unit/integration tests done; e2e and real-backend upload not done. Details below. |
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
-| 6 — In-browser recording | ⬜ | | Next step. |
-| 7 — Hardening | ⬜ | | |
+| 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
+| 7 — Hardening | ⬜ | | Next step. |
 | 8 — Release | ⬜ | | |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -620,6 +620,25 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 3. The in-dialog account-deletion UI is a plain inline `alertdialog` (no focus trap), consistent with the Phase 3 delete confirmation; revisit in the Phase 7 a11y audit.
 4. History is not bounded by a virtualised list (not needed at ≤ 50 rows per page, but "Load more" accumulates).
 5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-4 e2e.
+
+### FE-P6 — Phase 6 (2026-10-07, branch `feat/FE-P6-recording`, commit `67aac76`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| Feature detection (R10) | ✅ | `lib/recording.ts` `detectRecordingSupport()`: insecure context, missing `getUserMedia`/`MediaRecorder`, no WEBM type (Safari/iOS, G-08) each give a distinct reason; the form then hides "Record now" and keeps file upload with the explanation. Prefers `audio/webm;codecs=opus`. |
+| Recorder state machine | ✅ | `hooks/use-recorder.ts`: idle → requesting → recording → stopped \| error. Tracks always stopped (on stop, discard, error, unmount, and when a permission grant arrives after Cancel); auto-stop at 120 s; stop when the tab is hidden; mic unplugged mid-take → error and **no blob**; takes under 5 s yield an error, never a file. |
+| Permission/device errors | ✅ | `NotAllowedError`/`SecurityError`, `NotFoundError`/`OverconstrainedError`, `NotReadableError`/`AbortError`, other → four distinct recoverable messages with "Try again". |
+| `Recorder` UI | ✅ | `components/recorder.tsx`: timer, Stop disabled until 5 s, discard, preview player, "Discard and re-record"; result handed on as `recording.webm` with plain `audio/webm` type. |
+| Reuse of the Phase 3 upload | ✅ | `UploadVoiceForm` gains an "Upload a file / Record now" radio group; same consent, validation, progress and error handling; one request per submit; recorder remounted after success. The recorder is lazy-loaded (`next/dynamic`, `ssr: false`). |
+
+**Verification run (local, Node 24):** `npm test` → 17 files, **205 tests passed** (17 new: helpers, each mic error, min-length gating, preview + File type, discard, auto-stop at max, unplug, hidden tab, unmount, late-grant release, form integration, unsupported-browser fallback), zero failures/warnings, two consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK (`/profile` 184 kB first-load JS; recorder is a separate chunk). Backend untouched, suite not re-run. Exit criteria: every denial/failure path ends in a clear, recoverable state ✅; mic tracks stopped after stop/discard/unmount ✅ (asserted against a fake `MediaStream`).
+
+**Deviations and open items from FE-P6**
+1. **Never run in a real browser.** `MediaRecorder`/`getUserMedia` are fakes. Unverified: that real Chromium/Firefox WEBM output passes the server's magic-byte sniff (Unverified #6), the real permission prompt, and the planned Playwright run with `--use-fake-device-for-media-stream`. Safari/iOS is a manual check (recording is hidden there by design).
+2. **Level meter not built** (plan mentions timer *and* level meter with reduced-motion fallback); a pulsing-free static recording dot and timer are shown instead.
+3. A recording is capped at 120 s (plan: "well under 300 s"); minimum 5 s is the plan's own assumption.
+4. A noisy or silent take is still rejected by the server only after a full upload (422, shown verbatim).
+5. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1-5 e2e.
 
 ---
 
