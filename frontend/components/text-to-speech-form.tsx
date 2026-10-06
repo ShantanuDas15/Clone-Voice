@@ -8,6 +8,7 @@ import { AudioPlayer } from "@/components/audio-player";
 import { ResendVerification } from "@/components/resend-verification";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
 import { HISTORY_KEY, PROFILES_KEY } from "@/hooks/use-voice-profiles";
+import { useDegraded } from "@/hooks/use-health";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { useCooldown, useElapsedSeconds } from "@/hooks/use-timers";
 import { type SynthesisResult, synthesize } from "@/lib/api/synthesize";
@@ -55,6 +56,7 @@ export function TextToSpeechForm() {
   const controller = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
   const cooldown = useCooldown();
+  const degraded = useDegraded();
 
   const mutation = useMutation({
     mutationFn: (vars: { voiceId: string; text: string; signal: AbortSignal }) =>
@@ -193,6 +195,11 @@ export function TextToSpeechForm() {
             {formError}
           </p>
         )}
+        {degraded && (
+          <p role="status" className="text-sm">
+            Generating is paused while the service recovers. This page will update on its own.
+          </p>
+        )}
         {cooldown.remaining > 0 && (
           <p role="status" className="text-sm">
             You can try again in {cooldown.remaining} s.
@@ -202,7 +209,7 @@ export function TextToSpeechForm() {
         <div className="flex gap-2">
           <button
             type="submit"
-            disabled={pending || cooldown.remaining > 0}
+            disabled={pending || degraded || cooldown.remaining > 0}
             className="min-h-11 rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-60"
           >
             {pending ? "Generating…" : "Generate speech"}

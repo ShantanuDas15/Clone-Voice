@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider";
 import { AudioUploader } from "@/components/audio-uploader";
 import { TextField } from "@/components/form-fields";
 import { ResendVerification } from "@/components/resend-verification";
+import { useDegraded } from "@/hooks/use-health";
 import { PROFILES_KEY } from "@/hooks/use-voice-profiles";
 import { fetchTerms } from "@/lib/api/terms";
 import { uploadProfile } from "@/lib/api/voice";
@@ -136,6 +137,7 @@ export function UploadVoiceForm() {
 
   const unverified = user !== null && !user.email_verified_at;
   const pending = upload.isPending;
+  const degraded = useDegraded();
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4" aria-label="Create a voice">
@@ -257,9 +259,14 @@ export function UploadVoiceForm() {
           Voice “{created}” created.
         </p>
       )}
+      {degraded && (
+        <p role="status" className="text-sm">
+          Uploading is paused while the service recovers. This page will update on its own.
+        </p>
+      )}
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || degraded}
         className="min-h-11 rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-60"
       >
         {pending ? "Working…" : "Create voice"}

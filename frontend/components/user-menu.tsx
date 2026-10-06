@@ -27,17 +27,17 @@ export function UserMenu() {
   }
 
   return (
-    <div className="flex items-center gap-4 text-sm">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
       <Link href="/dashboard" className="underline-offset-4 hover:underline">
         Dashboard
       </Link>
       <Link href="/profile" className="underline-offset-4 hover:underline">
         Account
       </Link>
-      <span className="text-muted-foreground">{user?.name}</span>
+      <span className="max-w-[10rem] truncate text-muted-foreground">{user?.name}</span>
       <button
         type="button"
-        className="min-h-9 rounded border border-border px-3"
+        className="min-h-11 rounded border border-border px-3"
         onClick={async () => {
           await logout();
           router.replace("/");

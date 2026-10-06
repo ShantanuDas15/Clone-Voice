@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) and its e2e/real-backend slice (FE-P7b, `e1a8561`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) and its browser-audit slice (FE-P7c, `13ca9b1`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561` | CSP, jsdom axe audit, guardrail tests, and a Playwright suite (18 tests) against the real backend and weights done; browser a11y/perf/chaos/cross-browser/Sentry/contract tests not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, and a 33-test Playwright suite against the real backend done; Lighthouse, cross-browser, screen-reader pass, Sentry and contract tests not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -684,6 +684,25 @@ First run of the frontend against the **real FastAPI backend with real SV2TTS we
 2. e2e is **not in CI** (needs the backend, its weights and a console-mail log); CI still runs only the MSW suite. SQLite was used instead of Postgres.
 3. Recording decode on a real host (ffmpeg), Firefox/Safari runs, the rest of Phase 7 (Lighthouse, chaos/offline, Sentry, OpenAPI contract tests, axe in a real browser for colour contrast and focus order), the Phase 0 viewport check, Q8 and CI-never-run-on-GitHub.
 4. Unmeasured: real-CPU synthesis latency for long (500-char) texts and behind a proxy (Q3/Q4).
+
+### FE-P7c — Phase 7, browser audits (2026-10-07, branch `feat/FE-P7c-browser-audits`, commit `13ca9b1`)
+
+| Area | Status | Evidence |
+|---|---|---|
+| Accessibility in a real browser | ✅ (Chromium) | `e2e/a11y.spec.ts` runs axe-core (WCAG 2.0/2.1/2.2 A+AA tags, real layout) in **light and dark**: every public page, `/login?error=…`, the signed-in dashboard and profile, the recorder, both delete dialogs. **Zero serious/critical violations, including colour contrast** (which jsdom could not check). A canary test proves the audit does flag low contrast and an unlabeled input. |
+| Responsive (Phase 0 viewport check) | ✅ | `e2e/responsive.spec.ts`: no horizontal scroll and every button/input ≥ 44 px at **320, 768 and 1280 px**, public and signed-in pages, plus a 320 px-wide reflow check (≈400 % zoom). The first run **failed at 320 px**: see defect 1. |
+| Resilience / chaos | ✅ | `e2e/resilience.spec.ts`: degraded health pauses generate/upload then recovers; a 503 with `Retry-After` exhausts the two automatic GET retries, shows the error and **Try again** recovers; slow network shows skeletons; a connection reset during synthesis is not called a failure and is **attempted exactly once** (R5); an aborted upload says "interrupted", leaves the list consistent, one attempt; going offline gives "can't reach the server" and works again once online. |
+
+**Defects/gaps found and fixed**
+1. **Signed-in header overflowed horizontally at 320 px (53 px) and "Sign out" was 36 px tall.** Nav and menu now wrap, the name truncates, controls are 44 px.
+2. **R17 was only half built:** the banner showed but Generate/Create voice stayed enabled while `/health/ready` was 503. A shared `useDegraded()` hook now disables both and says why (`tests/degraded-forms.test.tsx`, including "stays enabled if the probe itself fails").
+
+**Verification run (local, Node 24, Chromium):** `npm test` → 23 files, **236 tests passed** (3 new), two consecutive runs, zero failures/warnings; `typecheck`, `lint` (incl. `e2e/`), `format:check` clean. `npx playwright test` → **32 passed under `CSP_ENFORCE=1`** (the canary was added and run after, 33 tests total) against the real backend with real weights. Backend source untouched, suite not re-run.
+
+**Open items from FE-P7c**
+1. Not done in Phase 7: Lighthouse CI budgets, Sentry + PII scrubber, OpenAPI contract tests, Firefox/Safari runs, a **manual NVDA/VoiceOver pass and keyboard-only walkthrough** (axe cannot judge focus order or announcements), dialogs still lack a focus trap, e2e not in CI, SQLite not Postgres.
+2. Recording decode still needs a host with ffmpeg (see FE-P7b).
+3. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Q3/Q4 latency unknowns.
 
 ---
 
