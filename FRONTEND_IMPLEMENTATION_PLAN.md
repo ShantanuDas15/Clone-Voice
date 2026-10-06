@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) and Phase 1 (FE-P1, `36a424f`) implemented 2026-10-06; Phases 2-8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) and Phase 2 (FE-P2, `a6c2913`) implemented 2026-10-06; Phases 3-8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-06.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -487,8 +487,8 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 |---|---|---|---|
 | 0 — Foundation & contracts | 🟡 Partial | `63d2bd4` | Tasks 1-7 and 9 done; task 8 (CI) partly; Playwright e2e and OpenAPI type generation not done. Details below. |
 | 1 — Signup, login, session core | 🟡 Partial | `36a424f` | All app code and unit/integration tests done; Playwright e2e and real-backend run not done. Details below. |
-| 2 — Email lifecycle, Google | ⬜ | | Next step. |
-| 3 — Voice profiles | ⬜ | | |
+| 2 — Email lifecycle, Google | 🟡 Partial | `a6c2913` | All app code and unit/integration tests done; real-email and real-Google e2e not done. Details below. |
+| 3 — Voice profiles | ⬜ | | Next step. |
 | 4 — Synthesis | ⬜ | | |
 | 5 — History & account | ⬜ | | |
 | 6 — In-browser recording | ⬜ | | |
@@ -535,6 +535,26 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 1. **No Playwright e2e and no run against the real backend.** The e2e set (signup → reload → logout, two-tab session, expired-token recovery) and the real-cookie behaviour (`Secure` on `http://localhost`, G-13) are **unverified**; the cross-tab lock is only tested with a fake `navigator.locks`. Next to build when the e2e harness is added (Phase 7 or sooner).
 2. Phase 1 edge cases not built: unverified-email banner (belongs to Phase 2), ambiguous-timeout signup guidance beyond the 409 link, "refresh replay after grace → forced logout message".
 3. Carried over: Q8 (Next 14 advisories), Phase 0 gaps (CI unrun, viewport check).
+
+### FE-P2 — Phase 2 (2026-10-06, branch `feat/FE-P2-email-google`, commit `a6c2913`)
+
+| Task | Status | Evidence |
+|---|---|---|
+| Fragment-token handling | ✅ | `lib/auth/fragment.ts`: reads `#token=`, strips it with one `history.replaceState`, caches per component so Strict Mode's second effect still gets the token. |
+| `/verify-email` | ✅ | Success, "link incomplete" (no API call), 400 invalid/expired (resend if signed in, else sign-in link), idempotent, one POST under Strict Mode; refreshes `/me` on success. |
+| `/forgot-password` | ✅ | Identical neutral confirmation (copy also covers Google-only "set a password"); 429 shows a cooldown and does **not** claim the email was sent. |
+| `/reset-password` | ✅ | Token from fragment; 8-128 + confirm; success clears the local session (which also logs out other tabs via broadcast, since the server revokes all sessions); 400 → "request a new link"; single-submit guard. |
+| Verification banner + resend | ✅ | `components/verification-banner.tsx` in the shell; 202 and 200 both read as success; 429 copy; re-reads `/me` on window focus so verifying elsewhere hides it (R11). |
+| Google sign-in | ✅ | Plain `<a>` link on login/signup; `/auth/callback` routes on the bootstrap result; `/login?error=` maps all four backend codes plus client-side `session_unavailable` (cookie-blocked help); unknown code → generic text. |
+| `Referrer-Policy: no-referrer` on token pages | ✅ | Verified against a running `next start`: `/verify-email` and `/reset-password` send `no-referrer`; `/login` sends `strict-origin-when-cross-origin`. |
+
+**Verification run (local, Node 24):** `npm test` → 12 files, **113 tests passed**, zero failures/warnings; `typecheck`, `lint`, `format:check` clean; `npm run build` OK (9 routes). Backend untouched, suite not re-run. Exit criteria: all 4 Google error codes render distinct copy ✅ (unit-tested for distinctness); fragment never remains in the URL after load ✅ (asserted); reset clears the session and broadcasts logout to other tabs ✅ (cross-tab delivery itself is unit-level only, see below).
+
+**Open items from FE-P2**
+1. **No Playwright e2e and nothing run against the real backend or a real mail/Google round trip.** Unverified: that the real emailed link format `FRONTEND_URL/verify-email#token=…` lands correctly, that Safari/ITP keeps the cookie across the Google redirect (G-13), and the "reset invalidates the other tab" case across two real tabs. The planned e2e (signup → console-log link → verify; forgot → reset; Google error pages) remains to build; a real Google round trip stays a Phase 8 manual check.
+2. The Google start link returns raw JSON on a 429 (plan §7 Phase 2 risk); not mitigated.
+3. Real email delivery still depends on the backend's verified sending domain (`HARDENING_PLAN.md` §4 item 2).
+4. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Phase 0 viewport check, Phase 1 e2e.
 
 ---
 
