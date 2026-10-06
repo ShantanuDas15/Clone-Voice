@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { UserMenu } from "@/components/user-menu";
 import { DegradedBanner } from "@/components/degraded-banner";
 
 /** Page chrome: skip-link, degraded banner, header, main landmark, footer. */
@@ -22,6 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/" className="text-lg font-semibold">
             CloneVoice
           </Link>
+          <UserMenu />
         </nav>
       </header>
       <main id="main" className="mx-auto min-h-[70vh] max-w-5xl px-4 py-8">

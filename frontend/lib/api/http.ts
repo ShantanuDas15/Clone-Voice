@@ -1,38 +1,67 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig, isAxiosError, isCancel } from "axios";
+import {
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from "axios";
 
+import { createPlainClient, toRawFailure } from "@/lib/api/plain";
+import { clearSession, getAccessToken, refreshAccessToken } from "@/lib/auth/session";
 import { env } from "@/lib/env";
-import { ApiError, type RawFailure, normalizeError } from "@/lib/errors";
+import { ApiError, normalizeError } from "@/lib/errors";
 
-/** Default timeout for ordinary calls (plan §5.2). */
-export const DEFAULT_TIMEOUT_MS = 15_000;
+export { DEFAULT_TIMEOUT_MS } from "@/lib/api/plain";
 /** Long timeout for `/synthesize` and `/voice/upload` (G-03 worst case ≈ 70 s plus cold start). */
 export const LONG_TIMEOUT_MS = 120_000;
 
-function toRawFailure(error: unknown): RawFailure {
-  if (isCancel(error)) return { status: 0, code: "CANCELLED" };
-  if (isAxiosError(error)) {
-    if (error.response) {
-      return {
-        status: error.response.status,
-        data: error.response.data,
-        headers: error.response.headers as Record<string, string | undefined>,
-      };
-    }
-    return {
-      status: 0,
-      code: error.code === "ECONNABORTED" || error.code === "ETIMEDOUT" ? "TIMEOUT" : "NETWORK",
-    };
-  }
-  return { status: 0, code: "NETWORK" };
+/** Endpoints that must never trigger the 401 → refresh → retry flow. */
+const NO_REFRESH_PATHS = ["/auth/login", "/auth/signup", "/auth/refresh", "/auth/logout"];
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
+
+function bearer(token: string | null): string | undefined {
+  return token ? `Bearer ${token}` : undefined;
 }
 
-/** Create an Axios instance whose every failure surfaces as an `ApiError`. */
+/**
+ * Axios instance for authenticated calls: attaches the in-memory bearer token and, on a
+ * 401, performs exactly one refresh and one retry (§5.3). A failed refresh ends the session.
+ */
 export function createHttpClient(baseURL: string = env.NEXT_PUBLIC_API_BASE_URL): AxiosInstance {
-  const client = axios.create({ baseURL, withCredentials: true, timeout: DEFAULT_TIMEOUT_MS });
+  const client = createPlainClient(baseURL);
+  // Replace the plain client's error handler with an auth-aware one.
+  client.interceptors.response.clear();
+
+  client.interceptors.request.use((config) => {
+    const header = bearer(getAccessToken());
+    if (header && !config.headers.Authorization) config.headers.Authorization = header;
+    return config;
+  });
+
   client.interceptors.response.use(
     (response) => response,
     async (error: unknown) => {
-      throw await normalizeError(toRawFailure(error));
+      const failure = toRawFailure(error);
+      const config = (error as { config?: RetriableConfig }).config;
+      const eligible =
+        failure.status === 401 &&
+        config !== undefined &&
+        !config._retried &&
+        !NO_REFRESH_PATHS.some((p) => config.url?.startsWith(p));
+
+      if (eligible && config) {
+        const sentWith = config.headers.Authorization;
+        const current = bearer(getAccessToken());
+        // Another caller already refreshed since this request left: just retry with that token.
+        const token =
+          current && current !== sentWith ? current.slice(7) : await refreshAccessToken();
+        if (token) {
+          config._retried = true;
+          config.headers.Authorization = `Bearer ${token}`;
+          return client.request(config);
+        }
+        clearSession();
+      }
+      throw await normalizeError(failure);
     },
   );
   return client;
