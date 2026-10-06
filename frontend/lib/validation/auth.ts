@@ -1,3 +1,4 @@
+import "@/lib/zod-setup";
 import { z } from "zod";
 
 /** Mirrors backend bounds (`schemas/auth.py`, `validators.py`); the server stays authoritative. */

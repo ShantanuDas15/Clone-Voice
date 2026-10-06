@@ -1,3 +1,4 @@
+import "@/lib/zod-setup";
 import { z } from "zod";
 
 /** Mirrors `audio_processing.py`: WAV/MP3/WEBM, non-empty, at most 25 MB. */
