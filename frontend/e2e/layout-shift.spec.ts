@@ -25,34 +25,42 @@ async function slowRefresh(page: Page): Promise<void> {
   });
 }
 
+// 320 is the smallest supported width, 360 the most common Android phone, 412 a large one.
+const WIDTHS = [320, 360, 412];
+
 test.describe("header does not shift when the session resolves (CLS)", () => {
   test.skip(({ browserName }) => browserName !== "chromium", "layout-shift API is Chromium-only");
-  test.use({ viewport: { width: 412, height: 823 } });
 
-  test("signed out", async ({ page }) => {
-    await observeShifts(page);
-    await slowRefresh(page);
-    await page.goto("/login");
-    await expect(page.getByRole("link", { name: "Sign up" })).toBeVisible();
-    expect(await cls(page)).toBeLessThan(0.05);
-  });
+  for (const width of WIDTHS) {
+    test.describe(`${width}px`, () => {
+      test.use({ viewport: { width, height: 823 } });
 
-  test("signed in, after a reload", async ({ page }) => {
-    // Verified, so no late notice is involved; the unverified case is the next test.
-    await signUpVerified(page, "cls");
-    await observeShifts(page);
-    await slowRefresh(page);
-    await page.goto("/dashboard");
-    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-    expect(await cls(page)).toBeLessThan(0.05);
-  });
+      test("signed out", async ({ page }) => {
+        await observeShifts(page);
+        await slowRefresh(page);
+        await page.goto("/login");
+        await expect(page.getByRole("link", { name: "Sign up" })).toBeVisible();
+        expect(await cls(page)).toBeLessThan(0.05);
+      });
 
-  test("signed in but unverified (the verify-email notice appears late)", async ({ page }) => {
-    await signUp(page, uniqueEmail("cls-unverified"));
-    await observeShifts(page);
-    await slowRefresh(page);
-    await page.goto("/dashboard");
-    await expect(page.getByText(/verify your email address \(/i)).toBeVisible();
-    expect(await cls(page)).toBeLessThan(0.05);
-  });
+      test("signed in, after a reload", async ({ page }) => {
+        // Verified, so no late notice is involved; the unverified case is the next test.
+        await signUpVerified(page, "cls");
+        await observeShifts(page);
+        await slowRefresh(page);
+        await page.goto("/dashboard");
+        await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+        expect(await cls(page)).toBeLessThan(0.05);
+      });
+
+      test("signed in but unverified (the verify-email notice appears late)", async ({ page }) => {
+        await signUp(page, uniqueEmail("cls-unverified"));
+        await observeShifts(page);
+        await slowRefresh(page);
+        await page.goto("/dashboard");
+        await expect(page.getByText(/verify your email address \(/i)).toBeVisible();
+        expect(await cls(page)).toBeLessThan(0.05);
+      });
+    });
+  }
 });

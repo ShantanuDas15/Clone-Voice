@@ -10,8 +10,9 @@ export function UserMenu() {
   const { status, user, logout } = useAuth();
   const router = useRouter();
 
-  // Every state is at least as tall as the 44 px sign-out button, so the header (and the page
-  // below it) never moves when the session resolves (CLS).
+  // Every state is at least as tall as the 44 px sign-out button, and below `sm` the menu has
+  // its own row (see app-shell), so the header never changes height when the session
+  // resolves (CLS).
   if (status === "loading") {
     return (
       <div aria-hidden className="flex min-h-11 items-center">
