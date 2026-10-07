@@ -2,12 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { useAuth } from "@/components/auth-provider";
 import { TextField } from "@/components/form-fields";
+import { useDialog } from "@/hooks/use-dialog";
 import * as authApi from "@/lib/api/auth";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
@@ -68,6 +69,30 @@ function NameForm() {
   );
 }
 
+/** The account-erasure modal: traps focus, closes on Escape unless a request is in flight. */
+function ModalPanel({
+  onClose,
+  closeDisabled,
+  children,
+}: {
+  onClose: () => void;
+  closeDisabled: boolean;
+  children: ReactNode;
+}) {
+  const ref = useDialog<HTMLDivElement>(onClose, closeDisabled);
+  return (
+    <div
+      ref={ref}
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="del-account-title"
+      className="space-y-3 rounded border border-border bg-muted p-4"
+    >
+      {children}
+    </div>
+  );
+}
+
 function DeleteAccount() {
   const { user, discardSession } = useAuth();
   const router = useRouter();
@@ -81,6 +106,13 @@ function DeleteAccount() {
   if (!user) return null;
   const confirmed = typed === DELETE_CONFIRMATION;
   const needsPassword = user.has_password;
+
+  function cancel() {
+    setOpen(false);
+    setTyped("");
+    setPassword("");
+    setError(null);
+  }
 
   function finish() {
     discardSession();
@@ -126,21 +158,16 @@ function DeleteAccount() {
         This permanently erases your account, every voice and every generated clip. It can&apos;t be
         undone.
       </p>
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="min-h-11 rounded border border-border px-4"
-        >
-          Delete my account…
-        </button>
-      ) : (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="del-account-title"
-          className="space-y-3 rounded border border-border bg-muted p-4"
-        >
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        className="min-h-11 rounded border border-border px-4"
+      >
+        Delete my account…
+      </button>
+      {open && (
+        <ModalPanel onClose={cancel} closeDisabled={busy}>
           <h3 id="del-account-title" className="font-medium">
             Delete your account?
           </h3>
@@ -181,18 +208,13 @@ function DeleteAccount() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => {
-                setOpen(false);
-                setTyped("");
-                setPassword("");
-                setError(null);
-              }}
+              onClick={cancel}
               className="min-h-11 rounded border border-border px-4"
             >
               Cancel
             </button>
           </div>
-        </div>
+        </ModalPanel>
       )}
     </div>
   );
