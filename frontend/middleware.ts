@@ -16,9 +16,17 @@ export function middleware(request: NextRequest) {
   } catch {
     // Missing/invalid: lib/env.ts fails the app loudly; the CSP simply omits the API host.
   }
+  let reportingOrigin: string | undefined;
+  try {
+    const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+    reportingOrigin = dsn ? new URL(dsn).origin : undefined;
+  } catch {
+    // An invalid DSN is rejected by lib/env.ts; the CSP simply omits it.
+  }
   const csp = buildCsp({
     nonce,
     apiOrigin,
+    reportingOrigin,
     development: process.env.NODE_ENV === "development",
   });
   const headerName = cspHeaderName(process.env.CSP_ENFORCE === "1");

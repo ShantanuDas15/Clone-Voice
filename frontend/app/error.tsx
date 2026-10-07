@@ -1,7 +1,14 @@
 "use client";
 
-import { ErrorFallback } from "@/components/error-fallback";
+import { useEffect } from "react";
 
-export default function RouteError({ reset }: { error: Error; reset: () => void }) {
+import { ErrorFallback } from "@/components/error-fallback";
+import { reportErrorLazy } from "@/lib/observability/lazy";
+
+export default function RouteError({ error, reset }: { error: Error; reset: () => void }) {
+  useEffect(() => {
+    reportErrorLazy(error);
+  }, [error]);
+
   return <ErrorFallback reset={reset} />;
 }

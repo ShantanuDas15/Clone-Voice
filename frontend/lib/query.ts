@@ -1,6 +1,7 @@
-import { QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/lib/errors";
+import { isReportableApiError, reportErrorLazy } from "@/lib/observability/lazy";
 
 const RETRYABLE_STATUS = new Set([0, 502, 503, 504]);
 const MAX_RETRIES = 2;
@@ -21,7 +22,12 @@ export function retryDelay(attempt: number): number {
 
 /** Build the app QueryClient: queries retry per R5; mutations never auto-retry. */
 export function createQueryClient(): QueryClient {
+  const onError = (error: unknown) => {
+    if (isReportableApiError(error)) reportErrorLazy(error);
+  };
   return new QueryClient({
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
     defaultOptions: {
       queries: {
         retry: shouldRetryQuery,

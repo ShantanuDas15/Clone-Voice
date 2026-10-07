@@ -7,6 +7,8 @@ const envSchema = z.object({
     .url()
     .refine((v) => !v.endsWith("/"), "must not end with a trailing slash"),
   NEXT_PUBLIC_APP_ORIGIN: z.string().url().optional(),
+  /** Error-reporting DSN; reporting is off when unset. */
+  NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -25,6 +27,7 @@ export function parseEnv(raw: Record<string, string | undefined>): Env {
 export const env: Env = parseEnv({
   NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
   NEXT_PUBLIC_APP_ORIGIN: process.env.NEXT_PUBLIC_APP_ORIGIN,
+  NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || undefined,
 });
 
 /** API origin (scheme + host), where `/health/*` lives outside `/api/v1`. */

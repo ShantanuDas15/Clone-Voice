@@ -72,3 +72,14 @@ describe("style hashes", () => {
     expect(buildCsp(opts)).not.toMatch(/script-src [^;]*sha256/);
   });
 });
+
+describe("reporting origin", () => {
+  it("is allowed in connect-src only when reporting is configured", () => {
+    const without = buildCsp(opts);
+    const withIt = buildCsp({ ...opts, reportingOrigin: "https://o1.ingest.sentry.io" });
+    expect(without).not.toContain("sentry");
+    expect(withIt).toContain(
+      "connect-src 'self' https://api.example.com https://o1.ingest.sentry.io",
+    );
+  });
+});

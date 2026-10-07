@@ -29,7 +29,11 @@ describe("security guardrails (Definition of Done 5, 9)", () => {
 
   it("only exposes the documented NEXT_PUBLIC_ variables", () => {
     const used = new Set(APP_FILES.flatMap((f) => read(f).match(/NEXT_PUBLIC_[A-Z_]+/g) ?? []));
-    expect([...used].sort()).toEqual(["NEXT_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_APP_ORIGIN"]);
+    expect([...used].sort()).toEqual([
+      "NEXT_PUBLIC_API_BASE_URL",
+      "NEXT_PUBLIC_APP_ORIGIN",
+      "NEXT_PUBLIC_SENTRY_DSN",
+    ]);
   });
 
   it("does not log to the console (no text, audio, emails or tokens in logs, R16)", () => {

@@ -44,6 +44,15 @@ Next.js can stamp the nonce on its scripts. It ships as **`Content-Security-Poli
 so a bad directive cannot break the app: browse every flow with the console open, fix any
 reported violation, then set the server env `CSP_ENFORCE=1` to enforce it.
 
+## Error reporting and web vitals
+
+Off by default. Set `NEXT_PUBLIC_SENTRY_DSN` at **build time** to enable it; the CSP then allows
+the DSN's origin in `connect-src`. The SDK is imported lazily (never in the initial bundle) and
+runs with no default integrations and no breadcrumbs. Every event passes `lib/observability/scrub.ts`,
+an allow-list that drops user, request, URL query/fragment, extra data and local variables, and
+redacts emails, JWTs and long tokens. Only server faults (5xx), error-boundary errors, uncaught
+errors and non-"good" web vitals are sent.
+
 ## Layout
 
 - `lib/errors.ts` — `ApiError` normalizer for every backend error shape (plan §5.5).
