@@ -59,3 +59,14 @@ test("content reflows at 400% zoom (320 CSS px wide) without horizontal scroll",
   await page.goto("/login");
   expect(await overflow(page)).toBeLessThanOrEqual(0);
 });
+
+test("an email address with a long unbroken segment wraps instead of overflowing the account section at 320px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  const email = await signUpVerified(page, "a".repeat(40));
+  expect(email.length).toBeGreaterThan(45);
+  await page.goto("/profile");
+  await expect(page.getByText(email)).toBeVisible();
+  expect(await overflow(page)).toBeLessThanOrEqual(0);
+});

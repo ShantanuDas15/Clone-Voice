@@ -17,12 +17,32 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:3000",
     trace: "retain-on-failure",
-    permissions: ["microphone"],
-    launchOptions: {
-      args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
-    },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        permissions: ["microphone"],
+        launchOptions: {
+          args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+        },
+      },
+    },
+    {
+      name: "firefox",
+      use: {
+        ...devices["Desktop Firefox"],
+        // Firefox's equivalent of Chromium's fake-device flags.
+        launchOptions: {
+          firefoxUserPrefs: {
+            "media.navigator.streams.fake": true,
+            "media.navigator.permission.disabled": true,
+          },
+        },
+      },
+    },
+  ],
   webServer: {
     command: "npm run build && npx next start -p 3000",
     url: "http://localhost:3000",

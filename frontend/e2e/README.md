@@ -22,14 +22,19 @@ backend/.venv/bin/uvicorn backend.main:app --port 8000 > /tmp/backend.log 2>&1 &
 
 # 2. Browser (once) and tests. Playwright builds and starts the web app itself.
 cd frontend
-npx playwright install chromium
-E2E_BACKEND_LOG=/tmp/backend.log npm run test:e2e
+npx playwright install chromium firefox
+E2E_BACKEND_LOG=/tmp/backend.log npm run test:e2e   # both browsers
+# one browser: npm run test:e2e -- --project=firefox
 ```
 
 Set `CSP_ENFORCE=1` to run the whole suite under an **enforcing** Content-Security-Policy;
 `csp.spec.ts` fails on any violation reported while browsing every flow.
 
 ## Notes
+
+- Two projects run the same specs: `chromium` and `firefox` (Firefox's fake microphone comes from
+  `firefoxUserPrefs`; Playwright's `microphone` permission is Chromium-only). Safari/WebKit is a
+  manual check.
 
 - `emailedToken()` reads the backend log and decodes the quoted-printable console email.
 - Recording uses Chromium's fake microphone. The WEBM it produces passes the server's container
