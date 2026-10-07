@@ -32,7 +32,8 @@ preprocess_semaphore = asyncio.Semaphore(settings.PREPROCESS_MAX_CONCURRENCY)
 
 # Declared media types accepted for each container the content can be.
 _MIME_TYPES_BY_EXTENSION = {
-    ".wav": {"audio/wav", "audio/x-wav", "audio/wave"},
+    # audio/vnd.wave is the IANA name (RFC 2361); Firefox on Linux labels WAVs with it.
+    ".wav": {"audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave"},
     ".mp3": {"audio/mpeg", "audio/mp3"},
     ".webm": {"audio/webm"},
 }

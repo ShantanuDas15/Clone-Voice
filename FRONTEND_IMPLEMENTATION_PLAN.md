@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook) done, deployment itself not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook) done, deployment itself not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4`, `fe91eb6`, `e112ca0` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4`, `fe91eb6`, `e112ca0`, `86ce187` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
 | 8 — Release | 🟡 Preparation only | `d012995` | Smoke script (`npm run smoke`) and `frontend/RUNBOOK.md` done and exercised against a local stack. Nothing deployed: needs hosting, a domain, real email and Google registration, and owner decisions Q3, Q4, Q8. Details below. |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -901,6 +901,22 @@ The two Phase 8 deliverables that need no hosting: "runbook (rollback, cookie/CO
 1. The registrable-domain check takes the last two labels; it does not use the public-suffix list, so two sites under a multi-label suffix (`a.co.uk`, `b.co.uk`) would wrongly pass. Documented in the code.
 2. The script and runbook have never met a real deployment, so provider-specific behaviour (proxy timeouts, `X-Forwarded-*`, idle limits: Unverified #1, Q4) is untested.
 3. Phase 8 proper still needs the owner: hosting and a same-site domain, a verified email domain and working email (`HARDENING_PLAN.md` §4 item 2), the Google redirect registered, a Sentry project, Q1/Q4 answered. Carried over from Phase 7: Safari, the manual screen-reader and keyboard pass, e2e in CI, SQLite vs Postgres, ffmpeg recording decode, Q8.
+
+### FE-P7n — backend accepts the `audio/vnd.wave` alias (2026-10-07, branch `fix/accept-audio-vnd-wave`, commit `86ce187`)
+
+Closes FE-P7g open item 1. Chosen over the other candidates (WebKit needs `sudo`; Phase 8 needs the owner's hosting decisions; running the API without model weights would loosen hardening finding C2) because it was small, self-contained, testable and a real defect.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Fix | ✅ | `backend/services/audio_processing.py`: `audio/vnd.wave` (the IANA name, RFC 2361, which Firefox on Linux uses for WAVs) joins the accepted names for `.wav`. Nothing else is loosened: the declared type must still match the **sniffed container**, so an MP3 or WebM called `audio/vnd.wave` is refused, and the error text and size limits are unchanged. Before, only this web client could upload such a file (it folded the alias into `audio/wav`); curl, scripts and native clients got a 422. |
+| Tests | ✅ | `backend/tests/test_upload_hardening.py`: a WAV declared `audio/vnd.wave`, and with a mixed-case name and parameters, is accepted; an MP3 and a WebM declared `audio/vnd.wave` are refused. **Without the fix the two accept cases fail** (2 failed, 33 passed); with it all pass. |
+| Frontend | ✅ | The client still folds the alias into `audio/wav`, now documented as protection for older deployed APIs. |
+
+**Verification run (local):** `pytest backend -q` → **902 passed, 1 skipped, 11 warnings** (898 before plus 4 new; the 11 warnings are the known third-party baseline). Frontend: `npm test` → 28 files, **331 passed**; `typecheck`, `lint`, `format:check` clean (a comment changed only). `black` and `isort` clean. The OpenAPI snapshot is unchanged (the allowlist is not in the schema).
+
+**Open items from FE-P7n**
+1. The error message still says "Allowed: WAV, MP3, WEBM." (accurate: the alias is a name for WAV, not a new format). Other WAV aliases a client might send (for example `audio/vnd.wave` with unusual parameters is handled; `audio/x-pn-wav` is not) are untouched.
+2. Everything else is unchanged: Safari/WebKit (needs `sudo npx playwright install-deps`), the manual NVDA/VoiceOver and keyboard pass, e2e in CI, Phase 8 (owner decisions: hosting, domain, email, Google, Sentry, Q1/Q3/Q4/Q8), SQLite vs Postgres, ffmpeg recording decode.
 
 ---
 
