@@ -19,14 +19,15 @@ The app fails fast at startup if `NEXT_PUBLIC_API_BASE_URL` is missing or malfor
 
 ## Quality gates
 
-| Command                | Purpose                                                 |
-| ---------------------- | ------------------------------------------------------- |
-| `npm run typecheck`    | `tsc --noEmit` (strict)                                 |
-| `npm run lint`         | ESLint (no `console`, no `dangerouslySetInnerHTML`)     |
-| `npm run format:check` | Prettier                                                |
-| `npm test`             | Vitest + React Testing Library + MSW (no live services) |
-| `npm run build`        | Production build (needs the env var above)              |
-| `npm run perf`         | Lighthouse budgets on the public routes (see below)     |
+| Command                | Purpose                                                            |
+| ---------------------- | ------------------------------------------------------------------ |
+| `npm run typecheck`    | `tsc --noEmit` (strict)                                            |
+| `npm run lint`         | ESLint (no `console`, no `dangerouslySetInnerHTML`)                |
+| `npm run format:check` | Prettier                                                           |
+| `npm test`             | Vitest + React Testing Library + MSW (no live services)            |
+| `npm run build`        | Production build (needs the env var above)                         |
+| `npm run smoke`        | Release smoke test against a deployed web + API (see `RUNBOOK.md`) |
+| `npm run perf`         | Lighthouse budgets on the public routes (see below)                |
 
 ## Performance budget
 
