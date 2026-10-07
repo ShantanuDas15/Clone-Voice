@@ -26,6 +26,16 @@ The app fails fast at startup if `NEXT_PUBLIC_API_BASE_URL` is missing or malfor
 | `npm run format:check` | Prettier                                                |
 | `npm test`             | Vitest + React Testing Library + MSW (no live services) |
 | `npm run build`        | Production build (needs the env var above)              |
+| `npm run perf`         | Lighthouse budgets on the public routes (see below)     |
+
+## Performance budget
+
+`npm run perf` audits `/`, `/login`, `/signup` and `/forgot-password` with Lighthouse's default
+mobile profile (slow 4G, 4x CPU), takes the median of 3 runs (`PERF_RUNS`) and exits 1 if any route
+exceeds: LCP 2500 ms, JS 200 KB transferred (gzipped), CLS 0.1, TBT 300 ms. It needs a production
+server (`npm run build && npx next start -p 3000`, or `PERF_BASE_URL`) and uses Playwright's
+Chromium (or `CHROME_PATH`). Needs Node 22+ (Lighthouse's requirement). The pass/fail logic is
+unit-tested in `tests/perf-budget.test.ts`; the budget itself lives in `perf/budget.mts`.
 
 ## Content-Security-Policy
 

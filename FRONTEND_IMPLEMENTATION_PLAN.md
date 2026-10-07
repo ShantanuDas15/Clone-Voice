@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) and its dialog-focus slice (FE-P7e, `7b69166`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) and its Lighthouse-budget slice (FE-P7f, `a5a1165`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management done; Lighthouse, cross-browser, screen-reader pass and Sentry not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate done; cross-browser, screen-reader pass and Sentry not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -740,6 +740,28 @@ Closes the gap recorded in FE-P7c ("dialogs still lack a focus trap"). Both conf
 **Open items from FE-P7e**
 1. Background content is not `inert`; the trap relies on key handling, so a screen reader's virtual cursor can still browse behind the dialog (`aria-modal` covers most readers). The manual NVDA/VoiceOver pass is still outstanding.
 2. Remaining in Phase 7: Lighthouse CI budgets, Sentry + PII scrubber, Firefox/Safari runs, the manual screen-reader and keyboard-only walkthrough of the remaining flows, e2e in CI, SQLite vs Postgres. Carried over: ffmpeg recording decode, Q8 (Next 14 advisories), CI never run on GitHub, Q3/Q4 latency.
+
+### FE-P7f — Phase 7, Lighthouse performance budgets (2026-10-07, branch `feat/FE-P7f-lighthouse`, commit `a5a1165`)
+
+Phase 7 task 3 and Definition-of-Done item 13 (performance budgets). Also answers the FE-P7 open item "static prerendering is lost to nonces, worth a Lighthouse check".
+
+| Area | Status | Evidence |
+|---|---|---|
+| Budget gate | ✅ | `npm run perf` (`perf/run.mjs`) drives Lighthouse 13 through Playwright's Chromium against a production `next start`, on `/`, `/login`, `/signup`, `/forgot-password`, with Lighthouse's default mobile profile (slow 4G, 4x CPU), median of 3 runs. Exits 1 on any breach of `perf/budget.mts`: **LCP 2500 ms and JS 200 KB gzipped** (the plan's two proposals) plus CLS 0.1 and TBT 300 ms (Core Web Vitals "good", added). |
+| Pure budget logic | ✅ | `tests/perf-budget.test.ts` (9): metric extraction (bytes→KB), missing/NaN audit throws instead of passing silently, median (outlier, even count, single run), at-the-limit passes, per-metric violation messages. |
+| Measured result | ✅ | `/` LCP 1861 ms · JS 171 KB; `/login` 2384 ms · 187 KB; `/signup` 1959 ms · 186 KB; `/forgot-password` 2035 ms · 189 KB; **CLS 0 and TBT ≤ 32 ms everywhere**. All inside the budget. Confirmed the JS figure is real gzip transfer (the server compresses 691 KB of chunks to 218 KB). |
+| Gate can fail | ✅ | A negative control with an impossible budget (LCP 1000 ms, JS 100 KB) failed all four routes with named reasons and **exit code 1**; the real budget was then restored. |
+| Dynamic rendering cost | ✅ | Per-request CSP nonces make every page server-rendered, yet LCP stays under budget on slow 4G, so the trade-off is acceptable. |
+
+**Headroom is thin:** `/login` JS is 187 of 200 KB (about 7 %) and its LCP reached 2384 of 2500 ms in one run (2336 in another). Any new dependency on the public routes (for example a Sentry browser SDK) will likely break the JS budget, so add it lazily. The simulated-throttling numbers vary by a few percent between runs, hence the median.
+
+**Verification run (local, Node 24):** `npm test` → 26 files, **298 tests passed** (9 new), two consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK. `npm run perf` passed twice (the second run after the final code). Backend untouched. `lighthouse@13` and `chrome-launcher` are devDependencies; Lighthouse needs Node 22+, so `engines` (≥ 18.17) and the CI job (Node 20) apply to the app, not to `perf`. `npm audit --omit=dev` is unchanged (the same Next 14 advisories, Q8). `tsconfig.json` gained `allowImportingTsExtensions` (valid with `noEmit`) so tests can import `perf/budget.mts`, which Node runs natively.
+
+**Open items from FE-P7f**
+1. **`perf` is not in CI** (needs a built server and Chromium; CI has never run on GitHub), so the budget is enforced only when someone runs it. A CI job on Node 22 would need `npx playwright install chromium`.
+2. Only public routes are budgeted; signed-in pages (`/dashboard` 157 kB, `/profile` 185 kB first-load) need a login flow in the runner. The plan also asks for a 50-generation soak for object-URL/stream leaks (DoD 13), not done.
+3. Lab numbers on simulated throttling, from this CPU; no real-device or field (web-vitals) data until Sentry/web-vitals reporting exists.
+4. Remaining in Phase 7: Sentry + PII scrubber and web-vitals, Firefox/Safari runs, the manual screen-reader and keyboard-only pass, e2e in CI, SQLite vs Postgres. Carried over: ffmpeg recording decode, Q8, CI never run on GitHub, Q3/Q4 latency.
 
 ---
 
