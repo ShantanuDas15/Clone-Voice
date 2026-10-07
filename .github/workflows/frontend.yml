@@ -31,3 +31,33 @@ jobs:
       # task log, FE-P0). Non-blocking until the owner approves a Next upgrade.
       - run: npm audit --omit=dev --audit-level=high
         continue-on-error: true
+
+  # Lighthouse budget gate (FRONTEND_IMPLEMENTATION_PLAN.md, FE-P7f). Public routes only, so no
+  # backend is needed. Lighthouse 13 requires Node 22+ (the `check` job stays on Node 20).
+  perf:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Start the production server
+        run: |
+          nohup npx next start -p 3000 > next.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/login > /dev/null && exit 0
+            sleep 1
+          done
+          cat next.log
+          exit 1
+      - run: npm run perf

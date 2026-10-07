@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4`, `fe91eb6` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4`, `fe91eb6`, `e112ca0` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -854,6 +854,21 @@ Closes the second half of Definition-of-Done item 13 ("object URLs/streams relea
 **Open items from FE-P7k**
 1. The soak covers blob URLs and audio elements, the leak sources in this code. It does not measure JS heap or a `MediaStream` over many recordings (the recorder's track release is asserted once in the unit tests); real synthesis was not repeated 50 times (about 6 minutes on this CPU).
 2. Everything else from FE-P7j stands: Safari/WebKit (needs `sudo npx playwright install-deps`), the manual NVDA/VoiceOver and keyboard pass, e2e and `perf` in CI, no real Sentry project, SQLite vs Postgres, ffmpeg recording decode, Q8, Q3/Q4 latency.
+
+### FE-P7l — Phase 7, Lighthouse budget in CI (2026-10-07, branch `feat/FE-P7l-ci-perf`, commit `e112ca0`)
+
+Closes FE-P7f open item 1 ("`perf` is not in CI") for the performance budget. e2e is deliberately not added (below).
+
+| Area | Status | Evidence |
+|---|---|---|
+| `perf` job | 🟡 | `.github/workflows/frontend.yml` gains a `perf` job beside `check`: Node 22 (Lighthouse 13 needs it; `check` stays on 20), `npm ci`, `npm run build`, `npx playwright install --with-deps chromium`, a start-and-wait step for `next start`, then `npm run perf`, which exits 1 on any budget breach. The public routes need no backend. **Run end to end locally with the same commands, from a clean `.next`, with the backend off as on a runner:** all four routes within budget (LCP 1.8 to 2.0 s, JS 177/193/193/192 KB, CLS 0.000). YAML parses. **It has never run on GitHub**, like the rest of the workflow, so runner CPU variance against the 2500 ms LCP and the thin `/login` JS margin (193 of 200 KB) is unproven; if it flaps, raise `PERF_RUNS` or relax LCP rather than disabling it. |
+| e2e in CI | ⬜ | Not added: the suite needs the real backend with its model weights (multi-GB, not in the repo), a console-mail log and two browsers. A weights-free subset (auth, email, a11y, responsive, layout shift, dialogs) is possible once the backend can start without TTS weights, which is a backend change. |
+
+**Verification run (local, Node 24):** the perf commands above. No application or test code changed, so the unit and e2e suites were not re-run for this slice beyond the post-merge unit run. Backend untouched.
+
+**Open items from FE-P7l**
+1. The first GitHub run of `perf` and `check` is the real test; watch it. Safari/WebKit (needs `sudo npx playwright install-deps` locally), the manual NVDA/VoiceOver and keyboard pass, e2e in CI, no real Sentry project, SQLite vs Postgres, ffmpeg recording decode, Q8, Q3/Q4 latency.
+2. With these, Phase 7 has only items that need a person, a browser this host cannot run, or infrastructure. Phase 8 (deploy on one registrable domain, real email, Google redirect, runbook, smoke script) needs the owner's hosting decisions (Q4) and cannot be started from this machine.
 
 ---
 
