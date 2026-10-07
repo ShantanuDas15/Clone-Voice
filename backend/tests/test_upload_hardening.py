@@ -72,6 +72,8 @@ def test_the_content_decides_what_a_file_is(head, expected):
         (WAV, "audio/wav"),
         (WAV, "audio/x-wav"),
         (WAV, "audio/wave"),
+        (WAV, "audio/vnd.wave"),
+        (WAV, "Audio/Vnd.Wave; charset=binary"),
         (MP3, "audio/mpeg"),
         (WEBM, "audio/webm"),
         # Browser recorders add parameters; the type is what counts.
@@ -89,6 +91,9 @@ def test_matching_type_and_content_is_accepted(content, media_type):
         (MP3, "audio/wav"),
         (WAV, "audio/mpeg"),
         (WEBM, "audio/wav"),
+        # The alias widens what WAV may be called, not what may be called WAV.
+        (MP3, "audio/vnd.wave"),
+        (WEBM, "audio/vnd.wave"),
     ],
 )
 def test_content_that_contradicts_the_declared_type_is_refused(content, media_type):

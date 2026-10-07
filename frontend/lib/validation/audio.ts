@@ -13,8 +13,9 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * Registered or OS-reported aliases of the accepted types, mapped to the one the server knows.
- * Firefox on Linux reports a `.wav` as `audio/vnd.wave` (the IANA name, RFC 2361), which the API
- * would reject although the bytes are an ordinary WAV.
+ * Firefox on Linux reports a `.wav` as `audio/vnd.wave` (the IANA name, RFC 2361). The API accepts
+ * that name since FE-P7n; folding it here keeps older deployed APIs working, which rejected it
+ * although the bytes are an ordinary WAV.
  */
 const ALIASES: Readonly<Record<string, string>> = { "audio/vnd.wave": "audio/wav" };
 
