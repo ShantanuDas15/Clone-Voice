@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -822,6 +822,23 @@ Closes FE-P7h open item 3. The "verify your email" notice rendered above the hea
 **Open items from FE-P7i**
 1. The notice is now last in DOM and tab order, so keyboard and screen-reader users reach it after the page content. It is a `sticky` block, not a live region; the manual NVDA/VoiceOver pass should judge whether that is discoverable enough (a `role="status"` was not added because it would announce on every reload).
 2. On a narrow signed-in menu below about 360 px the items still wrap (FE-P7h item 4). Everything else from FE-P7h item 5 is unchanged: screen-reader and keyboard pass, Safari, e2e and `perf` in CI, SQLite vs Postgres, ffmpeg recording decode, Q8, Q3/Q4, and no real Sentry project.
+
+### FE-P7j — Phase 7, header stability on narrow screens (2026-10-07, branch `feat/FE-P7j-narrow-header`, commit `3ace3f4`)
+
+Closes FE-P7h/FE-P7i open item "the signed-in menu still wraps below about 360 px". Measured first: with the session refresh delayed, a verified signed-in user shifted the page by **0.22 at 320 px and 0.27 at 360 px** (the menu wrapped to a second row only after the session loaded); signed out and 412 px were fine.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Fix | ✅ | Below `sm` (640 px) the header is two fixed rows in every state: brand, then the account menu (44 px min height) on its own row (`components/app-shell.tsx`); from `sm` up it is the previous single wrapping row. The loading skeleton, signed-out links and signed-in menu all occupy the same row, so the header height no longer depends on the session. Cost: signed-out visitors on phones get a 44 px taller header. |
+| Test | ✅ | `e2e/layout-shift.spec.ts` now runs signed out, signed in (verified) and signed in (unverified) at **320, 360 and 412 px**: 9 cases, CLS < 0.05. 4 failed before the fix (0.22 to 0.27), all 9 pass after. |
+
+**Verification run (local, Node 24; Chromium and Firefox; real backend with real weights):** `npm test` → 27 files, **315 passed**, two runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK. `npx playwright test` with `CSP_ENFORCE=1` → **79 passed, 9 skipped** (the nine Chromium-only CLS cases in Firefox), including the responsive (no overflow, 44 px targets at 320/768/1280) and real-browser axe audits. `npm run perf` → within budget, CLS 0.000. Backend untouched.
+
+**Safari/WebKit attempt (not done):** Playwright's WebKit build downloads but cannot launch here: the host lacks system libraries and installing them needs `sudo npx playwright install-deps`, which was not run. Running it, then adding a `webkit` project beside the other two, is the quickest way to automate part of the Safari check; the real-Safari manual pass remains outstanding either way.
+
+**Open items from FE-P7j**
+1. Safari/WebKit as above, and the manual NVDA/VoiceOver and keyboard-only pass. The sticky verify-email notice's discoverability (FE-P7i) belongs in that pass.
+2. e2e and `perf` are still not in CI (CI has never run on GitHub); no real Sentry project, release tagging or sourcemaps. Carried over: SQLite vs Postgres, ffmpeg recording decode, Q8, Q3/Q4 latency.
 
 ---
 
