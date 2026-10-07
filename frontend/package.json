@@ -12,7 +12,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "perf": "node perf/run.mjs"
   },
   "engines": {
     "node": ">=18.17"
@@ -44,9 +45,11 @@
     "ajv-formats": "^2.1.1",
     "autoprefixer": "^10.6.1",
     "axe-core": "^4.14.0",
+    "chrome-launcher": "^1.2.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
     "jsdom": "^25.0.1",
+    "lighthouse": "^13.5.0",
     "msw": "^2.15.0",
     "postcss": "^8.5.29",
     "prettier": "^3.9.9",
