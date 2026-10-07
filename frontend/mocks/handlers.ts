@@ -47,10 +47,17 @@ export const handlers = [
   http.get(`${API}/auth/me`, () => HttpResponse.json(fixtures.user)),
   http.patch(`${API}/auth/me`, () => HttpResponse.json(fixtures.user)),
   http.delete(`${API}/auth/me`, () => new HttpResponse(null, { status: 204 })),
-  http.post(`${API}/auth/verify-email`, () => HttpResponse.json({ status: "verified" })),
-  http.post(`${API}/auth/resend-verification`, () => HttpResponse.json({}, { status: 202 })),
-  http.post(`${API}/auth/forgot-password`, () => HttpResponse.json({}, { status: 202 })),
-  http.post(`${API}/auth/reset-password`, () => HttpResponse.json({ status: "ok" })),
+  http.post(`${API}/auth/verify-email`, () => HttpResponse.json({ detail: "Email verified" })),
+  http.post(`${API}/auth/resend-verification`, () =>
+    HttpResponse.json({ detail: "Verification email sent" }, { status: 202 }),
+  ),
+  http.post(`${API}/auth/forgot-password`, () =>
+    HttpResponse.json(
+      { detail: "If that address has an account, a reset link has been sent" },
+      { status: 202 },
+    ),
+  ),
+  http.post(`${API}/auth/reset-password`, () => HttpResponse.json({ detail: "Password updated" })),
   http.get(`${API}/voice/profiles`, () => HttpResponse.json([fixtures.profile])),
   http.post(`${API}/voice/upload`, () => HttpResponse.json(fixtures.profile, { status: 201 })),
   http.delete(`${API}/voice/profiles/:id`, () => HttpResponse.json({ status: "deleted" })),

@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) and its browser-audit slice (FE-P7c, `13ca9b1`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) and its OpenAPI contract-test slice (FE-P7d, `856ef58`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, and a 33-test Playwright suite against the real backend done; Lighthouse, cross-browser, screen-reader pass, Sentry and contract tests not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests done; Lighthouse, cross-browser, screen-reader pass and Sentry not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -703,6 +703,26 @@ First run of the frontend against the **real FastAPI backend with real SV2TTS we
 1. Not done in Phase 7: Lighthouse CI budgets, Sentry + PII scrubber, OpenAPI contract tests, Firefox/Safari runs, a **manual NVDA/VoiceOver pass and keyboard-only walkthrough** (axe cannot judge focus order or announcements), dialogs still lack a focus trap, e2e not in CI, SQLite not Postgres.
 2. Recording decode still needs a host with ffmpeg (see FE-P7b).
 3. Carried over: Q8 (Next 14 advisories), CI never run on GitHub, Q3/Q4 latency unknowns.
+
+### FE-P7d — Phase 7, OpenAPI contract tests (2026-10-07, branch `feat/FE-P7d-contract-tests`, commit `856ef58`)
+
+Phase 7 task 7 and Definition-of-Done item 10 ("contract tests match the backend OpenAPI").
+
+| Area | Status | Evidence |
+|---|---|---|
+| Snapshot + drift guard | ✅ | `python -m backend.export_openapi` writes `frontend/contract/openapi.json` (OpenAPI 3.1, sorted, deterministic) from the real FastAPI app; `--check` exits 1 if stale. `backend/tests/test_openapi_snapshot.py` fails the backend suite when a schema change lands without refreshing the snapshot, so the frontend can never validate against an outdated contract. |
+| Fixtures vs schemas | ✅ | `tests/contract.test.ts` validates the `user`, `profile`, `generation`, `token` and `terms` fixtures against `UserOut`, `VoiceProfileOut`, `GenerationOut`, `TokenResponse`, `TermsOut` (Ajv 2020-12 + formats), and asserts a fixture invents no field the backend lacks. Canaries prove a missing required field or wrong type is rejected. |
+| Every default MSW handler | ✅ | Each handler is hit for real: its path and method must exist in the spec, its status must be declared, and a JSON body must match the declared response schema. A guard test lists the endpoints the app calls that must stay mocked. |
+| Outgoing requests | ✅ | The real API functions are run against capture handlers and their bodies validated against the request schemas: signup, login, verify-email, forgot-password, reset-password (snake_case `new_password`), `PATCH /auth/me`, `DELETE /auth/me` with and without a password, `POST /synthesize`. Upload's multipart field names are checked against the form schema (all required present, none unknown) and history's `limit`/`offset` against the declared parameters and bounds. A canary proves a payload the backend would 422 is rejected. |
+
+**Drift the contract tests found, now fixed:** four mocks returned bodies the backend never sends. `verify-email`, `resend-verification`, `forgot-password` and `reset-password` all answer `{"detail": "<message>"}` (`MessageResponse`), but the mocks returned `{status:"verified"}`, `{}`, `{}` and `{status:"ok"}`. The client ignores these bodies so nothing was broken, but the mocks now carry the real shape and wording.
+
+**Verification run (local, Node 24):** `npm test` → 24 files, **280 tests passed** (44 new), two consecutive runs, zero failures/warnings; `typecheck`, `lint`, `format:check` clean; `npm run build` OK. Backend: `pytest backend -q` → **898 passed, 1 skipped, 11 warnings** (the known third-party baseline; 4 new tests). Playwright was not re-run: only unit-test mocks changed, no app code. `ajv@8` and `ajv-formats@2` added as devDependencies (v2 because `@hookform/resolvers` declares an optional peer on `ajv-formats@^2`).
+
+**Open items from FE-P7d**
+1. The contract covers the JSON and multipart shapes the app uses. It cannot catch what OpenAPI does not describe: error bodies for 4xx other than 422 (G-04), response headers (`X-Total-Count`, `Content-Disposition`, `Retry-After`), cookies, and the untyped `DELETE /voice/profiles/{id}` body (G-12).
+2. The frontend `interface`s in `lib/api/*.ts` are still hand-written; they are checked indirectly through the fixtures, not generated from the spec (Phase 0's type generation remains undone).
+3. Remaining in Phase 7: Lighthouse CI budgets, Sentry + PII scrubber, Firefox/Safari runs, manual NVDA/VoiceOver and keyboard-only pass, dialog focus trap, e2e in CI, SQLite vs Postgres. Carried over: ffmpeg recording decode, Q8 (Next 14 advisories), CI never run on GitHub, Q3/Q4 latency.
 
 ---
 
