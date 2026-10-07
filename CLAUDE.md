@@ -116,9 +116,9 @@ Every milestone MUST include explicitly defined test specifications covering:
 backend/
 ├── main.py                    # FastAPI app, lifespan, CORS, router registration
 ├── api/
-│   ├── auth.py                # POST /api/auth/login, /api/auth/signup
-│   ├── voice.py               # POST /api/voice/upload, GET /api/voice/profiles
-│   └── synthesize.py          # POST /api/synthesize, GET /api/synthesize/history
+│   ├── auth.py                # /api/v1/auth/* (signup, login, refresh, logout, me, email, Google)
+│   ├── voice.py               # /api/v1/voice/* (upload, profiles)
+│   └── synthesize.py          # /api/v1/synthesize (+ history, past-audio download)
 ├── services/
 │   ├── tts_pipeline.py        # SV2TTS inference (Encoder, Synthesizer, Vocoder)
 │   └── audio_processing.py    # Librosa preprocessing (resample, trim, normalize)
@@ -157,11 +157,25 @@ backend/
 
 | Method | Path | Auth Required | Description |
 |--------|------|:---:|-------------|
-| `POST` | `/api/auth/login` | ❌ | Email/password login → returns JWT |
-| `POST` | `/api/voice/upload` | ✅ | Upload audio sample(s) → returns new voice profile |
-| `GET` | `/api/voice/profiles` | ✅ | List user's voice profiles |
-| `POST` | `/api/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output |
-| `GET` | `/api/synthesize/history`| ✅ | List user's generated audio history |
+| `POST` | `/api/v1/auth/signup` | ❌ | Register with email + password |
+| `POST` | `/api/v1/auth/login` | ❌ | Email/password login → access JWT + httpOnly refresh cookie |
+| `POST` | `/api/v1/auth/refresh` | ❌ (cookie) | Rotate the refresh cookie, return a new access token |
+| `POST` | `/api/v1/auth/logout` | ❌ (cookie) | Revoke the refresh token |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/auth/me` | ✅ | Current user / rename / delete account (password in body) |
+| `POST` | `/api/v1/auth/verify-email`, `/resend-verification` | ❌ / ✅ | Email verification |
+| `POST` | `/api/v1/auth/forgot-password`, `/reset-password` | ❌ | Password reset by emailed single-use token |
+| `GET` | `/api/v1/auth/google`, `/google/callback` | ❌ | Google OAuth |
+| `GET` | `/api/v1/terms` | ❌ | Current voice-consent terms (version, text) |
+| `POST` | `/api/v1/voice/upload` | ✅ | Upload an audio sample (+ `consent_confirmed=true`) → new voice profile |
+| `GET` | `/api/v1/voice/profiles` | ✅ | List user's voice profiles |
+| `DELETE` | `/api/v1/voice/profiles/{profile_id}` | ✅ | Soft-delete a voice profile |
+| `POST` | `/api/v1/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output |
+| `GET` | `/api/v1/synthesize/history` | ✅ | List user's generated audio history (`limit`/`offset`, `X-Total-Count`) |
+| `GET` | `/api/v1/synthesize/{generation_id}/audio` | ✅ | Download a past generation's WAV (404 / 410 expired) |
+| `GET` | `/health`, `/health/live`, `/health/ready` | ❌ | Liveness / readiness (outside `/api/v1`) |
+
+The authoritative list is the generated OpenAPI snapshot, `frontend/contract/openapi.json`
+(refresh with `python -m backend.export_openapi`; a backend test fails when it is stale).
 
 ---
 

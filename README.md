@@ -19,8 +19,10 @@
 
 ### Frontend
 - **Framework:** Next.js 14 (App Router)
-- **Styling:** Tailwind CSS + shadcn/ui
-- **Auth:** NextAuth.js v5
+- **Styling:** Tailwind CSS
+- **Data and forms:** TanStack Query, React Hook Form + Zod
+- **Auth:** the backend's own JWT (memory-only access token) plus its httpOnly refresh cookie;
+  NextAuth is not used (FRONTEND_IMPLEMENTATION_PLAN.md, Q1)
 
 ### Backend
 - **Framework:** FastAPI (Python 3.11+)
@@ -76,8 +78,10 @@ and `HARDENING_PLAN.md` finding H7).
 docker-compose up --build
 ```
 
-- **Frontend:** http://localhost:3000 (not yet implemented — CLAUDE.md §2 requires the
-  backend to be fully hardened first)
+- **Frontend:** http://localhost:3000 — not part of `docker-compose.yml`; run it from
+  `frontend/` with `npm run dev` (setup, env vars, tests and the e2e recipe are in
+  [`frontend/README.md`](frontend/README.md)). The web app and API must be same-site so the
+  refresh cookie is sent.
 - **Backend API:** http://localhost:8000
 - **API Documentation:** http://localhost:8000/docs
 - **Database:** localhost:5432 (bound to `127.0.0.1` only — not reachable from outside

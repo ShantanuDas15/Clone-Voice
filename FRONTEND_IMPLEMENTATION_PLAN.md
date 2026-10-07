@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -869,6 +869,20 @@ Closes FE-P7f open item 1 ("`perf` is not in CI") for the performance budget. e2
 **Open items from FE-P7l**
 1. The first GitHub run of `perf` and `check` is the real test; watch it. Safari/WebKit (needs `sudo npx playwright install-deps` locally), the manual NVDA/VoiceOver and keyboard pass, e2e in CI, no real Sentry project, SQLite vs Postgres, ffmpeg recording decode, Q8, Q3/Q4 latency.
 2. With these, Phase 7 has only items that need a person, a browser this host cannot run, or infrastructure. Phase 8 (deploy on one registrable domain, real email, Google redirect, runbook, smoke script) needs the owner's hosting decisions (Q4) and cannot be started from this machine.
+
+### FE-P7m — documentation reconciliation (2026-10-07, branch `docs/FE-P7m-doc-reconciliation`, commit `dba0be3`)
+
+Definition-of-Done item 18 and gap G-15 ("stale endpoint docs"). Documentation only; no code, tests or backend behaviour changed.
+
+| Area | Status | Evidence |
+|---|---|---|
+| `CLAUDE.md` §5 and §7 | ✅ | The architecture sketch and the endpoint table named `/api/auth/login`, `/api/voice/upload` and five routes. §7 now lists every route under `/api/v1` (signup, login, refresh, logout, `me` GET/PATCH/DELETE, email verification, password reset, Google, `terms`, voice upload/list/delete, synthesize, history, past-audio download) plus `/health*`, and points to `frontend/contract/openapi.json` as the authority. **Cross-checked: every one of the 20 paths in the OpenAPI snapshot appears in the doc.** Only the reference tables were edited, none of the rules. |
+| `project_description.md` | ✅ | Already carried the full `/api/v1` list (done in an earlier milestone); verified, not changed. |
+| `README.md` | ✅ | The frontend stack no longer claims NextAuth and shadcn (neither is used); the "not yet implemented" note is replaced with how to run it and a pointer to `frontend/README.md`, plus the same-site requirement for the refresh cookie. |
+
+**Open items from FE-P7m**
+1. The README now states NextAuth is not used, but Q1 (drop NextAuth or wrap the backend with it) is formally still the owner's decision; the code already follows "drop". Confirm Q1 so the docs, `project_description.md` and the plan agree.
+2. Docs changed, so the graph's semantic layer needs `/graphify --update`. Everything else from FE-P7l stands.
 
 ---
 
