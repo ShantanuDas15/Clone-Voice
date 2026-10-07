@@ -1,6 +1,6 @@
 import { type Page, expect, test } from "@playwright/test";
 
-import { signUpVerified } from "./helpers";
+import { signUp, signUpVerified, uniqueEmail } from "./helpers";
 
 // The unfixed header shifted 0.17-0.35; 0.05 leaves room for incidental sub-pixel shifts.
 /** Sum of layout shifts (no recent input) over a page load, Chromium only. */
@@ -38,12 +38,21 @@ test.describe("header does not shift when the session resolves (CLS)", () => {
   });
 
   test("signed in, after a reload", async ({ page }) => {
-    // Verified, so the "verify your email" banner (which does appear late) is not in play.
+    // Verified, so no late notice is involved; the unverified case is the next test.
     await signUpVerified(page, "cls");
     await observeShifts(page);
     await slowRefresh(page);
     await page.goto("/dashboard");
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    expect(await cls(page)).toBeLessThan(0.05);
+  });
+
+  test("signed in but unverified (the verify-email notice appears late)", async ({ page }) => {
+    await signUp(page, uniqueEmail("cls-unverified"));
+    await observeShifts(page);
+    await slowRefresh(page);
+    await page.goto("/dashboard");
+    await expect(page.getByText(/verify your email address \(/i)).toBeVisible();
     expect(await cls(page)).toBeLessThan(0.05);
   });
 });
