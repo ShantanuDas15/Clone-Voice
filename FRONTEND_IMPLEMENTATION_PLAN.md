@@ -493,8 +493,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
 | 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4`, `fe91eb6`, `e112ca0` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
-| 8 — Release | 🟡 Preparation only | `d012995` | Smoke script (`npm run smoke`) and `frontend/RUNBOOK.md` done and exercised against a local stack. Nothing deployed: needs hosting, a domain, real email and Google registration (owner decisions, Q4). Details below. |
-| 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
+| 8 — Release | 🟡 Preparation only | `d012995` | Smoke script (`npm run smoke`) and `frontend/RUNBOOK.md` done and exercised against a local stack. Nothing deployed: needs hosting, a domain, real email and Google registration, and owner decisions Q3, Q4, Q8. Details below. |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
 
