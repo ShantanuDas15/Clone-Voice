@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) and its OpenAPI contract-test slice (FE-P7d, `856ef58`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) and its dialog-focus slice (FE-P7e, `7b69166`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests done; Lighthouse, cross-browser, screen-reader pass and Sentry not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management done; Lighthouse, cross-browser, screen-reader pass and Sentry not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -723,6 +723,23 @@ Phase 7 task 7 and Definition-of-Done item 10 ("contract tests match the backend
 1. The contract covers the JSON and multipart shapes the app uses. It cannot catch what OpenAPI does not describe: error bodies for 4xx other than 422 (G-04), response headers (`X-Total-Count`, `Content-Disposition`, `Retry-After`), cookies, and the untyped `DELETE /voice/profiles/{id}` body (G-12).
 2. The frontend `interface`s in `lib/api/*.ts` are still hand-written; they are checked indirectly through the fixtures, not generated from the spec (Phase 0's type generation remains undone).
 3. Remaining in Phase 7: Lighthouse CI budgets, Sentry + PII scrubber, Firefox/Safari runs, manual NVDA/VoiceOver and keyboard-only pass, dialog focus trap, e2e in CI, SQLite vs Postgres. Carried over: ffmpeg recording decode, Q8 (Next 14 advisories), CI never run on GitHub, Q3/Q4 latency.
+
+### FE-P7e — Phase 7, modal dialog focus management (2026-10-07, branch `feat/FE-P7e-dialog-focus`, commit `7b69166`)
+
+Closes the gap recorded in FE-P7c ("dialogs still lack a focus trap"). Both confirmation dialogs declared `aria-modal="true"` but behaved like plain boxes: Tab walked into the page behind, Escape did nothing and focus was lost on close.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Shared `useDialog` hook | ✅ | `hooks/use-dialog.ts`: focus moves in on open (first focusable, else the container); Tab/Shift+Tab cycle inside and pull stray focus back; Escape closes unless `closeDisabled`; focus returns to the opener on close if it is still in the DOM. The opener is captured during the first render because children's `autoFocus` runs before any effect. |
+| Delete-voice dialog | ✅ | Extracted to `DeleteDialog`; confirm button keeps initial focus; Escape cancels back to that row's Delete button. |
+| Delete-account dialog | ✅ | Wrapped in `ModalPanel`; the first field is focused; **Escape is ignored while the deletion request is in flight** (as Cancel already was). The "Delete my account…" trigger now stays mounted while the dialog is open (it used to unmount, which would have made focus-restore impossible). |
+| Tests | ✅ | `tests/dialog.test.tsx` (9): cycling, disabled controls skipped, stray focus recovered, Escape, Escape blocked, empty dialog, and both real dialogs. **Verified to fail without the hook** (6 of 9 fail with its listener and focus-restore removed; the other 3 assert absences). `e2e/dialog-keyboard.spec.ts` drives both dialogs by keyboard in real Chromium: 6-8 Tab presses never leave, Shift+Tab, Escape restores the opener. |
+
+**Verification run (local, Node 24, Chromium):** `npm test` → 25 files, **289 tests passed** (9 new), two consecutive runs, zero failures; `typecheck`, `lint`, `format:check` clean; `npm run build` OK. `npx playwright test` against the real backend with real weights under `CSP_ENFORCE=1` → **34 passed** (the real-browser axe audits of both dialogs still report zero serious/critical issues with the changed markup). Backend source untouched. The axe `_isIconLigature` stderr lines in `a11y.test.tsx` are jsdom noise present before this change.
+
+**Open items from FE-P7e**
+1. Background content is not `inert`; the trap relies on key handling, so a screen reader's virtual cursor can still browse behind the dialog (`aria-modal` covers most readers). The manual NVDA/VoiceOver pass is still outstanding.
+2. Remaining in Phase 7: Lighthouse CI budgets, Sentry + PII scrubber, Firefox/Safari runs, the manual screen-reader and keyboard-only walkthrough of the remaining flows, e2e in CI, SQLite vs Postgres. Carried over: ffmpeg recording decode, Q8 (Next 14 advisories), CI never run on GitHub, Q3/Q4 latency.
 
 ---
 
