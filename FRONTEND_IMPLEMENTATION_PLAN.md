@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook) done, deployment itself not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -493,6 +493,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
 | 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4`, `fe91eb6`, `e112ca0` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
+| 8 — Release | 🟡 Preparation only | `d012995` | Smoke script (`npm run smoke`) and `frontend/RUNBOOK.md` done and exercised against a local stack. Nothing deployed: needs hosting, a domain, real email and Google registration (owner decisions, Q4). Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -883,6 +884,24 @@ Definition-of-Done item 18 and gap G-15 ("stale endpoint docs"). Documentation o
 **Open items from FE-P7m**
 1. The README now states NextAuth is not used, but Q1 (drop NextAuth or wrap the backend with it) is formally still the owner's decision; the code already follows "drop". Confirm Q1 so the docs, `project_description.md` and the plan agree.
 2. Docs changed, so the graph's semantic layer needs `/graphify --update`. Everything else from FE-P7l stands.
+
+### FE-P8a — Phase 8 preparation: smoke script and runbook (2026-10-07, branch `feat/FE-P8a-smoke-runbook`, commit `d012995`)
+
+The two Phase 8 deliverables that need no hosting: "runbook (rollback, cookie/CORS troubleshooting); smoke script" (Definition of Done 17, the runbook and script parts). The deployment, domain, real email, Google redirect and error-tracking project remain.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Smoke script | ✅ (local only) | `npm run smoke -- --web <url> --api <origin> [--with-account]` (`smoke/run.mts`, logic in `smoke/lib.mts`). Read-only checks: web `/login` 200 and security headers (CSP present and free of `unsafe-inline`/`unsafe-eval`, nosniff, framing protection), `Referrer-Policy: no-referrer` on `/verify-email`, API `/health/live` and `/health/ready`, `GET /terms`, **CORS preflight and exposed `Content-Disposition` for the web origin**, `/metrics` not public, and **web and API same-site** (G-13). `--with-account` also signs up a throwaway user, checks the refresh cookie is `HttpOnly`/`SameSite=Lax` (`Secure` on https), refreshes with it, and deletes the account. Exit 1 on any failure; warnings do not fail. |
+| Verified | ✅ | Run against the real local stack (backend with real weights + production web build, `--with-account`): **21 checks, 0 failed**, 3 warnings that are true of a dev setup (CSP report-only, `/metrics` public, http so `Secure` unchecked). Negative controls: calling the web via `127.0.0.1` fails the CORS and same-site checks with the fix named (exit 1); an unreachable web fails its checks (exit 1); missing arguments exit 2. |
+| Unit tests | ✅ | `tests/smoke.test.ts` (16): same-site logic, security-header, referrer, CORS, cookie-flag and exit-code rules, each with failing inputs. |
+| Runbook | ✅ (unproven on a host) | `frontend/RUNBOOK.md`: build-time vs runtime variables, release procedure, manual release checks, rollback (frontend, CSP, Sentry), and diagnosis for lost sessions (cookie), status-0 errors (CORS), CSP breakage, wrong email links, Google errors, the degraded banner and synthesis timeouts. `frontend/README.md` links it. |
+
+**Verification run (local, Node 24):** `npm test` → 28 files, **331 passed** (16 new), two runs; `typecheck`, `lint`, `format:check` clean. The smoke script run as above. No application code changed, so the e2e and perf suites were not re-run. Backend untouched.
+
+**Open items from FE-P8a**
+1. The registrable-domain check takes the last two labels; it does not use the public-suffix list, so two sites under a multi-label suffix (`a.co.uk`, `b.co.uk`) would wrongly pass. Documented in the code.
+2. The script and runbook have never met a real deployment, so provider-specific behaviour (proxy timeouts, `X-Forwarded-*`, idle limits: Unverified #1, Q4) is untested.
+3. Phase 8 proper still needs the owner: hosting and a same-site domain, a verified email domain and working email (`HARDENING_PLAN.md` §4 item 2), the Google redirect registered, a Sentry project, Q1/Q4 answered. Carried over from Phase 7: Safari, the manual screen-reader and keyboard pass, e2e in CI, SQLite vs Postgres, ffmpeg recording decode, Q8.
 
 ---
 
