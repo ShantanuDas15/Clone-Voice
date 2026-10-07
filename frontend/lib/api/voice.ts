@@ -1,4 +1,5 @@
 import { http, longRequest } from "@/lib/api/http";
+import { canonicalAudioFile } from "@/lib/validation/audio";
 
 export interface VoiceProfile {
   id: string;
@@ -29,7 +30,8 @@ export interface UploadInput {
 
 /**
  * Upload a sample. The multipart body is built by the browser (no manual Content-Type) and the
- * File's own MIME type is sent untouched: the server checks it against the real container.
+ * File's own MIME type is sent untouched, bar the `audio/vnd.wave` alias (folded into `audio/wav`):
+ * the server checks it against the real container.
  * `onProgress` receives 0..1 for the bytes sent; the server then analyses the voice with the
  * request still open.
  */
@@ -41,7 +43,7 @@ export async function uploadProfile(
   form.append("name", input.name);
   form.append("consent_confirmed", "true");
   if (input.termsVersion) form.append("terms_version", input.termsVersion);
-  form.append("file", input.file);
+  form.append("file", canonicalAudioFile(input.file));
   const { data } = await http.post<VoiceProfile>("/voice/upload", form, {
     ...longRequest,
     signal: options.signal,

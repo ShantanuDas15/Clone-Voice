@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) and its Lighthouse-budget slice (FE-P7f, `a5a1165`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) and its Firefox slice (FE-P7g, `0fbbdd8`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate done; cross-browser, screen-reader pass and Sentry not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project done; Safari, screen-reader pass and Sentry not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -762,6 +762,26 @@ Phase 7 task 3 and Definition-of-Done item 13 (performance budgets). Also answer
 2. Only public routes are budgeted; signed-in pages (`/dashboard` 157 kB, `/profile` 185 kB first-load) need a login flow in the runner. The plan also asks for a 50-generation soak for object-URL/stream leaks (DoD 13), not done.
 3. Lab numbers on simulated throttling, from this CPU; no real-device or field (web-vitals) data until Sentry/web-vitals reporting exists.
 4. Remaining in Phase 7: Sentry + PII scrubber and web-vitals, Firefox/Safari runs, the manual screen-reader and keyboard-only pass, e2e in CI, SQLite vs Postgres. Carried over: ffmpeg recording decode, Q8, CI never run on GitHub, Q3/Q4 latency.
+
+### FE-P7g — Phase 7, Firefox e2e (2026-10-07, branch `feat/FE-P7g-firefox`, commit `0fbbdd8`)
+
+Definition-of-Done item 12 (Firefox smoke) and the Phase 7 "e2e full regression on Chromium + Firefox". `playwright.config.ts` now has a `chromium` and a `firefox` project running the same 35 tests against the real backend with real weights; Firefox's fake microphone comes from `firefoxUserPrefs` (Playwright's `microphone` permission is Chromium-only). Firefox 155 (Playwright build 1543).
+
+The first Firefox run **failed 11 of 34**. Nine were one product bug (every test that uploads a WAV), one was a second product bug, and one a test race.
+
+| Finding | Status | Evidence |
+|---|---|---|
+| **Firefox users could not upload a `.wav` at all** | ✅ fixed | Firefox on Linux reports a WAV as `audio/vnd.wave` (the IANA name, RFC 2361). Neither the client allowlist nor the server accepts it, so the form said "Use a WAV, MP3 or WEBM audio file" before any request. 9 e2e tests that upload a WAV timed out or failed (seven after 2 minutes each). Fix is client-side, leaving the hardened server allowlist alone: `canonicalMediaType`/`canonicalAudioFile` fold the alias into `audio/wav` for validation and for the upload (same bytes, name and date; any other type is sent untouched, the same `File` object). Tests: 4 in `tests/audio-validation.test.ts`, 1 in `tests/voice-profiles.test.tsx` that uploads an `audio/vnd.wave` file and asserts the form sends `audio/wav`. |
+| **Long email overflowed the account page** | ✅ fixed | The email `<dd>` was a flex item holding one unbreakable string, so a long address widened the page (Firefox showed 9 px at 320 px on the existing test; Chromium passed only because its test email wraps at hyphens). Now `min-w-0` + `overflow-wrap:anywhere`. A new e2e test (`responsive.spec.ts`, an address with a 40-char unbroken segment at 320 px) **fails without the fix in both browsers (59 px Chromium, 276 px Firefox) and passes with it**. |
+| `NS_BINDING_ABORTED` after sign-out | ✅ test race | `auth.spec.ts` called `goto` straight after clicking Sign out, colliding with the app's own navigation home; Firefox reports the abort as an error (50 % failure rate in a 12x repeat, 0 of 40 after the fix). A shared `signOut()` helper now waits for the URL to settle. Not an app defect. |
+
+**Verification run (local, Node 24; Chromium and Firefox):** `npm test` → 26 files, **303 tests passed** (5 new), two consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK. `npx playwright test` with `CSP_ENFORCE=1` against the real backend → **70 passed (35 per browser)** in 3.2 min, run on the final code. Backend untouched.
+
+**Open items from FE-P7g**
+1. The backend still rejects `audio/vnd.wave` from any other client (curl, scripts, a native app); only this web client folds it. If non-browser clients matter, add the alias to `audio_processing.py`'s allowlist (the real container is sniffed anyway).
+2. Recording in Firefox reaches the server (the WEBM passes the container check) but, as in Chromium, decoding needs ffmpeg on the API host, so a successful recording upload is still unverified end to end.
+3. **Safari/WebKit not run** (manual check, and the iOS MP4 recording gap G-08 / Q5). e2e is still not in CI, and CI has never run on GitHub; the e2e suite now takes both browsers (`npx playwright install chromium firefox`).
+4. Remaining in Phase 7: Sentry + PII scrubber and web-vitals, the manual NVDA/VoiceOver and keyboard-only pass of the remaining flows, SQLite vs Postgres. Carried over: Q8, Q3/Q4 latency.
 
 ---
 

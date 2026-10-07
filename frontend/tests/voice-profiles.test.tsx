@@ -225,6 +225,18 @@ describe("UploadVoiceForm", () => {
     post.mockRestore();
   });
 
+  it("uploads a Firefox-style audio/vnd.wave file as audio/wav (found by the Firefox e2e run)", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValue({ data: fixtures.profile });
+    wrap(<UploadVoiceForm />);
+    await fillAndSubmit({
+      file: new File([new Uint8Array(2000)], "firefox.wav", { type: "audio/vnd.wave" }),
+    });
+    expect(await screen.findByText(/created\./i)).toBeInTheDocument();
+    const form = post.mock.calls[0]![1] as FormData;
+    expect((form.get("file") as File).type).toBe("audio/wav");
+    post.mockRestore();
+  });
+
   it("cannot bypass consent, a missing file, or a blank name (no request)", async () => {
     let calls = 0;
     server.use(

@@ -75,3 +75,13 @@ export async function createVoice(page: Page, name = "E2E voice"): Promise<void>
   await page.getByRole("button", { name: "Create voice" }).click();
   await expect(page.getByText(`Voice “${name}” created.`)).toBeVisible({ timeout: 120_000 });
 }
+
+/**
+ * Sign out and wait until the app has finished its own navigation home. A `goto` issued earlier
+ * collides with that navigation, which Firefox reports as `NS_BINDING_ABORTED`.
+ */
+export async function signOut(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+}

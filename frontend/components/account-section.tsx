@@ -228,8 +228,8 @@ export function AccountSection() {
     <div className="space-y-6">
       <dl className="space-y-1 text-sm">
         <div className="flex gap-2">
-          <dt className="text-muted-foreground">Email</dt>
-          <dd>{user.email}</dd>
+          <dt className="shrink-0 text-muted-foreground">Email</dt>
+          <dd className="min-w-0 [overflow-wrap:anywhere]">{user.email}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="text-muted-foreground">Sign-in</dt>

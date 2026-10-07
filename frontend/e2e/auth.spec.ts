@@ -1,6 +1,6 @@
 import { type Page, expect, test } from "@playwright/test";
 
-import { PASSWORD, signUp, uniqueEmail } from "./helpers";
+import { PASSWORD, signOut, signUp, uniqueEmail } from "./helpers";
 
 async function tokenInStorage(page: Page): Promise<boolean> {
   return page.evaluate(() => {
@@ -23,8 +23,7 @@ test("signup keeps the session across reloads, stores no token, and logs out", a
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   expect(await tokenInStorage(page)).toBe(false);
 
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await signOut(page);
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login/);
 
@@ -37,7 +36,7 @@ test("signup keeps the session across reloads, stores no token, and logs out", a
 test("wrong password gives one generic message", async ({ page }) => {
   const email = uniqueEmail("badpw");
   await signUp(page, email);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("not-the-password");
