@@ -23,10 +23,17 @@ export interface CspOptions {
   nonce: string;
   /** API origin (scheme + host) the browser may call; `NEXT_PUBLIC_API_BASE_URL`'s origin. */
   apiOrigin: string;
+  /** Error-reporting ingest origin (from the Sentry DSN), if reporting is configured. */
+  reportingOrigin?: string;
   development?: boolean;
 }
 
-export function buildCsp({ nonce, apiOrigin, development = false }: CspOptions): string {
+export function buildCsp({
+  nonce,
+  apiOrigin,
+  reportingOrigin,
+  development = false,
+}: CspOptions): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": [
@@ -38,7 +45,7 @@ export function buildCsp({ nonce, apiOrigin, development = false }: CspOptions):
     "style-src": ["'self'", `'nonce-${nonce}'`, ...STYLE_HASHES],
     "img-src": ["'self'", "data:", "blob:", ...AVATAR_HOSTS],
     "font-src": ["'self'"],
-    "connect-src": ["'self'", apiOrigin],
+    "connect-src": ["'self'", apiOrigin, ...(reportingOrigin ? [reportingOrigin] : [])],
     "media-src": ["'self'", "blob:"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],

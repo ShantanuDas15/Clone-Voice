@@ -1,0 +1,49 @@
+import { type Page, expect, test } from "@playwright/test";
+
+import { signUpVerified } from "./helpers";
+
+// The unfixed header shifted 0.17-0.35; 0.05 leaves room for incidental sub-pixel shifts.
+/** Sum of layout shifts (no recent input) over a page load, Chromium only. */
+async function observeShifts(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __cls: number };
+    w.__cls = 0;
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries() as unknown as { value: number; hadRecentInput: boolean }[])
+        if (!e.hadRecentInput) w.__cls += e.value;
+    }).observe({ type: "layout-shift", buffered: true });
+  });
+}
+
+const cls = (page: Page) => page.evaluate(() => (window as unknown as { __cls: number }).__cls);
+
+/** Hold the session refresh so the header changes state well after first paint. */
+async function slowRefresh(page: Page): Promise<void> {
+  await page.route("**/auth/refresh", async (route) => {
+    await new Promise((r) => setTimeout(r, 1200));
+    await route.continue();
+  });
+}
+
+test.describe("header does not shift when the session resolves (CLS)", () => {
+  test.skip(({ browserName }) => browserName !== "chromium", "layout-shift API is Chromium-only");
+  test.use({ viewport: { width: 412, height: 823 } });
+
+  test("signed out", async ({ page }) => {
+    await observeShifts(page);
+    await slowRefresh(page);
+    await page.goto("/login");
+    await expect(page.getByRole("link", { name: "Sign up" })).toBeVisible();
+    expect(await cls(page)).toBeLessThan(0.05);
+  });
+
+  test("signed in, after a reload", async ({ page }) => {
+    // Verified, so the "verify your email" banner (which does appear late) is not in play.
+    await signUpVerified(page, "cls");
+    await observeShifts(page);
+    await slowRefresh(page);
+    await page.goto("/dashboard");
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    expect(await cls(page)).toBeLessThan(0.05);
+  });
+});
