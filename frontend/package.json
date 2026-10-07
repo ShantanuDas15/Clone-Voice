@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "perf": "node perf/run.mjs"
+    "perf": "node perf/run.mjs",
+    "smoke": "node smoke/run.mts"
   },
   "engines": {
     "node": ">=18.17"
