@@ -5,7 +5,7 @@ import { VerificationBanner } from "@/components/verification-banner";
 import { UserMenu } from "@/components/user-menu";
 import { DegradedBanner } from "@/components/degraded-banner";
 
-/** Page chrome: skip-link, degraded banner, header, main landmark, footer. */
+/** Page chrome: skip-link, degraded banner, header, main landmark, footer, verification notice. */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
@@ -16,7 +16,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <DegradedBanner />
-      <VerificationBanner />
       <header className="border-b border-border">
         <nav
           aria-label="Primary"
@@ -34,6 +33,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <footer className="border-t border-border px-4 py-6 text-center text-sm text-muted-foreground">
         Generated voices are AI-synthesized. Use only voices you have consent to clone.
       </footer>
+      {/* After the footer, sticky: it appears once the session resolves, and anything above it
+          would be pushed down (CLS). Here it only extends the page. */}
+      <VerificationBanner />
     </>
   );
 }
