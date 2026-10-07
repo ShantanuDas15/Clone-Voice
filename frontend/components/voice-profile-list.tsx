@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useDialog } from "@/hooks/use-dialog";
 import { useDeleteProfile, useProfiles } from "@/hooks/use-voice-profiles";
 import type { VoiceProfile } from "@/lib/api/voice";
 import { ApiError } from "@/lib/errors";
@@ -18,6 +19,53 @@ function StatusChip({ status }: { status: string }) {
         ? "bg-warning text-warning-foreground"
         : "bg-muted text-muted-foreground";
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${tone}`}>{label}</span>;
+}
+
+/** Modal confirmation for deleting a voice; traps focus and closes on Escape. */
+function DeleteDialog({
+  profile,
+  onCancel,
+  onConfirm,
+}: {
+  profile: VoiceProfile;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useDialog<HTMLDivElement>(onCancel);
+  return (
+    <div
+      ref={ref}
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="del-title"
+      className="mt-4 rounded border border-border bg-muted p-4"
+    >
+      <h3 id="del-title" className="font-medium">
+        Delete “{profile.name}”?
+      </h3>
+      <p className="mt-1 text-sm">
+        This also permanently removes every audio clip generated with this voice. It can&apos;t be
+        undone.
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          autoFocus
+          className="min-h-11 rounded bg-primary px-4 text-primary-foreground"
+          onClick={onConfirm}
+        >
+          Delete voice
+        </button>
+        <button
+          type="button"
+          className="min-h-11 rounded border border-border px-4"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /** The user's voices with loading, empty, error and failed-row states, and confirmed deletion. */
@@ -92,45 +140,19 @@ export function VoiceProfileList() {
       </ul>
 
       {confirming && (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="del-title"
-          className="mt-4 rounded border border-border bg-muted p-4"
-        >
-          <h3 id="del-title" className="font-medium">
-            Delete “{confirming.name}”?
-          </h3>
-          <p className="mt-1 text-sm">
-            This also permanently removes every audio clip generated with this voice. It can&apos;t
-            be undone.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              autoFocus
-              className="min-h-11 rounded bg-primary px-4 text-primary-foreground"
-              onClick={() => {
-                const target = confirming;
-                setConfirming(null);
-                remove.mutate(target.id, {
-                  onError: (e) =>
-                    toast.error(e instanceof ApiError ? e.message : "Couldn't delete that voice."),
-                  onSuccess: () => toast.success(`Deleted “${target.name}”.`),
-                });
-              }}
-            >
-              Delete voice
-            </button>
-            <button
-              type="button"
-              className="min-h-11 rounded border border-border px-4"
-              onClick={() => setConfirming(null)}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <DeleteDialog
+          profile={confirming}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            const target = confirming;
+            setConfirming(null);
+            remove.mutate(target.id, {
+              onError: (e) =>
+                toast.error(e instanceof ApiError ? e.message : "Couldn't delete that voice."),
+              onSuccess: () => toast.success(`Deleted “${target.name}”.`),
+            });
+          }}
+        />
       )}
       <p className="mt-4 text-sm text-muted-foreground">
         Ready to hear it?{" "}
