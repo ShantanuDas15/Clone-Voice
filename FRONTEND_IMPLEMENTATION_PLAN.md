@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) and its Firefox slice (FE-P7g, `0fbbdd8`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) and its observability slice (FE-P7h, `5b2e25c`) implemented 2026-10-07; Phase 8 not started. See the Task Status Log below.
 > **Last reviewed:** 2026-10-07.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
@@ -492,7 +492,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 4 — Synthesis | 🟡 Partial | `91efb3d` | All app code and unit/integration tests done; e2e and real-weights run not done. Details below. |
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
-| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project done; Safari, screen-reader pass and Sentry not done. Details below. |
+| 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
 | 8 — Release | ⬜ | | Blocked on Phase 7 remainder and owner decisions (Q3, Q4, Q8). |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
@@ -782,6 +782,31 @@ The first Firefox run **failed 11 of 34**. Nine were one product bug (every test
 2. Recording in Firefox reaches the server (the WEBM passes the container check) but, as in Chromium, decoding needs ffmpeg on the API host, so a successful recording upload is still unverified end to end.
 3. **Safari/WebKit not run** (manual check, and the iOS MP4 recording gap G-08 / Q5). e2e is still not in CI, and CI has never run on GitHub; the e2e suite now takes both browsers (`npx playwright install chromium firefox`).
 4. Remaining in Phase 7: Sentry + PII scrubber and web-vitals, the manual NVDA/VoiceOver and keyboard-only pass of the remaining flows, SQLite vs Postgres. Carried over: Q8, Q3/Q4 latency.
+
+### FE-P7h — Phase 7, observability and a layout-shift fix (2026-10-07, branch `feat/FE-P7h-observability`, commit `5b2e25c`)
+
+Phase 7 task 6 and Definition-of-Done item 7 ("no input text, audio, email or token reaches error reports, tested scrubber").
+
+| Area | Status | Evidence |
+|---|---|---|
+| PII scrubber | ✅ | `lib/observability/scrub.ts` is an **allow-list**: an event keeps only id, level, release, environment, SDK, a scrubbed message, exception type/value/frame file+line (frame `vars` dropped), allow-listed tags (`route`, `status`, `kind`, `request_id`, `metric`, `rating`) and the route. User, request (URL, query, cookies, headers, body), breadcrumbs, extra and contexts are discarded; emails, JWTs and 32+ char opaque strings are redacted in what remains; URLs collapse to a route with ids as `:id`. `tests/observability.test.ts` feeds a deliberately dirty event (email, IP, bearer token, cookie, password, synthesis text, reset-token fragment) and asserts none of it appears anywhere in the serialized result. |
+| Reporter | ✅ | `lib/observability/report.ts`: off unless `NEXT_PUBLIC_SENTRY_DSN` is set; `@sentry/browser` 8 loaded by dynamic `import()` only; **no default integrations, no breadcrumbs, `sendDefaultPii:false`**, `beforeSend` = scrubber; an `ApiError` is reduced to status, kind and request id (its message is server text that can echo input). Failures are swallowed. Wired to `app/error.tsx`, `app/global-error.tsx` and the Query/Mutation caches (5xx only; 4xx and network conditions are user states, not faults). Web vitals via `next/web-vitals`, reporting only non-"good" ratings. |
+| Bundle impact | ✅ | `lib/observability/lazy.ts` is the only reporter code the initial bundle contains (it checks the DSN, then imports lazily); a guard test fails if any statically imported module imports `report.ts` or the SDK. `npm run build`: `/login` 158 to 159 kB first-load. |
+| CSP | ✅ | The DSN's origin is added to `connect-src` by `middleware.ts`/`buildCsp` and only then (unit-tested both ways). |
+| Real-browser check | ✅ (manual) | Built with a DSN pointing at a local capture server, under **`CSP_ENFORCE=1`**, on a page whose URL carried a token fragment: an uncaught `Error("boom for jane.doe@example.com token eyJ…")` arrived as one envelope, message `boom for [email] token [token]`, **no URL, request, user or fragment**, zero CSP violations. Not an automated test (the e2e web server is built without a DSN). |
+
+**Defects found and fixed along the way**
+1. **Header layout shift (CLS 0.265).** Lighthouse failed the CLS budget once the reporter code changed hydration timing: the header's right side was 24 px while the session loaded and 32 px (signed out) or 44 px (signed in) afterwards, shoving the whole page down. This was latent, not caused by reporting. Every state is now at least 44 px (`components/user-menu.tsx`); CLS is **0.001**. On screens under 640 px the signed-in menu also hides the display name (it wrapped to a second row and shifted the page; the name is still on `/profile`) and uses tighter gaps. `e2e/layout-shift.spec.ts` (Chromium, session refresh delayed 1.2 s, 412 px) asserts CLS < 0.05 signed out and signed in; **both fail without the fix (0.17 and 0.31) and pass with it**.
+2. Uncaught errors would never have been reported: the SDK was initialised lazily on the first explicit report, so its global handlers did not exist yet. Found by the real-browser check; the lazily loaded `WebVitals` component now starts it on mount.
+
+**Verification run (local, Node 24; Chromium and Firefox; real backend with real weights, SQLite):** `npm test` → 27 files, **315 tests passed** (12 new), two consecutive runs; `typecheck`, `lint`, `format:check` clean; `npm run build` OK. `npx playwright test` with `CSP_ENFORCE=1` → **72 passed, 2 skipped** (35 shared tests per browser plus the two new Chromium-only CLS tests, skipped in Firefox) in 3.3 min. `npm run perf` → all four routes within budget (LCP 1.8-2.0 s; JS 177/193/193/192 KB; CLS 0.001; TBT <= 2 ms). Backend untouched. `npm audit --omit=dev` unchanged (the Next 14 advisories only; `@sentry/browser` adds none).
+
+**Open items from FE-P7h**
+1. **No real Sentry project:** the DSN is empty everywhere, so nothing is reported in any deployed environment until one is created and `NEXT_PUBLIC_SENTRY_DSN` is set at build time. **Release tagging and sourcemap upload are not done** (need a project and an auth token), so reported stack frames are minified. The Definition-of-Done "tested live" part of item 17 is open.
+2. **`/login` JS is 193 of 200 KB (3 % headroom).** FE-P7f recorded 187 KB; this slice added about 1 KB, the rest is run-to-run drift on this machine. Do not add anything else to public routes without measuring.
+3. **The "verify your email" banner still shifts the page when it appears** after the session resolves (about 0.16 CLS for an unverified user on reload). The new CLS test deliberately uses a verified user. Fix by reserving its space or moving it below the header.
+4. A narrow-screen signed-in menu with only 3 items still wraps below about 360 px (the responsive test passes because it only checks overflow and target size, not shift).
+5. Remaining in Phase 7: the manual NVDA/VoiceOver and keyboard-only pass of the remaining flows, Safari/WebKit, e2e and `perf` in CI (CI has never run on GitHub), SQLite vs Postgres. Carried over: ffmpeg recording decode, Q8, Q3/Q4 latency.
 
 ---
 
