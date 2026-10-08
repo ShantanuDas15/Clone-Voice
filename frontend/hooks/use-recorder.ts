@@ -24,6 +24,8 @@ export type RecorderState =
 export function useRecorder() {
   const [state, setState] = useState<RecorderState>({ phase: "idle" });
   const [seconds, setSeconds] = useState(0);
+  // The live stream, exposed so the UI can meter it; null whenever the microphone is released.
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -35,6 +37,7 @@ export function useRecorder() {
   const releaseStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setStream(null);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
   }, []);
@@ -89,6 +92,7 @@ export function useRecorder() {
       return;
     }
     streamRef.current = stream;
+    setStream(stream);
 
     let recorder: MediaRecorder;
     try {
@@ -173,5 +177,5 @@ export function useRecorder() {
     [],
   );
 
-  return { state, seconds, start, stop, discard };
+  return { state, seconds, stream, start, stop, discard };
 }

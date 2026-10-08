@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { useObjectUrl } from "@/hooks/use-object-url";
+import { useInputLevel } from "@/hooks/use-input-level";
 import { useRecorder } from "@/hooks/use-recorder";
 import {
   MAX_RECORDING_SECONDS,
@@ -21,7 +22,8 @@ interface RecorderProps {
 
 /** In-browser voice recorder with permission handling, a timer, preview and re-record. */
 export function Recorder({ onChange, disabled }: RecorderProps) {
-  const { state, seconds, start, stop, discard } = useRecorder();
+  const { state, seconds, stream, start, stop, discard } = useRecorder();
+  const { level, silent } = useInputLevel(state.phase === "recording" ? stream : null);
   const previewUrl = useObjectUrl(state.phase === "stopped" ? state.blob : null);
 
   useEffect(() => {
@@ -58,9 +60,30 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
       {state.phase === "recording" && (
         <>
           <p role="status" aria-live="off" className="font-mono font-medium tabular-nums">
-            <span aria-hidden className="mr-2 inline-block h-2 w-2 rounded-full bg-danger" />
+            {/* The dot swells with the input level: it shows the microphone is live, not a timer. */}
+            <span
+              aria-hidden
+              className="mr-2 inline-block h-2 w-2 rounded-full bg-danger"
+              style={{ transform: `scale(${1 + level * 0.8})`, opacity: 0.5 + level * 0.5 }}
+            />
             Recording {formatClock(seconds)} / {formatClock(MAX_RECORDING_SECONDS)}
           </p>
+          <div
+            role="meter"
+            aria-label="Microphone level"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(level * 100)}
+            className="h-2 overflow-hidden rounded bg-muted"
+          >
+            <div className="h-full bg-primary" style={{ width: `${level * 100}%` }} />
+          </div>
+          {silent && (
+            <p role="status" className="text-muted-foreground">
+              We can&apos;t hear anything. Check that the right microphone is selected and not
+              muted.
+            </p>
+          )}
           {!canStop && (
             <p className="text-muted-foreground">
               Keep going: at least {MIN_RECORDING_SECONDS} seconds are needed.
