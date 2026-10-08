@@ -43,7 +43,7 @@ for (const vp of VIEWPORTS) {
       expect(await smallTargets(page), `${path} small targets at ${vp.name}`).toEqual([]);
     }
     await signUpVerified(page, `vp${vp.name}`);
-    for (const path of ["/dashboard", "/profile"]) {
+    for (const path of ["/generate", "/voices", "/history", "/account"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(await overflow(page), `${path} overflows at ${vp.name}`).toBeLessThanOrEqual(0);
@@ -66,7 +66,7 @@ test("an email address with a long unbroken segment wraps instead of overflowing
   await page.setViewportSize({ width: 320, height: 640 });
   const email = await signUpVerified(page, "a".repeat(40));
   expect(email.length).toBeGreaterThan(45);
-  await page.goto("/profile");
+  await page.goto("/account");
   await expect(page.getByText(email)).toBeVisible();
   expect(await overflow(page)).toBeLessThanOrEqual(0);
 });

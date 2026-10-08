@@ -47,7 +47,7 @@ export async function signUp(page: Page, email: string, name = "E2E User"): Prom
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/generate/);
 }
 
 export async function verifyEmail(page: Page, email: string): Promise<void> {
@@ -61,14 +61,14 @@ export async function signUpVerified(page: Page, tag: string): Promise<string> {
   const email = uniqueEmail(tag);
   await signUp(page, email);
   await verifyEmail(page, email);
-  await page.goto("/profile");
+  await page.goto("/voices");
   await expect(page.getByRole("heading", { name: "Create a voice" })).toBeVisible();
   return email;
 }
 
 /** Create a voice profile from the repo's sample WAV through the real upload form. */
 export async function createVoice(page: Page, name = "E2E voice"): Promise<void> {
-  await page.goto("/profile");
+  await page.goto("/voices");
   await page.getByLabel("Voice name").fill(name);
   await page.locator("input[type=file]").setInputFiles(SAMPLE_WAV);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();

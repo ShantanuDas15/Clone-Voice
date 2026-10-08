@@ -17,7 +17,7 @@ import { server } from "@/mocks/server";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
-  usePathname: () => "/profile",
+  usePathname: () => "/voices",
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 

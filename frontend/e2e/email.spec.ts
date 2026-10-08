@@ -10,7 +10,7 @@ test("verification link from the real email clears the banner; reopening it stil
   await expect(page.getByText(/verify your email address \(/i)).toBeVisible();
 
   await verifyEmail(page, email);
-  await page.goto("/dashboard");
+  await page.goto("/generate");
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   await expect(page.getByText(/verify your email address \(/i)).toHaveCount(0);
 
@@ -55,7 +55,7 @@ test("forgot → reset changes the password, ends other sessions and reuse is re
   await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
   await page.getByLabel("Password").fill("brand-new-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/generate/);
 
   // Token reuse → 400 "request a new link".
   await page.goto(`/reset-password#token=${token}`);

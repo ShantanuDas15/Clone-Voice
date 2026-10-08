@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Design, UI & UX Improvement Plan
 
-> **Status:** Planning document, now with owner decisions (§11, 2026-10-08) and the U0 implemented in two slices: brand mark, palette tokens, fonts and the theme toggle (FE-UX0), then the Button/Alert/Badge primitives (FE-UX1) and the Input/Select/Textarea field primitives (FE-UX2) (commits recorded in `FRONTEND_IMPLEMENTATION_PLAN.md` > Task Status Log). Remaining in U0: U0.6 and the visual-regression baseline; `Card` is deferred to U3/U4. U1-U7 are not started.
+> **Status:** Planning document, now with owner decisions (§11, 2026-10-08) and the U0 implemented in two slices: brand mark, palette tokens, fonts and the theme toggle (FE-UX0), then the Button/Alert/Badge primitives (FE-UX1) and the Input/Select/Textarea field primitives (FE-UX2) (commits recorded in `FRONTEND_IMPLEMENTATION_PLAN.md` > Task Status Log). Remaining in U0: U0.6 and the visual-regression baseline; `Card` is deferred to U3/U4. U1 is partly done (FE-UX3: `NavLink`, the route split to `/generate`, `/voices`, `/history`, `/account` with 308 redirects, `next=` mapping); U1.3 tab bar, U1.4 inline verification alert and U1.5 two-column layout remain. U2-U7 are not started.
 > **Produced:** 2026-10-08 by following `frontend-ux-improvement-prompt.md`.
 > **Citation convention:** `path:line` = file opened this session (paths relative to `frontend/` unless stated).
 > `shot:<name>` = a screenshot captured this session (scratchpad, not committed). `Proposal:` = not in the repo. `Assumption:` = not verified.
@@ -329,12 +329,12 @@ New test types introduced: **visual regression** (Playwright `toHaveScreenshot`,
 ### U1 — App shell, navigation and information architecture
 - **Goal:** a user always knows where they are and what the main action is; the three jobs (make speech, manage voices, replay history) have their own homes.
 - **Tasks**
-  - U1.1 Introduce `NavLink` with `aria-current="page"` and a visible marker (UX-19).
-  - U1.2 Split `app/(app)/profile/page.tsx` into `/voices`, `/history`, `/account`; rename `/dashboard` → `/studio`; add 308 redirects from `/dashboard` and `/profile`; update titles, headings and the nav labels (Studio · Voices · History · Account) (UX-05, UX-21).
+  - U1.1 **(done, FE-UX3)** Introduce `NavLink` with `aria-current="page"` and a visible marker (UX-19).
+  - U1.2 **(done, FE-UX3; the generator is `/generate`, per §11.2)** Split `app/(app)/profile/page.tsx` into `/voices`, `/history`, `/account`; rename `/dashboard` → `/studio`; add 308 redirects from `/dashboard` and `/profile`; update titles, headings and the nav labels (Studio · Voices · History · Account) (UX-05, UX-21).
   - U1.3 Mobile bottom tab bar in place of the two-row header; desktop keeps the top bar (UX-25).
   - U1.4 Replace the sticky bottom verification banner with one inline `Alert` on Studio and Voices; keep the reserved space so there is no layout shift (UX-07, UX-25).
   - U1.5 Desktop two-column layout for Studio (form | take) and Voices (create | list) (UX-20).
-  - U1.6 Update `AuthGate` redirect targets, `next=` sanitiser allow-list, smoke script and RUNBOOK paths for the renamed routes.
+  - U1.6 **(done, FE-UX3; no smoke/RUNBOOK references existed)** Update `AuthGate` redirect targets, `next=` sanitiser allow-list, smoke script and RUNBOOK paths for the renamed routes.
 - **Files likely affected:** `components/app-shell.tsx`, `components/user-menu.tsx`, `components/verification-banner.tsx`, `app/(app)/*`, `app/(public)/*` (redirect targets), `components/auth-gate.tsx`, `lib/auth/next-path.ts`, `middleware.ts` (redirects), `smoke/*`, `frontend/RUNBOOK.md`, e2e specs.
 - **Edge cases:** deep links and emailed links to `/dashboard`, `/profile` still work (redirect, query and fragment preserved); `next=` to an old path is mapped; browser back; a signed-out user opening `/voices` goes to login and returns there; narrow (320 px) tab bar; the keyboard order of the new nav; screen-reader landmark labels are unique.
 - **Tests:** *Unit:* `sanitizeNext` accepts new paths and maps old ones; `NavLink` sets `aria-current`. *Integration (MSW):* each new route renders its own content and the old paths redirect. *e2e:* signup → first-run → each nav item; old URLs redirect; tab bar at 375 px. *Visual:* shell at 3 widths. *Accessibility:* axe on every route; heading order (one `h1` per page).

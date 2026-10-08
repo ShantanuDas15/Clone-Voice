@@ -6,7 +6,7 @@ test("an unverified user is told to verify and the server refuses the upload (40
   page,
 }) => {
   await signUp(page, uniqueEmail("unverified"));
-  await page.goto("/profile");
+  await page.goto("/voices");
   await page.getByLabel("Voice name").fill("Nope");
   await page.locator("input[type=file]").setInputFiles(SAMPLE_WAV);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
@@ -27,7 +27,7 @@ test("upload a real sample, see it listed, then delete it", async ({ page }) => 
 
 test("an empty file and a non-audio file are refused", async ({ page }) => {
   await signUpVerified(page, "badfile");
-  await page.goto("/profile");
+  await page.goto("/voices");
   await page.locator("input[type=file]").setInputFiles({
     name: "empty.wav",
     mimeType: "audio/wav",
@@ -53,7 +53,7 @@ test("an empty file and a non-audio file are refused", async ({ page }) => {
 
 test("consent is required: no request is made without it", async ({ page }) => {
   await signUpVerified(page, "consent");
-  await page.goto("/profile");
+  await page.goto("/voices");
   let uploads = 0;
   page.on("request", (r) => {
     if (r.url().endsWith("/voice/upload")) uploads += 1;

@@ -12,7 +12,7 @@ import { server } from "@/mocks/server";
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
-  usePathname: () => "/profile",
+  usePathname: () => "/voices",
 }));
 
 function SignOut() {
@@ -51,7 +51,7 @@ describe("AuthGate", () => {
       ),
     );
     wrap();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fprofile"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fvoices"));
   });
 
   it("sends a deliberate sign-out home, not to sign-in (found by the e2e run)", async () => {

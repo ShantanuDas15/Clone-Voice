@@ -19,18 +19,18 @@ test("signup keeps the session across reloads, stores no token, and logs out", a
   expect(await tokenInStorage(page)).toBe(false);
 
   await page.reload();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/generate/);
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   expect(await tokenInStorage(page)).toBe(false);
 
   await signOut(page);
-  await page.goto("/dashboard");
+  await page.goto("/generate");
   await expect(page).toHaveURL(/\/login/);
 
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/generate/);
 });
 
 test("wrong password gives one generic message", async ({ page }) => {
@@ -50,7 +50,7 @@ test("two tabs refreshing together never log each other out; logout propagates",
   const a = await context.newPage();
   await signUp(a, uniqueEmail("tabs"));
   const b = await context.newPage();
-  await b.goto("/dashboard");
+  await b.goto("/generate");
   await expect(b.getByRole("button", { name: "Sign out" })).toBeVisible();
 
   // Both tabs bootstrap (a /refresh each) at the same instant, several times.
@@ -74,8 +74,8 @@ test("an expired access token mid-session recovers silently", async ({ page }) =
       await route.fulfill({ status: 401, json: { detail: "Token expired" } });
     } else await route.continue();
   });
-  await page.goto("/profile");
+  await page.goto("/voices");
   await expect(page.getByText(/haven't created a voice yet/i)).toBeVisible();
   expect(failed).toBe(true);
-  await expect(page).toHaveURL(/\/profile/);
+  await expect(page).toHaveURL(/\/voices/);
 });
