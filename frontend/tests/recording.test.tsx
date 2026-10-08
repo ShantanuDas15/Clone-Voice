@@ -161,6 +161,17 @@ describe("Recorder", () => {
     expect(last.type).toBe("audio/webm");
   });
 
+  it("shows a labelled microphone meter while recording, and no false 'silent' warning", async () => {
+    vi.useFakeTimers();
+    await begin();
+    await act(async () => void vi.advanceTimersByTime(1000));
+    const meter = screen.getByRole("meter", { name: "Microphone level" });
+    expect(meter).toHaveAttribute("aria-valuemin", "0");
+    expect(meter).toHaveAttribute("aria-valuemax", "100");
+    expect(meter).toHaveAttribute("aria-valuenow", "0"); // no Web Audio in jsdom: stays at 0
+    expect(screen.queryByText(/can't hear anything/i)).toBeNull();
+  });
+
   it("discard releases the microphone and clears the file", async () => {
     vi.useFakeTimers();
     const onChange = await begin();
