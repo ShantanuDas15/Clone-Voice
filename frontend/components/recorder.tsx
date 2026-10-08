@@ -55,7 +55,7 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
           <button
             type="button"
             onClick={discard}
-            className="min-h-11 rounded border border-border px-4"
+            className="min-h-11 rounded border border-line px-4"
           >
             Cancel
           </button>
@@ -64,8 +64,8 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
 
       {state.phase === "recording" && (
         <>
-          <p role="status" aria-live="off" className="font-medium">
-            <span aria-hidden className="mr-2 inline-block h-2 w-2 rounded-full bg-red-600" />
+          <p role="status" aria-live="off" className="font-mono font-medium tabular-nums">
+            <span aria-hidden className="mr-2 inline-block h-2 w-2 rounded-full bg-danger" />
             Recording {formatClock(seconds)} / {formatClock(MAX_RECORDING_SECONDS)}
           </p>
           {!canStop && (
@@ -85,7 +85,7 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
             <button
               type="button"
               onClick={discard}
-              className="min-h-11 rounded border border-border px-4"
+              className="min-h-11 rounded border border-line px-4"
             >
               Discard
             </button>
@@ -104,7 +104,7 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
             type="button"
             onClick={discard}
             disabled={disabled}
-            className="min-h-11 rounded border border-border px-4 disabled:opacity-60"
+            className="min-h-11 rounded border border-line px-4 disabled:opacity-60"
           >
             Discard and re-record
           </button>
@@ -117,7 +117,7 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
           <button
             type="button"
             onClick={() => void start()}
-            className="min-h-11 rounded border border-border px-4"
+            className="min-h-11 rounded border border-line px-4"
           >
             Try again
           </button>

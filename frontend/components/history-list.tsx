@@ -66,7 +66,7 @@ function Playback({ gen }: { gen: Generation }) {
         type="button"
         onClick={() => void load()}
         disabled={state.phase === "loading"}
-        className="min-h-11 rounded border border-border px-3 text-sm"
+        className="min-h-11 rounded border border-line px-3 text-sm"
       >
         {state.phase === "loading" ? "Loading…" : state.phase === "error" ? "Try again" : "Play"}
       </button>
@@ -128,7 +128,7 @@ export function HistoryList() {
         <button
           type="button"
           onClick={() => void refetch()}
-          className="min-h-11 rounded border border-border px-3"
+          className="min-h-11 rounded border border-line px-3"
         >
           Try again
         </button>
@@ -157,7 +157,7 @@ export function HistoryList() {
           type="button"
           onClick={() => void fetchNextPage()}
           disabled={isFetchingNextPage}
-          className="min-h-11 rounded border border-border px-4"
+          className="min-h-11 rounded border border-line px-4"
         >
           {isFetchingNextPage ? "Loading…" : "Load more"}
         </button>

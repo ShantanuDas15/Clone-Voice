@@ -164,9 +164,12 @@ export function TextToSpeechForm() {
             disabled={pending}
             aria-invalid={textError ? true : undefined}
             aria-describedby="tts-count tts-hint"
-            className="mt-1 block w-full rounded border border-border bg-background px-3 py-2"
+            className="mt-1 block w-full rounded border border-line bg-surface px-3 py-2"
           />
-          <p id="tts-count" className="mt-1 text-right text-xs text-muted-foreground">
+          <p
+            id="tts-count"
+            className="mt-1 text-right font-mono text-xs tabular-nums text-muted-foreground"
+          >
             {text.length} / {TEXT_MAX}
           </p>
           <p id="tts-hint" className="text-xs text-muted-foreground">
@@ -178,7 +181,7 @@ export function TextToSpeechForm() {
             </p>
           )}
           {textError && (
-            <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="mt-1 text-sm text-danger">
               {textError}
             </p>
           )}
@@ -191,7 +194,7 @@ export function TextToSpeechForm() {
           </div>
         )}
         {formError && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             {formError}
           </p>
         )}
@@ -218,7 +221,7 @@ export function TextToSpeechForm() {
             <button
               type="button"
               onClick={() => controller.current?.abort()}
-              className="min-h-11 rounded border border-border px-4"
+              className="min-h-11 rounded border border-line px-4"
             >
               Cancel
             </button>

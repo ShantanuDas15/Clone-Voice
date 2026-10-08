@@ -47,7 +47,7 @@ export function UserMenu() {
       </span>
       <button
         type="button"
-        className="min-h-11 rounded border border-border px-3"
+        className="min-h-11 rounded border border-line px-3"
         onClick={async () => {
           await logout();
           router.replace("/");

@@ -4,9 +4,12 @@ import type { ReactNode } from "react";
 import { VerificationBanner } from "@/components/verification-banner";
 import { UserMenu } from "@/components/user-menu";
 import { DegradedBanner } from "@/components/degraded-banner";
+import { Logo } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
+import type { Theme } from "@/lib/theme";
 
 /** Page chrome: skip-link, degraded banner, header, main landmark, footer, verification notice. */
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, theme }: { children: ReactNode; theme: Theme }) {
   return (
     <>
       <a
@@ -21,10 +24,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-label="Primary"
           className="mx-auto flex max-w-5xl flex-col items-start gap-y-1 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2"
         >
-          <Link href="/" className="text-lg font-semibold">
-            CloneVoice
+          <Link href="/">
+            <Logo />
           </Link>
-          <UserMenu />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <UserMenu />
+            <ThemeToggle initial={theme} />
+          </div>
         </nav>
       </header>
       <main id="main" className="mx-auto min-h-[70vh] max-w-5xl px-4 py-8">

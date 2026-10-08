@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08.
+> **Last reviewed:** 2026-10-08. First UX-plan slice (FE-UX0: brand, tokens, fonts, theme toggle) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -932,6 +932,26 @@ Closes FE-P8a open item 1. Chosen as the next step because every other remaining
 **Open items from FE-P8b**
 1. The public-suffix data is whatever the installed `tldts` ships; refresh it with `npm update tldts` before a release.
 2. Everything else from FE-P8a item 2-3 stands: Phase 8 proper needs the owner (hosting, same-site domain, real email, Google redirect, Sentry, Q1/Q3/Q4/Q8); Safari, the manual screen-reader pass, e2e in CI, SQLite vs Postgres, ffmpeg recording decode.
+
+### FE-UX0 — UX plan, first slice: brand, tokens, fonts, theme toggle (2026-10-08, branch `feat/UX-U0-brand-theme`, commit `6b7281d`)
+
+The first implementation slice of `FRONTEND_UX_IMPROVEMENT_PLAN.md` (phase U0). The plan itself and the owner's six decisions are in that file (§11); this entry records what was built.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Brand mark and favicon | ✅ | `components/logo.tsx` (waveform of five bars that fade out), `app/icon.svg`, used in the header. |
+| Palette tokens, both themes | ✅ | `app/globals.css`, `tailwind.config.ts`: new `surface`, `line`, `danger`, `success` tokens; existing names kept; every `text-red-600 dark:text-red-400` and `bg-red-600` replaced by `text-danger`/`bg-danger`; control outlines moved to `line` (3:1). `tests/theme.test.ts` recomputes WCAG contrast from the shipped HSL values (text and accent ≥ 4.5:1, outlines ≥ 3:1, both themes) and forbids `dark:` variants and raw palette colours in components. |
+| Theme toggle | ✅ | System → Light → Dark button (`components/theme-toggle.tsx`), `lib/theme.ts`, server-rendered `data-theme` from the `cv-theme` cookie in `app/layout.tsx` (no flash, no inline script, CSP-safe), 200 ms cross-fade only on switch, instant under reduced motion, `<meta name="theme-color">` kept in step. `tests/theme-toggle.test.tsx` (3), `tests/theme.test.ts`. |
+| Guardrail change | ✅ | `tests/hardening.test.ts`: `document.cookie` stays forbidden everywhere except `lib/theme.ts`, which must write exactly one cookie, never touch storage, and never mention tokens, passwords or emails. The access token remains memory-only. |
+| Fonts | ✅ | IBM Plex Sans 400/500/600 and Plex Mono 400, self-hosted (`app/fonts/`, OFL licence included) with `next/font/local`; mono used for the character counter and recording clock. |
+
+**Verification run (local, Node 24):** `npm test` → 30 files, **351 passed** (28 → 30 files, 331 → 351 tests); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Real Chromium against the production build with the API mocked: OS-dark follows the OS; cycle light → dark → system sets and clears the cookie; an explicit choice survives a reload; with JavaScript disabled the cookie still renders dark; no console errors; no horizontal overflow at 320/375/1280 px; header height unchanged by toggling; reduced motion adds no transition class. `npm run perf` (median of 5, public routes): LCP 2.1-2.3 s, JS 178-194 KB, CLS 0.000, all within budget (LCP was 1.8-2.0 s before the fonts). Backend untouched. The e2e suite was **not** re-run (it needs the real backend with model weights); the changes it could notice are class and colour changes, and the header gained one 44 px button.
+
+**Open items from FE-UX0**
+1. The rest of U0-U7 is not started: the Button/Field/Alert primitives, the route split and rename (decision §11.2), the first-run flow, the take component.
+2. `frontend/e2e/*` has not been run against the new header; run `layout-shift`, `responsive` and `a11y` against the real stack before relying on them. The LCP margin is now about 0.3 s: watch the first GitHub `perf` run.
+3. No Safari/WebKit check and no manual screen-reader pass of the toggle. `app/global-error.tsx` renders its own `<html>` and follows the OS only.
+4. New backend dependency UBD-4 (expose `output_retention_days`) and a stale hard-coded "30 days" string in `components/history-list.tsx:49`; see the UX plan §11.3. No trademark search was done for the name "CloneVoice".
 
 ---
 

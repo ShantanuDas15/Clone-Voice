@@ -2,34 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens (FRONTEND_UX_IMPROVEMENT_PLAN.md §4). Components use token utilities only, never
+ * `dark:` variants or raw colours (tests/theme.test.ts enforces it), so one block here re-themes
+ * the app. Values are HSL triplets; the hex in each comment is the source of truth for contrast.
+ *
+ * Theme resolution (no flash, no inline script, CSP-safe):
+ *   1. no `data-theme` on <html>  -> follow the OS via prefers-color-scheme (the default)
+ *   2. data-theme="light" | "dark" -> an explicit choice, set server-side from the `cv-theme` cookie
+ */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222 20% 12%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 38%;
-  --border: 220 13% 88%;
-  --primary: 243 75% 50%;
+  color-scheme: light;
+  --background: 43 28% 95%; /* #F6F4EF paper */
+  --surface: 0 0% 100%; /* #FFFFFF inputs, dialogs */
+  --foreground: 216 10% 10%; /* #17191C ink */
+  --muted: 42 25% 90%; /* #ECE8DF subtle fill */
+  --muted-foreground: 210 7% 36%; /* #555B61 */
+  --border: 41 19% 84%; /* #DDD8CD hairline: dividers and cards only */
+  --line: 210 4% 50%; /* #7A7F84 control outline, >= 3:1 (WCAG 1.4.11) */
+  --primary: 177 82% 24%; /* #0B6E69 signal */
   --primary-foreground: 0 0% 100%;
+  --danger: 4 76% 40%; /* #B42318 */
+  --success: 150 59% 30%; /* #1F7A4D */
   --warning: 38 92% 90%;
   --warning-foreground: 26 80% 22%;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: 222 20% 8%;
-    --foreground: 210 20% 96%;
-    --muted: 222 15% 14%;
-    --muted-foreground: 215 14% 70%;
-    --border: 222 12% 22%;
-    --primary: 243 90% 72%;
-    --primary-foreground: 222 20% 8%;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: 150 5% 7%; /* #121413 */
+    --surface: 160 5% 11%; /* #1A1D1C */
+    --foreground: 100 9% 93%; /* #EDEFEC */
+    --muted: 165 6% 13%; /* #1F2322 */
+    --muted-foreground: 146 4% 65%; /* #A3AAA6 */
+    --border: 156 5% 18%; /* #2B302E */
+    --line: 150 3% 45%; /* #6F7773 */
+    --primary: 174 50% 57%; /* #5CC9BF */
+    --primary-foreground: 167 29% 6%; /* #0B1412 */
+    --danger: 5 100% 75%; /* #FF8A80 */
+    --success: 146 53% 63%; /* #6FD39B */
     --warning: 38 60% 16%;
     --warning-foreground: 38 90% 85%;
   }
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: 150 5% 7%;
+  --surface: 160 5% 11%;
+  --foreground: 100 9% 93%;
+  --muted: 165 6% 13%;
+  --muted-foreground: 146 4% 65%;
+  --border: 156 5% 18%;
+  --line: 150 3% 45%;
+  --primary: 174 50% 57%;
+  --primary-foreground: 167 29% 6%;
+  --danger: 5 100% 75%;
+  --success: 146 53% 63%;
+  --warning: 38 60% 16%;
+  --warning-foreground: 38 90% 85%;
+}
+
 body {
-  @apply bg-background text-foreground antialiased;
+  @apply bg-background font-sans text-foreground antialiased;
+}
+
+/* The one visible focus treatment for every interactive element. */
+:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/*
+ * Applied to <html> for ~250 ms by lib/theme.ts when the user switches theme, so colours cross-fade
+ * once and ordinary hover/focus never animate. Scoped to no-preference: reduced motion switches
+ * instantly (and the rule below would otherwise lose to this one on specificity).
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition:
+      background-color 200ms ease,
+      color 200ms ease,
+      border-color 200ms ease,
+      fill 200ms ease,
+      stroke 200ms ease !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

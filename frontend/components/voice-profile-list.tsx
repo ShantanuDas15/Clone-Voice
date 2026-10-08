@@ -58,7 +58,7 @@ function DeleteDialog({
         </button>
         <button
           type="button"
-          className="min-h-11 rounded border border-border px-4"
+          className="min-h-11 rounded border border-line px-4"
           onClick={onCancel}
         >
           Cancel
@@ -90,7 +90,7 @@ export function VoiceProfileList() {
         <button
           type="button"
           onClick={() => void refetch()}
-          className="min-h-11 rounded border border-border px-3"
+          className="min-h-11 rounded border border-line px-3"
         >
           Try again
         </button>
@@ -130,7 +130,7 @@ export function VoiceProfileList() {
               type="button"
               onClick={() => setConfirming(p)}
               disabled={remove.isPending && remove.variables === p.id}
-              className="min-h-11 rounded border border-border px-3 text-sm"
+              className="min-h-11 rounded border border-line px-3 text-sm"
               aria-label={`Delete ${p.name}`}
             >
               Delete
