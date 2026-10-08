@@ -3,15 +3,15 @@ import Link from "next/link";
 
 import { TextToSpeechForm } from "@/components/text-to-speech-form";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export const metadata: Metadata = { title: "Generate speech" };
 
-export default function DashboardPage() {
+export default function GeneratePage() {
   return (
     <section>
       <h1 className="text-2xl font-bold">Generate speech</h1>
       <p className="mb-6 mt-2 text-muted-foreground">
         Pick one of your voices and type what it should say. Need a new voice?{" "}
-        <Link href="/profile" className="underline">
+        <Link href="/voices" className="underline">
           Create one
         </Link>
         .

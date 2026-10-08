@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useId } from "react";
 
 import { Select } from "@/components/ui/field";
@@ -43,9 +44,9 @@ export function VoiceProfileSelect({ value, onChange, disabled }: Props) {
       {!isPending && !isError && ready.length === 0 && (
         <p className="mt-1 text-sm text-muted-foreground">
           No voices are ready yet.{" "}
-          <a href="/profile" className="underline">
+          <Link href="/voices" className="underline">
             Create one
-          </a>
+          </Link>
           .
         </p>
       )}

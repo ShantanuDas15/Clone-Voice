@@ -48,7 +48,7 @@ test.describe("header does not shift when the session resolves (CLS)", () => {
         await signUpVerified(page, "cls");
         await observeShifts(page);
         await slowRefresh(page);
-        await page.goto("/dashboard");
+        await page.goto("/generate");
         await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
         expect(await cls(page)).toBeLessThan(0.05);
       });
@@ -57,7 +57,7 @@ test.describe("header does not shift when the session resolves (CLS)", () => {
         await signUp(page, uniqueEmail("cls-unverified"));
         await observeShifts(page);
         await slowRefresh(page);
-        await page.goto("/dashboard");
+        await page.goto("/generate");
         await expect(page.getByText(/verify your email address \(/i)).toBeVisible();
         expect(await cls(page)).toBeLessThan(0.05);
       });

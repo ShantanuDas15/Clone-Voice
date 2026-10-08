@@ -28,9 +28,9 @@ test("no CSP violations across public pages, the app, playback and recording", a
   }
   await signUpVerified(page, "csp");
   await createVoice(page, "CSP voice");
-  await page.goto("/dashboard");
+  await page.goto("/generate");
   await page.waitForLoadState("networkidle");
-  await page.goto("/profile");
+  await page.goto("/voices");
   await page.getByRole("radio", { name: "Record now" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(page.getByRole("button", { name: "Stop recording" })).toBeEnabled({

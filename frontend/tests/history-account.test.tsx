@@ -22,7 +22,7 @@ import { server } from "@/mocks/server";
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
-  usePathname: () => "/profile",
+  usePathname: () => "/voices",
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 

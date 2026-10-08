@@ -72,7 +72,7 @@ test(`${RUNS} generations leave at most one live audio blob URL and one player`,
     });
   });
 
-  await page.goto("/dashboard");
+  await page.goto("/generate");
   await expect(page.getByLabel("Voice")).toBeEnabled();
   await page.getByLabel("Voice").selectOption({ label: "Soak voice" });
   await page.getByLabel("Text").fill("Soak test.");
@@ -101,6 +101,6 @@ test(`${RUNS} generations leave at most one live audio blob URL and one player`,
 
   // Leaving the page releases the last one.
   await page.getByRole("link", { name: "Account" }).click();
-  await expect(page).toHaveURL(/\/profile/);
+  await expect(page).toHaveURL(/\/account/);
   expect((await state()).live).toBe(0);
 });

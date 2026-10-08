@@ -51,7 +51,7 @@ for (const scheme of SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
     await signUpVerified(page, `ax${scheme}`);
     await createVoice(page, "Audit voice");
-    await audit(page, `/profile (${scheme})`);
+    await audit(page, `/voices (${scheme})`);
 
     await page.getByRole("radio", { name: "Record now" }).click();
     await audit(page, `recorder idle (${scheme})`);
@@ -64,8 +64,8 @@ for (const scheme of SCHEMES) {
     await page.getByRole("button", { name: /delete my account/i }).click();
     await audit(page, `delete-account dialog (${scheme})`);
 
-    await page.goto("/dashboard");
+    await page.goto("/generate");
     await page.getByLabel("Text").waitFor();
-    await audit(page, `/dashboard (${scheme})`);
+    await audit(page, `/generate (${scheme})`);
   });
 }

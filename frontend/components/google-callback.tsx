@@ -15,7 +15,7 @@ export function GoogleCallback() {
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
+    if (status === "authenticated") router.replace("/generate");
     else if (status === "unauthenticated") router.replace("/login?error=session_unavailable");
   }, [status, router]);
 

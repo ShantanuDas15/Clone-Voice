@@ -17,7 +17,7 @@ const replace = vi.fn();
 let search = "";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
-  usePathname: () => "/dashboard",
+  usePathname: () => "/generate",
   useSearchParams: () => new URLSearchParams(search),
 }));
 
@@ -99,7 +99,7 @@ describe("AuthGate", () => {
         <p>secret</p>
       </AuthGate>,
     );
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fdashboard"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fgenerate"));
     expect(screen.queryByText("secret")).toBeNull();
   });
 
@@ -144,7 +144,7 @@ describe("LoginForm", () => {
     await user.type(await screen.findByLabelText("Email"), "ada@example.com");
     await user.type(screen.getByLabelText("Password"), "secret-pass");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/profile"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/voices"));
   });
 
   it("ignores an external next target", async () => {
@@ -155,7 +155,7 @@ describe("LoginForm", () => {
     await user.type(await screen.findByLabelText("Email"), "ada@example.com");
     await user.type(screen.getByLabelText("Password"), "secret-pass");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/generate"));
   });
 
   it("shows one generic message on 401 (G-19)", async () => {
@@ -220,11 +220,11 @@ describe("SignupForm", () => {
     await user.click(screen.getByRole("button", { name: "Create account" }));
   }
 
-  it("creates the account and goes to the dashboard", async () => {
+  it("creates the account and goes to the generator", async () => {
     signedOut();
     wrap(<SignupForm />);
     await fill(userEvent.setup());
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/generate"));
   });
 
   it("maps 409 to an email field error with a sign-in link", async () => {

@@ -5,7 +5,7 @@ import { PASSWORD, signUp, uniqueEmail } from "./helpers";
 test("rename, then delete the account: signed out and login no longer works", async ({ page }) => {
   const email = uniqueEmail("acct");
   await signUp(page, email);
-  await page.goto("/profile");
+  await page.goto("/account");
 
   await page.getByLabel("Display name").fill("Renamed User");
   await page.getByRole("button", { name: "Save name" }).click();

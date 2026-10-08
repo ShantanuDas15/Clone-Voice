@@ -9,7 +9,7 @@ test("generate → play → download → history → replay from history (real w
   await signUpVerified(page, "synth");
   await createVoice(page, "Synth voice");
 
-  await page.goto("/dashboard");
+  await page.goto("/generate");
   const select = page.getByLabel("Voice");
   await expect(select).toBeEnabled();
   await select.selectOption({ label: "Synth voice" });
@@ -40,7 +40,7 @@ test("generate → play → download → history → replay from history (real w
   expect((await download).suggestedFilename()).toMatch(/^synthesized_[0-9a-f-]{36}\.wav$/);
 
   // History shows it with the voice name, and past audio plays through the authed endpoint.
-  await page.goto("/profile");
+  await page.goto("/history");
   await expect(page.getByText("Hello there.")).toBeVisible();
   await page.getByRole("button", { name: "Play" }).click();
   const past = page.getByLabel(/generated audio from/i);
@@ -60,7 +60,7 @@ test("a text with unsupported characters is refused by the server and shown on t
 }) => {
   await signUpVerified(page, "badtext");
   await createVoice(page, "Text voice");
-  await page.goto("/dashboard");
+  await page.goto("/generate");
   await page.getByLabel("Voice").selectOption({ label: "Text voice" });
   await page.getByLabel("Text").fill("Use <b>bold</b> here");
   await page.getByRole("button", { name: "Generate speech" }).click();

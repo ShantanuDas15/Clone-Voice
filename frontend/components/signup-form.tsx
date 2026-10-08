@@ -29,7 +29,7 @@ export function SignupForm() {
   } = useForm<SignupValues>({ resolver: zodResolver(signupSchema) });
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
+    if (status === "authenticated") router.replace("/generate");
   }, [status, router]);
 
   const onSubmit = handleSubmit(async (values) => {
@@ -43,7 +43,7 @@ export function SignupForm() {
         name: values.name.trim(),
         password: values.password,
       });
-      router.replace("/dashboard");
+      router.replace("/generate");
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;
       if (e.status === 409) {

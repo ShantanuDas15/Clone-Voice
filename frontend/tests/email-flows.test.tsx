@@ -248,7 +248,7 @@ describe("Google flow", () => {
   it("callback routes to the dashboard when the session was established", async () => {
     server.use(mswHttp.post(`${API}/auth/refresh`, () => HttpResponse.json(fixtures.token)));
     wrap(<GoogleCallback />);
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/generate"));
   });
 
   it("callback sends cookie-less browsers to login with cookie help", async () => {

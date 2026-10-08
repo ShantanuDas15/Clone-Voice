@@ -140,7 +140,7 @@ export function VoiceProfileList() {
       )}
       <p className="mt-4 text-sm text-muted-foreground">
         Ready to hear it?{" "}
-        <Link href="/dashboard" className="underline">
+        <Link href="/generate" className="underline">
           Generate speech
         </Link>
       </p>

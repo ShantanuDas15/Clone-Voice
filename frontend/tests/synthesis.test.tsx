@@ -16,7 +16,7 @@ import { server } from "@/mocks/server";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
-  usePathname: () => "/dashboard",
+  usePathname: () => "/generate",
 }));
 
 const API = "http://api.test/api/v1";

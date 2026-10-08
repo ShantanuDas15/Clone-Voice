@@ -48,7 +48,7 @@ export function VerifyEmailView() {
       {view === "verified" && (
         <>
           <p>Your email address is verified.</p>
-          <Link href={status === "authenticated" ? "/dashboard" : "/login"} className="underline">
+          <Link href={status === "authenticated" ? "/generate" : "/login"} className="underline">
             {status === "authenticated" ? "Go to dashboard" : "Sign in"}
           </Link>
         </>

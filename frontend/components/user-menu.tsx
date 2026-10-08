@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
+import { NavLink } from "@/components/nav-link";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 /** Header account controls: sign-in links, or the user's name and a sign-out button. */
@@ -37,12 +38,10 @@ export function UserMenu() {
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:gap-x-4">
-      <Link href="/dashboard" className="underline-offset-4 hover:underline">
-        Dashboard
-      </Link>
-      <Link href="/profile" className="underline-offset-4 hover:underline">
-        Account
-      </Link>
+      <NavLink href="/generate">Generate</NavLink>
+      <NavLink href="/voices">Voices</NavLink>
+      <NavLink href="/history">History</NavLink>
+      <NavLink href="/account">Account</NavLink>
       <span className="hidden max-w-[10rem] truncate text-muted-foreground sm:inline">
         {user?.name}
       </span>

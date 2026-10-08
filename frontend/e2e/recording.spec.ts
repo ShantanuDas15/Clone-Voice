@@ -4,7 +4,7 @@ import { signUpVerified } from "./helpers";
 
 test("record with a fake microphone, preview, and submit a real WEBM upload", async ({ page }) => {
   await signUpVerified(page, "record");
-  await page.goto("/profile");
+  await page.goto("/voices");
   await page.getByRole("radio", { name: "Record now" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();
 
