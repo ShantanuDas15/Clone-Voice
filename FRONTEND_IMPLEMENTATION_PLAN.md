@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea) and FE-UX3 (route split and rename) implemented the same day.
+> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) and FE-UX4 (tab bar, inline verify alert, two-column layouts) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -1005,6 +1005,26 @@ Implements owner decision §11.2 (option C): `/profile` is split by job and the 
 2. Run the e2e suite against the real stack before relying on the route edits; a missed reference would show up as a timeout, not a type error. `RUNBOOK.md`, `README.md` and `smoke/` had no references to the old routes (grep).
 3. Old routes work only through the redirect; nothing else links to them. Remove the redirects in a later release if no traffic uses them.
 4. `/graphify --update` is still needed for the changed plan docs.
+
+### FE-UX4 — UX plan, U1.3/U1.4/U1.5: mobile tab bar, inline verify alert, two-column layouts (2026-10-08, branch `feat/UX-U1-shell`, commit `be38858`)
+
+Completes phase U1 of `FRONTEND_UX_IMPROVEMENT_PLAN.md`.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Mobile tab bar (UX-25) | ✅ | `components/mobile-tabs.tsx`: below `sm`, signed-in users get a fixed bottom bar (Generate · Voices · History · Account, 56 px tall, `aria-current`), and the header keeps only the name and Sign out. `APP_LINKS` in `user-menu.tsx` is the single list used by both. The spacer after the footer keeps the last line reachable. |
+| One verification notice (UX-07) | ✅ | `components/verify-email-alert.tsx` (replaces the sticky `VerificationBanner`) is rendered once, inline, on Generate and Voices. The duplicate notices inside the generate and upload forms are gone. The server still enforces the gate; making the buttons disabled-with-a-reason is U2.3. |
+| Desktop two columns (UX-20) | ✅ | Generate: form beside the result (`lg`); Voices: create form beside the list (`lg`); one column on phones. |
+| Header polish | ✅ | Desktop nav links are 44 px targets; the loading skeleton reserves the signed-in menu width at `sm`+. |
+| Tests | ✅ | `tests/shell.test.tsx` (new: tabs, current marker, hidden while loading/signed out), `tests/navigation.test.tsx` (+1: alert only on the pages that need it, no sticky banner), form tests changed to assert there is no duplicate notice. |
+
+**Verification run (local, Node 24):** `npm test` -> 33 files, **382 passed** (378 -> 382); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Real Chromium against the production build with the API mocked (a 400 ms delayed `/auth/me`), at 320, 375 and 1280 px, unverified and verified users, all four routes: the tab bar is visible below `sm` and hidden above it; the header shows the four links only at desktop; exactly one verify alert on Generate and Voices and none elsewhere; zero horizontal overflow; two columns at 1280 px and one at phone width. `npm run perf` (median of 5): LCP 1.96-2.41 s, JS 180.6-197.5 KB, CLS 0.000, TBT <= 7 ms, all within budget. Layout shift measured with the same mock on `main` and on this branch: on phones it fell from 0.13-0.58 (the header re-wrapped when the session resolved) to 0.00-0.09; on desktop it ranged 0.005-0.048 before and 0.00-0.09 after, run to run. The shifts seen after the change came from the footer moving as the voice list loads and from the header menu growing when the session resolves; the second now has a reserved width. These are mocked-network numbers, not the repo's `layout-shift` e2e. Backend untouched. **e2e not run**; the `layout-shift` spec (budget 0.05) and the `responsive` spec (44 px targets, four routes) are the ones most likely to be affected and need the real stack.
+
+**Open items from FE-UX4**
+1. Run `e2e/layout-shift.spec.ts` and `e2e/responsive.spec.ts` against the real backend. If the desktop unverified case exceeds 0.05, the cause to chase is the footer shift while the voice list loads (give the list a reserved height).
+2. Phase U1 is complete. Next is U2: landing page, auth form polish, the Generate first-run checklist, "Generate speech with this voice" after creating one, honest progress and result actions, copy pass, and the file-drop styling.
+3. The plan's wireframe also showed a footer notice on every page; the footer text is unchanged.
+4. `/graphify --update` for the plan docs is still pending (see the earlier note about not shrinking the graph).
 
 ---
 
