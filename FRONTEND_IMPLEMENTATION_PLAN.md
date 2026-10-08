@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) and FE-UX6 (landing page, auth polish, copy pass) implemented the same day.
+> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) FE-UX6 (landing page, auth polish, copy pass) and FE-UX7 (progress, result actions, file drop zone) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -1064,6 +1064,24 @@ The first slice of phase U2: removes the first-minute dead end (UX-06) and the l
 2. JS headroom on `/login` and `/signup` is about 2.2 KB; new shared form code needs a budget check.
 3. Backend asks UBD-2 (terms URL) and UBD-4 (expose retention) still pending; the in-app "kept for 30 days" text in `components/history-list.tsx` is still hard-coded.
 4. `/graphify --update` for the plan docs is still pending.
+
+### FE-UX7 — UX plan, U2.5/U2.7: Generate progress and result actions, file drop zone (2026-10-08, branch `feat/UX-U2-progress-drop`, commit `025d9b5`)
+
+Completes phase U2 of `FRONTEND_UX_IMPROVEMENT_PLAN.md`.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Honest progress (UX-08) | ✅ | `components/text-to-speech-form.tsx`: while generating, a mono elapsed clock plus an indeterminate bar and the existing Cancel. The clock is `aria-hidden` so a screen reader hears "Generating…" once instead of every second. The bar moves only while a request is in flight (state, not decoration, UX plan §4.10); under reduced motion it is a static full bar (`motion-reduce:`), and the global reduced-motion rule now also sets `animation-iteration-count: 1`. |
+| Result actions (UX-08) | ✅ | "Edit text" focuses and selects the text box; "Generate again" re-runs the original text with the same voice (even if the box was edited since) and follows the same blocking rules as the main button. |
+| Styled file picker (UX-18) | ✅ | `components/audio-uploader.tsx`: a visible "Choose file" / "Choose a different file" button (a `label` for the real input), the real `<input type="file">` is visually hidden but remains the single tab stop with a visible focus ring on the button; drag-and-drop and validation unchanged; the chosen file name and size are shown in the mono face. |
+| Tests | ✅ | `tests/synthesis.test.tsx` (+3: Edit text/Generate again, original-text rule, quiet progress), `tests/voice-profiles.test.tsx` (+1: picker label and selected file). |
+
+**Verification run (local, Node 24):** `npm test` -> 35 files, **408 passed** (404 -> 408); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Real Chromium against the production build, API mocked, 375 and 1280 px and reduced-motion: the bar animates for 1.4 s per cycle normally and does not under reduced motion, the clock ticks, "Edit text" lands focus in the text box, no horizontal overflow; the file button is 44 px tall in light and dark, shows the chosen file, and shows a 2 px focus outline when the hidden input has keyboard focus. (A first run of this check showed that the reduced-motion rule alone leaves the bar parked off-screen at its end position; that is why the static `motion-reduce` classes exist.) `npm run perf`: JS unchanged at 180.6-197.8 KB, CLS 0.001, TBT <= 7 ms. **LCP is flaky:** across the last three runs one or two of the four public routes read 2.56-2.76 s, a different pair each time (`/`, `/login`, `/signup`, `/forgot-password`), and `/` and `/forgot-password` do not use any code changed here. The host has a browser running alongside; I treat this as noise, but it is now the thing most likely to fail the first CI `perf` run (LCP budget 2.5 s). If CI confirms it, the options already listed in FE-UX0 apply first (drop the 500 weight of Plex Sans, then raise `PERF_RUNS`). Backend untouched. **e2e not run**; the file input is still found by `input[type=file]`, so the existing upload specs should be unaffected.
+
+**Open items from FE-UX7**
+1. Phase U2 is complete except the Google provider mark (see FE-UX6). Next is U3: `Dialog` primitive (focus trap, scrim, destructive variant) for delete voice and delete account, session-expiry message and return path, offline handling, error-fallback routes, empty states as buttons, skeletons.
+2. JS headroom on `/login` and `/signup` is about 2.2 KB; `Dialog` should reuse `hooks/use-dialog.ts` and load only on the pages that open it.
+3. `/graphify --update` for the plan docs is still pending.
 
 ---
 
