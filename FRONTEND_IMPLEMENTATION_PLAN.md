@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. First UX-plan slice (FE-UX0: brand, tokens, fonts, theme toggle) implemented the same day.
+> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) and FE-UX1 (Button, Alert, Badge primitives) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -952,6 +952,24 @@ The first implementation slice of `FRONTEND_UX_IMPROVEMENT_PLAN.md` (phase U0). 
 2. `frontend/e2e/*` has not been run against the new header; run `layout-shift`, `responsive` and `a11y` against the real stack before relying on them. The LCP margin is now about 0.3 s: watch the first GitHub `perf` run.
 3. No Safari/WebKit check and no manual screen-reader pass of the toggle. `app/global-error.tsx` renders its own `<html>` and follows the OS only.
 4. New backend dependency UBD-4 (expose `output_retention_days`) and a stale hard-coded "30 days" string in `components/history-list.tsx:49`; see the UX plan §11.3. No trademark search was done for the name "CloneVoice".
+
+### FE-UX1 — UX plan, U0.4/U0.5 part 1: Button, Alert, Badge primitives (2026-10-08, branch `feat/UX-U0-primitives`, commit `7dc993d`)
+
+| Area | Status | Evidence |
+|---|---|---|
+| `Button` primitive | ✅ | `components/ui/button.tsx` (cva): primary, secondary, quiet, danger × md/sm; defaults to `type="button"`; `loading` sets `aria-busy`; hover, active and disabled states; 44 px minimum height. All 30 inline button recipes in 13 components now use it, plus `buttonVariants` for the landing, header and Google links. |
+| `Alert` and `Badge` | ✅ | `components/ui/alert.tsx` (danger → `role="alert"`, others → `status`), `components/ui/badge.tsx`. Every `<p role="alert" class="text-danger">` migrated; `StatusChip` is now `Badge`. |
+| Destructive confirms | ✅ | Delete voice and Delete account confirm buttons use the `danger` variant (UX-15, colour part only; the overlay dialog is still U3.1). |
+| Tokens | ✅ | New `--danger-foreground` (contrast asserted in both themes); Tailwind colours use `<alpha-value>` so `/90` hover shades work. |
+| Guardrail | ✅ | `tests/theme.test.ts` fails on any ad-hoc button or error recipe outside `components/ui/`. `tests/ui-primitives.test.tsx` (11 tests). |
+
+**Verification run (local, Node 24):** `npm test` -> 31 files, **362 passed** (351 -> 362); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. `npm run perf` (median of 5, quiet machine, public routes): LCP 1.85-2.26 s, JS 180.8-197.6 KB, CLS 0.000, all within budget. A first attempt with `tailwind-merge` inside the primitives pushed `/login`, `/signup` and `/forgot-password` to 204-206 KB (over the 200 KB budget), so the primitives use cva's own `className` merge and no `cn()`; JS headroom on the form routes is now about 2.4 KB, so the next primitive (`Field`, `Dialog`) must watch it. Perf runs under load (graph rebuild running) gave LCP 2.6 s on `/` and `/login`; they passed when repeated on an idle machine. Backend untouched. e2e not re-run (needs the real backend and model weights).
+
+**Open items from FE-UX1**
+1. U0.4 part 2: `Field` (input, select, textarea) and `Card` primitives; the input and select recipes in `form-fields.tsx` and `voice-profile-select.tsx` and the mode toggle in `upload-voice-form.tsx` are the only remaining ad-hoc controls.
+2. Remaining U0: U0.6 accent documentation and a visual-regression baseline. Not started: U1-U7.
+3. `npm run perf` needs `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_APP_ORIGIN` at build and start time and a server on port 3000; without them it fails with a misleading "no script row" error.
+4. The UX plan's markdown changed; run `/graphify --update` to refresh its semantic nodes (the code graph was refreshed with `graphify update .`).
 
 ---
 
