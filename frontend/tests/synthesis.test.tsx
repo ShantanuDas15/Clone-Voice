@@ -122,6 +122,62 @@ describe("TextToSpeechForm", () => {
     expect(screen.getByLabelText("Voice")).toHaveValue(fixtures.profile.id);
   });
 
+  it("offers Edit text and Generate again on a result", async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      mswHttp.post(`${API}/synthesize`, async ({ request }) => {
+        bodies.push(await request.json());
+        return wavResponse();
+      }),
+    );
+    wrap(<TextToSpeechForm />);
+    const user = await generate("Say it twice.");
+    await screen.findByRole("link", { name: "Download WAV" });
+
+    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    expect(screen.getByLabelText("Text")).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Generate again" }));
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toEqual({ voice_profile_id: fixtures.profile.id, text: "Say it twice." });
+  });
+
+  it("generates again with the original text even if the box was edited meanwhile", async () => {
+    const bodies: Array<{ text: string }> = [];
+    server.use(
+      mswHttp.post(`${API}/synthesize`, async ({ request }) => {
+        bodies.push((await request.json()) as { text: string });
+        return wavResponse();
+      }),
+    );
+    wrap(<TextToSpeechForm />);
+    const user = await generate("Original.");
+    await screen.findByRole("link", { name: "Download WAV" });
+    await user.clear(screen.getByLabelText("Text"));
+    await user.type(screen.getByLabelText("Text"), "Changed.");
+    await user.click(screen.getByRole("button", { name: "Generate again" }));
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]?.text).toBe("Original.");
+    expect(screen.getByLabelText("Text")).toHaveValue("Original.");
+  });
+
+  it("shows an honest, quiet progress state: a bar and a ticking clock hidden from screen readers", async () => {
+    server.use(
+      mswHttp.post(`${API}/synthesize`, async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return wavResponse();
+      }),
+    );
+    wrap(<TextToSpeechForm />);
+    await generate();
+    const status = await screen.findByText(/This can take a minute/);
+    const clock = status.querySelector("span");
+    expect(clock).toHaveAttribute("aria-hidden", "true");
+    expect(clock?.className).toContain("font-mono");
+    expect(status.parentElement?.querySelector(".animate-indeterminate")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
   it("revokes the object URL on unmount (R15)", async () => {
     const { unmount } = wrap(<TextToSpeechForm />);
     await generate();

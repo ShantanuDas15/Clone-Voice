@@ -23,6 +23,14 @@ const config: Config = {
         warning: "hsl(var(--warning) / <alpha-value>)",
         "warning-foreground": "hsl(var(--warning-foreground) / <alpha-value>)",
       },
+      // Used only by the indeterminate "generating" bar (state, not decoration; UX plan §4.10).
+      keyframes: {
+        indeterminate: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(300%)" },
+        },
+      },
+      animation: { indeterminate: "indeterminate 1.4s ease-in-out infinite" },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
