@@ -51,6 +51,10 @@ describe("Button", () => {
     expect(buttonVariants({ variant: "danger" })).toContain("bg-danger");
   });
 
+  it("gives press feedback on the fast motion token", () => {
+    expect(buttonVariants()).toContain("duration-fast");
+  });
+
   it("merges a caller class last so layout tweaks win", () => {
     render(<Button className="mt-6">Spaced</Button>);
     expect(screen.getByRole("button")).toHaveClass("mt-6");

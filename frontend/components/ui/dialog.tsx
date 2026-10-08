@@ -35,7 +35,7 @@ export function Dialog({ titleId, onClose, closeDisabled = false, children }: Di
   return (
     <div
       data-testid="dialog-scrim"
-      className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-foreground/50 p-4"
+      className="fixed inset-0 z-40 flex animate-fade-in items-center justify-center overflow-y-auto bg-foreground/50 p-4"
       onMouseDown={(e) => {
         pressedScrim.current = e.target === e.currentTarget;
       }}

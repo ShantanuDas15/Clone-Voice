@@ -6,7 +6,7 @@ import { type ButtonHTMLAttributes, forwardRef } from "react";
  * ad-hoc classes; the focus ring comes from the global `:focus-visible` rule in globals.css.
  */
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress",
+  "inline-flex items-center justify-center rounded font-medium transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress",
   {
     variants: {
       variant: {
