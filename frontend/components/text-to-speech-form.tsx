@@ -18,6 +18,7 @@ import { ApiError } from "@/lib/errors";
 import { TEXT_MAX, hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/field";
 
 const BUSY_COOLDOWN_S = 15; // no Retry-After on "service busy" (G-05)
 const RATE_COOLDOWN_S = 60; // 5/min per IP
@@ -157,7 +158,7 @@ export function TextToSpeechForm() {
           <label htmlFor="tts-text" className="block text-sm font-medium">
             Text
           </label>
-          <textarea
+          <Textarea
             id="tts-text"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -166,7 +167,6 @@ export function TextToSpeechForm() {
             disabled={pending}
             aria-invalid={textError ? true : undefined}
             aria-describedby="tts-count tts-hint"
-            className="mt-1 block w-full rounded border border-line bg-surface px-3 py-2"
           />
           <p
             id="tts-count"

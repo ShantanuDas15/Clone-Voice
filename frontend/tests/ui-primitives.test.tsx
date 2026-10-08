@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input, Select, Textarea } from "@/components/ui/field";
 
 describe("Button", () => {
   it("defaults to type=button so it never submits a form by accident", () => {
@@ -83,5 +84,34 @@ describe("Badge", () => {
   it("renders its text, which carries the meaning", () => {
     render(<Badge tone="success">Ready</Badge>);
     expect(screen.getByText("Ready")).toBeVisible();
+  });
+});
+
+describe("Field controls", () => {
+  it("renders input, select and textarea with the shared outline and forwards props", () => {
+    render(
+      <>
+        <Input aria-label="a" />
+        <Select aria-label="b" disabled>
+          <option>x</option>
+        </Select>
+        <Textarea aria-label="c" className="extra" />
+      </>,
+    );
+    for (const name of ["a", "b", "c"]) {
+      expect(screen.getByLabelText(name)).toHaveClass("border-line", "bg-surface");
+    }
+    expect(screen.getByLabelText("b")).toBeDisabled();
+    expect(screen.getByLabelText("c")).toHaveClass("extra");
+  });
+
+  it("styles the invalid state through aria-invalid so it cannot drift from the semantics", () => {
+    render(<Input aria-label="e" aria-invalid />);
+    expect(screen.getByLabelText("e").className).toContain("aria-[invalid=true]:border-danger");
+  });
+
+  it("keeps single-line controls at a 44 px target", () => {
+    render(<Input aria-label="t" />);
+    expect(screen.getByLabelText("t")).toHaveClass("min-h-11");
   });
 });

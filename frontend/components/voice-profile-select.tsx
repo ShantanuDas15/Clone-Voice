@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 
+import { Select } from "@/components/ui/field";
 import { useProfiles } from "@/hooks/use-voice-profiles";
 
 interface Props {
@@ -21,12 +22,11 @@ export function VoiceProfileSelect({ value, onChange, disabled }: Props) {
       <label htmlFor={id} className="block text-sm font-medium">
         Voice
       </label>
-      <select
+      <Select
         id={id}
         value={value}
         disabled={disabled || isPending || ready.length === 0}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 block min-h-11 w-full rounded border border-line bg-surface px-3"
       >
         <option value="">{isPending ? "Loading…" : "Choose a voice"}</option>
         {ready.map((p) => (
@@ -34,7 +34,7 @@ export function VoiceProfileSelect({ value, onChange, disabled }: Props) {
             {p.name}
           </option>
         ))}
-      </select>
+      </Select>
       {isError && (
         <p role="alert" className="mt-1 text-sm">
           Couldn&apos;t load your voices.
