@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) FE-UX6 (landing page, auth polish, copy pass) FE-UX7 (progress, result actions, file drop zone) FE-UX8 (Dialog primitive, session-ended message) and FE-UX9 (offline handling, error recovery, empty-state actions) implemented the same day.
+> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) FE-UX6 (landing page, auth polish, copy pass) FE-UX7 (progress, result actions, file drop zone) FE-UX8 (Dialog primitive, session-ended message) FE-UX9 (offline handling, error recovery, empty-state actions) and FE-UX10 (Take player with waveform) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -1117,6 +1117,25 @@ Completes phase U3 of `FRONTEND_UX_IMPROVEMENT_PLAN.md` apart from the draft-res
 1. Draft restore across the sign-in redirect (U3.2) still needs the same-user design decision.
 2. Add e2e assertions for the offline banner and the disabled buttons; add per-route error-boundary tests (UR15) if the owner wants them as a release gate.
 3. Phase U4 (the `Take` component: waveform, level meter, playback) is next and is the largest remaining visual piece. It must stay lazy: JS headroom on the form routes is about 1.5 KB.
+4. `/graphify --update` for the plan docs is still pending.
+
+### FE-UX10 — UX plan, U4.1/U4.3/U4.4: the Take player with waveform (2026-10-08, branch `feat/UX-U4-take`, commit `9ed6ea5`)
+
+The first slice of phase U4 (UX-12: make the audio visible).
+
+| Area | Status | Evidence |
+|---|---|---|
+| `Take` component | ✅ | `components/take.tsx` replaces `AudioPlayer` (deleted). A native `<audio>` element (no browser controls) under our own: a Play/Pause button, a monospaced timecode ("0:03 / 0:07"), a waveform with a playhead, and a seek slider laid over the waveform (`aria-valuetext` carries the timecode; arrow keys jump 2 s because takes are short; Home/End work natively; a focus ring surrounds the whole strip). The waveform is `aria-hidden`: the button and slider are the accessible controls. Download link retained. If the audio errors it says so and keeps the download; if the shape cannot be computed the controls still work (no bars, a plain line). |
+| Waveform data | ✅ | `lib/audio-peaks.ts`: `bucketPeaks` (loudest sample per slice, scaled to the loudest bar) and `computePeaks` (Web Audio `decodeAudioData` on the blob already in memory, no fetch of a `blob:` URL so the CSP `connect-src` is untouched; size cap 8 MB; returns null on any failure, never throws). Loaded with a dynamic `import()` so the decoder is in no page's first-load JavaScript. |
+| Where it is used | ✅ | Generate result, History playback (still loads audio only on Play, as before) and the recording preview (no download link there). |
+| Tests | ✅ | `tests/take.test.tsx` (new, 14): peak maths, every `computePeaks` failure path, play/pause, timecode, seeking by slider and arrows, ended, error with download kept, waveform present and absent. |
+
+**Verification run (local, Node 24):** `npm test` -> 38 files, **438 passed** (425 -> 438); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Real Chromium against the production build with a real 2 s WAV (synthesised in the check script) returned from the mocked API, at 375 px light and 1280 px dark: 64 bars are drawn and their heights vary with the audio, Play flips to Pause and the playhead clip advances, Home then ArrowRight lands on 0 then 2 s, the focus ring shows, no horizontal overflow. `npm run perf`: the public routes' JS is unchanged by this change (181.3 / 198.5 / 198.1 / 196.9 KB, Take is not on them); LCP read 2.76 s on `/` and 2.56 s on `/login` in this run and 2.1 s on the others, the same intermittent pattern as the last several runs on routes this change does not touch (host noise, but the margin is thin). Backend untouched. **e2e not run.** The recorder preview was not exercised in a browser (needs the fake-media flags the e2e recording spec already uses). `e2e/synthesis.spec.ts` and `e2e/recording.spec.ts` look for the audio by its label or the "Download WAV" link; the label on the `<audio>` element is unchanged, but the visible controls are now ours, so any step that clicked the native player needs updating.
+
+**Open items from FE-UX10**
+1. U4.2: the live level meter while recording (`AnalyserNode`, lazy with the recorder) and the recording dot driven by level, not a timer. Not started.
+2. Playhead is driven by `timeupdate` (about 4 updates a second), which is adequate for short takes; smoother motion is U5.
+3. Add a recording e2e assertion for the preview `Take`, and update e2e steps that used the native controls.
 4. `/graphify --update` for the plan docs is still pending.
 
 ---
