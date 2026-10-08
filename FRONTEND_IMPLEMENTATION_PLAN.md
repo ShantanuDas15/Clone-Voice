@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) FE-UX6 (landing page, auth polish, copy pass) FE-UX7 (progress, result actions, file drop zone) and FE-UX8 (Dialog primitive, session-ended message) implemented the same day.
+> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) FE-UX6 (landing page, auth polish, copy pass) FE-UX7 (progress, result actions, file drop zone) FE-UX8 (Dialog primitive, session-ended message) and FE-UX9 (offline handling, error recovery, empty-state actions) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -1099,6 +1099,25 @@ Completes phase U2 of `FRONTEND_UX_IMPROVEMENT_PLAN.md`.
 1. Rest of U3: U3.3 offline handling (`useOnline`, alert, disabled network actions, refetch on reconnect), U3.4 error fallback with "Go to Generate" and a branded global error, U3.5 empty states as buttons and skeletons matching the final layout, U3.6 (the single verification alert is already done via FE-UX4/FE-UX5; mark complete after the checklist review).
 2. The draft-restore decision above.
 3. `/graphify --update` for the plan docs is still pending.
+
+### FE-UX9 — UX plan, U3.3/U3.4/U3.5: offline handling, error recovery, empty-state actions (2026-10-08, branch `feat/UX-U3-resilience`, commit `aba1849`)
+
+Completes phase U3 of `FRONTEND_UX_IMPROVEMENT_PLAN.md` apart from the draft-restore decision (see FE-UX8).
+
+| Area | Status | Evidence |
+|---|---|---|
+| Offline (UX-22, UR5) | ✅ | `hooks/use-online.ts` (`useSyncExternalStore` over `online`/`offline`), `components/offline-banner.tsx` in the app shell ("You're offline. Uploading and generating are paused until your connection is back."), and Generate and Create voice are disabled with "You're offline." beside the button, linked by `aria-describedby`. `lib/query.ts` now sets `refetchOnReconnect: "always"`: the default only refetches stale queries, and the app's 30 s `staleTime` meant fresh-looking data was not re-read after a connection loss. |
+| Error screens (UX-23, UR15) | ✅ | `components/error-fallback.tsx` offers "Try again" and "Go to Generate" (a plain link: after a crash router state cannot be trusted and the global fallback has no router). `app/global-error.tsx` now brings the wordmark, main landmark and footer, so it is never a blank page; raw error text is never shown. |
+| Empty states (UR2) | ✅ | Voices: "You haven't created a voice yet." with a "Create a voice" button that focuses the name field. History: "Nothing generated yet." with a "Generate speech" link button; the stale mention of a "dashboard" is gone. |
+| Tests | ✅ | `tests/resilience-ui.test.tsx` (new, 11): `useOnline`, banner, both forms disabled/enabled with the reason, refetch on reconnect through the real `createQueryClient`, both error fallbacks, both empty states. |
+
+**Verification run (local, Node 24):** `npm test` -> 37 files, **425 passed** (415 -> 425; the refetch test first failed, which is how the stale-data gap above was found); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Real Chromium against the production build with the API mocked, using `setOffline` at 375 and 1280 px: the banner appears, Generate becomes disabled with the reason, there is no horizontal overflow, and on reconnect the banner clears, Generate is enabled again and the voice list is refetched. `npm run perf` (median of 5): LCP 1.96-2.26 s, JS 181.2-198.5 KB, CLS 0.001, TBT <= 5 ms, all within budget this run. **JS headroom on `/login` is now about 1.5 KB** (it was 2.2 KB): the offline banner and hook ship in the shell on every page. **Not exercised in a browser:** the route and global error screens (they are covered by unit tests; there is no safe way to force a crash in the production build without adding a test-only route). Backend untouched. **e2e not run**; `e2e/resilience.spec.ts` already uses `context.setOffline` and should be extended to assert the banner (not done).
+
+**Open items from FE-UX9**
+1. Draft restore across the sign-in redirect (U3.2) still needs the same-user design decision.
+2. Add e2e assertions for the offline banner and the disabled buttons; add per-route error-boundary tests (UR15) if the owner wants them as a release gate.
+3. Phase U4 (the `Take` component: waveform, level meter, playback) is next and is the largest remaining visual piece. It must stay lazy: JS headroom on the form routes is about 1.5 KB.
+4. `/graphify --update` for the plan docs is still pending.
 
 ---
 
