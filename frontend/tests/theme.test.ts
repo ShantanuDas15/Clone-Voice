@@ -116,8 +116,8 @@ describe("design-token guardrails", () => {
 
   it("builds buttons and messages from the ui primitives, not ad-hoc recipes", () => {
     const outside = FILES.filter((f) => !f.includes(path.join("components", "ui")));
-    // Form controls (input/select) keep their own recipe until the Field primitive lands (U0.4 part 2).
-    const recipe = /bg-primary px-|border border-line px-|text-sm text-danger|"text-danger"/;
+    const recipe =
+      /bg-primary px-|border border-line px-|border-line bg-surface|text-sm text-danger|"text-danger"/;
     expect(outside.filter((f) => recipe.test(read(f)))).toEqual([]);
   });
 });
