@@ -33,6 +33,8 @@ export function createQueryClient(): QueryClient {
         retry: shouldRetryQuery,
         retryDelay,
         refetchOnWindowFocus: true,
+        // Even fresh data is re-read after being offline: anything may have changed meanwhile.
+        refetchOnReconnect: "always",
         staleTime: 30_000,
       },
       mutations: { retry: false },

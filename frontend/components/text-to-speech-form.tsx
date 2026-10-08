@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
 import { HISTORY_KEY, PROFILES_KEY, useProfiles } from "@/hooks/use-voice-profiles";
 import { useDegraded } from "@/hooks/use-health";
+import { useOnline } from "@/hooks/use-online";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { useCooldown, useElapsedSeconds } from "@/hooks/use-timers";
 import { type SynthesisResult, synthesize } from "@/lib/api/synthesize";
@@ -62,6 +63,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const inFlight = useRef(false);
   const cooldown = useCooldown();
   const degraded = useDegraded();
+  const online = useOnline();
 
   const mutation = useMutation({
     mutationFn: (vars: { voiceId: string; text: string; signal: AbortSignal }) =>
@@ -153,8 +155,9 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
 
   // Why Generate is unavailable, shown next to the button (UR4). While the list loads we don't
   // block; the server still enforces both rules.
-  const blocker =
-    user && !profiles.isPending
+  const blocker = !online
+    ? "You're offline."
+    : user && !profiles.isPending
       ? firstRun({
           emailVerified: Boolean(user.email_verified_at),
           hasReadyVoice: (profiles.data ?? []).some((p) => p.status === "ready"),

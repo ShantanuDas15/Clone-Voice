@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { AudioPlayer } from "@/components/audio-player";
@@ -8,7 +9,7 @@ import { useObjectUrl } from "@/hooks/use-object-url";
 import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 const PREVIEW_CHARS = 140;
 
@@ -140,9 +141,14 @@ export function HistoryList() {
   const items = flattenHistory(data.pages);
   if (items.length === 0) {
     return (
-      <p className="text-muted-foreground">
-        Nothing generated yet. Speech you create on the dashboard will appear here.
-      </p>
+      <div className="space-y-3">
+        <p className="text-muted-foreground">
+          Nothing generated yet. Speech you create will appear here.
+        </p>
+        <Link href="/generate" className={buttonVariants()}>
+          Generate speech
+        </Link>
+      </div>
     );
   }
 
