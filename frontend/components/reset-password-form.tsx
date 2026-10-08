@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
-import { TextField } from "@/components/form-fields";
+import { PasswordField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { resetPassword } from "@/lib/api/auth";
 import { useFragmentToken } from "@/lib/auth/fragment";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { clearSession } from "@/lib/auth/session";
 import { ApiError } from "@/lib/errors";
-import { type ResetValues, resetSchema } from "@/lib/validation/auth";
+import { PASSWORD_MAX, PASSWORD_MIN, type ResetValues, resetSchema } from "@/lib/validation/auth";
 import { Alert } from "@/components/ui/alert";
 
 type View = "checking" | "form" | "incomplete" | "invalid" | "done";
@@ -83,9 +83,9 @@ export function ResetPasswordForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
-      <TextField
+      <PasswordField
         label="New password"
-        type="password"
+        hint={`${PASSWORD_MIN} to ${PASSWORD_MAX} characters`}
         autoComplete="new-password"
         error={errors.password?.message}
         {...register("password")}

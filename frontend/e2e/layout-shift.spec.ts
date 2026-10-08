@@ -39,7 +39,7 @@ test.describe("header does not shift when the session resolves (CLS)", () => {
         await observeShifts(page);
         await slowRefresh(page);
         await page.goto("/login");
-        await expect(page.getByRole("link", { name: "Sign up" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Create account" })).toBeVisible();
         expect(await cls(page)).toBeLessThan(0.05);
       });
 

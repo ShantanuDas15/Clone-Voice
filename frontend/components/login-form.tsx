@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth-provider";
-import { TextField } from "@/components/form-fields";
+import { PasswordField, TextField } from "@/components/form-fields";
+import { OrDivider } from "@/components/or-divider";
 import { Button } from "@/components/ui/button";
 import { GoogleButton } from "@/components/google-button";
 import { googleErrorMessage } from "@/lib/auth/google-errors";
@@ -61,6 +62,7 @@ export function LoginForm() {
     <form onSubmit={onSubmit} noValidate className="space-y-4">
       {callbackError && <Alert tone="danger">{callbackError}</Alert>}
       <GoogleButton />
+      <OrDivider>or use email</OrDivider>
       <TextField
         label="Email"
         type="email"
@@ -68,9 +70,8 @@ export function LoginForm() {
         error={errors.email?.message}
         {...register("email")}
       />
-      <TextField
+      <PasswordField
         label="Password"
-        type="password"
         autoComplete="current-password"
         error={errors.password?.message}
         {...register("password")}

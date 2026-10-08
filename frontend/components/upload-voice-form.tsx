@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { useAuth } from "@/components/auth-provider";
 import { AudioUploader } from "@/components/audio-uploader";
 import { TextField } from "@/components/form-fields";
 import { useDegraded } from "@/hooks/use-health";
@@ -68,6 +69,8 @@ export function UploadVoiceForm() {
     setRecordingUnavailable(support.supported ? null : support.reason);
   }, []);
 
+  const { user } = useAuth();
+  const unverified = user !== null && !user.email_verified_at;
   const upload = useMutation({
     mutationFn: () =>
       uploadProfile(
@@ -195,31 +198,27 @@ export function UploadVoiceForm() {
           <span>
             I confirm I have the right to use this voice sample and will follow the acceptable-use
             terms
-            {terms.data && (
+            {terms.data?.url && (
               <>
                 {" "}
-                (version {terms.data.version}
-                {terms.data.url ? (
-                  <>
-                    ,{" "}
-                    <a
-                      href={terms.data.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      read the terms
-                    </a>
-                  </>
-                ) : (
-                  <>; the full terms page is not published yet</>
-                )}
+                (version {terms.data.version},{" "}
+                <a
+                  href={terms.data.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  read the terms
+                </a>
                 )
               </>
             )}
             .
           </span>
         </label>
+        {terms.data && !terms.data.url && (
+          <p className="mt-1 text-xs text-muted-foreground">Terms are being finalised.</p>
+        )}
         {consentError && (
           <Alert tone="danger" className="mt-1">
             {consentError}
@@ -256,9 +255,21 @@ export function UploadVoiceForm() {
           Uploading is paused while the service recovers. This page will update on its own.
         </p>
       )}
-      <Button type="submit" disabled={pending || degraded} loading={pending}>
-        {pending ? "Working…" : "Create voice"}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="submit"
+          disabled={pending || degraded || unverified}
+          aria-describedby={unverified ? "upload-blocked" : undefined}
+          loading={pending}
+        >
+          {pending ? "Creating voice…" : "Create voice"}
+        </Button>
+        {unverified && (
+          <p id="upload-blocked" className="text-sm text-muted-foreground">
+            Verify your email first.
+          </p>
+        )}
+      </div>
     </form>
   );
 }

@@ -34,11 +34,14 @@ export function UserMenu() {
   if (status === "unauthenticated") {
     return (
       <div className="flex min-h-11 items-center gap-4 text-sm">
-        <Link href="/login" className="underline-offset-4 hover:underline">
+        <Link
+          href="/login"
+          className="inline-flex min-h-11 items-center underline-offset-4 hover:underline"
+        >
           Sign in
         </Link>
         <Link href="/signup" className={buttonVariants({ size: "sm" })}>
-          Sign up
+          Create account
         </Link>
       </div>
     );

@@ -29,7 +29,7 @@ export function VoiceProfileSelect({ value, onChange, disabled }: Props) {
         disabled={disabled || isPending || ready.length === 0}
         onChange={(e) => onChange(e.target.value)}
       >
-        <option value="">{isPending ? "Loading…" : "Choose a voice"}</option>
+        <option value="">{isPending ? "Loading voices…" : "Choose a voice"}</option>
         {ready.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}

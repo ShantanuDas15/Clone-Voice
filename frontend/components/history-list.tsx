@@ -69,7 +69,11 @@ function Playback({ gen }: { gen: Generation }) {
         onClick={() => void load()}
         disabled={state.phase === "loading"}
       >
-        {state.phase === "loading" ? "Loading…" : state.phase === "error" ? "Try again" : "Play"}
+        {state.phase === "loading"
+          ? "Loading audio…"
+          : state.phase === "error"
+            ? "Try again"
+            : "Play"}
       </Button>
       {state.phase === "error" && (
         <p role="alert" className="text-sm">
@@ -155,7 +159,7 @@ export function HistoryList() {
           onClick={() => void fetchNextPage()}
           disabled={isFetchingNextPage}
         >
-          {isFetchingNextPage ? "Loading…" : "Load more"}
+          {isFetchingNextPage ? "Loading more…" : "Load more"}
         </Button>
       )}
     </div>
