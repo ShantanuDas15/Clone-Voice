@@ -324,7 +324,7 @@ describe("TextToSpeechForm", () => {
     expect(screen.getByRole("link", { name: "Download WAV" })).toBeInTheDocument();
   });
 
-  it("points unverified users to verification without blocking the server's answer", async () => {
+  it("leaves the verification notice to the page-level alert and does not block the server's answer", async () => {
     server.use(
       mswHttp.post(`${API}/auth/refresh`, () => HttpResponse.json(fixtures.token)),
       mswHttp.get(`${API}/auth/me`, () =>
@@ -332,6 +332,7 @@ describe("TextToSpeechForm", () => {
       ),
     );
     wrap(<TextToSpeechForm />);
-    expect(await screen.findByText(/verify your email address to generate/i)).toBeInTheDocument();
+    await screen.findByLabelText("Text");
+    expect(screen.queryByText(/verify your email/i)).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { VerificationBanner } from "@/components/verification-banner";
+import { MobileTabs } from "@/components/mobile-tabs";
 import { UserMenu } from "@/components/user-menu";
 import { DegradedBanner } from "@/components/degraded-banner";
 import { Logo } from "@/components/logo";
@@ -39,9 +39,9 @@ export function AppShell({ children, theme }: { children: ReactNode; theme: Them
       <footer className="border-t border-border px-4 py-6 text-center text-sm text-muted-foreground">
         Generated voices are AI-synthesized. Use only voices you have consent to clone.
       </footer>
-      {/* After the footer, sticky: it appears once the session resolves, and anything above it
-          would be pushed down (CLS). Here it only extends the page. */}
-      <VerificationBanner />
+      {/* After the footer: fixed bar plus a spacer, so it appears with the session without moving
+          anything above it (CLS). */}
+      <MobileTabs />
     </>
   );
 }

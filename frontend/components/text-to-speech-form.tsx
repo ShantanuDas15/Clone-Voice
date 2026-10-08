@@ -3,9 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { useAuth } from "@/components/auth-provider";
 import { AudioPlayer } from "@/components/audio-player";
-import { ResendVerification } from "@/components/resend-verification";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
 import { HISTORY_KEY, PROFILES_KEY } from "@/hooks/use-voice-profiles";
 import { useDegraded } from "@/hooks/use-health";
@@ -48,7 +46,6 @@ function errorMessage(e: ApiError): string {
 
 /** Pick a voice, enter text, generate, then play or download the result. */
 export function TextToSpeechForm() {
-  const { user } = useAuth();
   const client = useQueryClient();
   const initial = getDraft();
   const [voiceId, setVoiceId] = useState(initial.voiceId);
@@ -136,22 +133,16 @@ export function TextToSpeechForm() {
     }
   }
 
-  const unverified = user !== null && !user.email_verified_at;
   const warnChars = hasLikelyUnsupportedChars(text);
 
   return (
-    <div className="space-y-6">
+    <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
       <form
         onSubmit={onSubmit}
         noValidate
         className="max-w-xl space-y-4"
         aria-label="Generate speech"
       >
-        {unverified && (
-          <p className="text-sm">
-            Verify your email address to generate speech. <ResendVerification />
-          </p>
-        )}
         <VoiceProfileSelect value={voiceId} onChange={setVoiceId} disabled={pending} />
 
         <div>

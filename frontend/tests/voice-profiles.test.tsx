@@ -393,7 +393,7 @@ describe("UploadVoiceForm", () => {
     await screen.findByText(/created\./i);
   });
 
-  it("nudges unverified users to verify (server still enforces)", async () => {
+  it("leaves the verification notice to the page-level alert (no duplicate in the form)", async () => {
     server.use(
       mswHttp.post(`${API}/auth/refresh`, () => HttpResponse.json(fixtures.token)),
       mswHttp.get(`${API}/auth/me`, () =>
@@ -401,6 +401,8 @@ describe("UploadVoiceForm", () => {
       ),
     );
     wrap(<UploadVoiceForm />);
-    expect(await screen.findByText(/verify your email address to upload/i)).toBeInTheDocument();
+    await screen.findByLabelText("Voice name");
+    expect(screen.queryByText(/verify your email/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "Create voice" })).toBeEnabled();
   });
 });

@@ -10,7 +10,7 @@ import { ForgotPasswordForm } from "@/components/forgot-password-form";
 import { GoogleCallback } from "@/components/google-callback";
 import { LoginForm } from "@/components/login-form";
 import { ResetPasswordForm } from "@/components/reset-password-form";
-import { VerificationBanner } from "@/components/verification-banner";
+import { VerifyEmailAlert } from "@/components/verify-email-alert";
 import { VerifyEmailView } from "@/components/verify-email-view";
 import { __resetSessionForTests, getAccessToken, handleChannelMessage } from "@/lib/auth/session";
 import { fixtures } from "@/mocks/handlers";
@@ -107,13 +107,13 @@ describe("VerifyEmailView", () => {
   });
 });
 
-describe("VerificationBanner / resend", () => {
+describe("VerifyEmailAlert / resend", () => {
   beforeEach(() =>
     server.use(mswHttp.post(`${API}/auth/refresh`, () => HttpResponse.json(fixtures.token))),
   );
 
   it("is hidden for verified users", async () => {
-    const { container } = wrap(<VerificationBanner />);
+    const { container } = wrap(<VerifyEmailAlert />);
     await new Promise((r) => setTimeout(r, 60));
     expect(container).toBeEmptyDOMElement();
   });
@@ -125,7 +125,7 @@ describe("VerificationBanner / resend", () => {
         HttpResponse.json({ detail: "Email already verified" }, { status: 200 }),
       ),
     );
-    wrap(<VerificationBanner />);
+    wrap(<VerifyEmailAlert />);
     await userEvent.click(await screen.findByRole("button", { name: /resend verification/i }));
     expect(await screen.findByText(/email sent/i)).toBeInTheDocument();
   });
@@ -137,14 +137,14 @@ describe("VerificationBanner / resend", () => {
         HttpResponse.json({ error: "Rate limit exceeded: 5 per 1 hour" }, { status: 429 }),
       ),
     );
-    wrap(<VerificationBanner />);
+    wrap(<VerifyEmailAlert />);
     await userEvent.click(await screen.findByRole("button", { name: /resend verification/i }));
     expect(await screen.findByText(/too many attempts/i)).toBeInTheDocument();
   });
 
   it("re-reads /me on window focus and hides once verified elsewhere", async () => {
     unverifiedUser();
-    wrap(<VerificationBanner />);
+    wrap(<VerifyEmailAlert />);
     await screen.findByRole("button", { name: /resend verification/i });
     server.use(mswHttp.get(`${API}/auth/me`, () => HttpResponse.json(fixtures.user)));
     window.dispatchEvent(new Event("focus"));
