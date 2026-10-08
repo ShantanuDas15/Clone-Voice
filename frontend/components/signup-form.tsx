@@ -8,10 +8,12 @@ import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth-provider";
 import { TextField } from "@/components/form-fields";
+import { Button } from "@/components/ui/button";
 import { GoogleButton } from "@/components/google-button";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { type SignupValues, signupSchema } from "@/lib/validation/auth";
+import { Alert } from "@/components/ui/alert";
 
 export function SignupForm() {
   const { signup, status } = useAuth();
@@ -93,18 +95,10 @@ export function SignupForm() {
           </Link>
         </p>
       )}
-      {formError && (
-        <p role="alert" className="text-sm text-danger">
-          {formError}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="min-h-11 w-full rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-60"
-      >
+      {formError && <Alert tone="danger">{formError}</Alert>}
+      <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
         {isSubmitting ? "Creating account…" : "Create account"}
-      </button>
+      </Button>
       <p className="text-sm text-muted-foreground">
         Already have an account?{" "}
         <Link href="/login" className="underline">

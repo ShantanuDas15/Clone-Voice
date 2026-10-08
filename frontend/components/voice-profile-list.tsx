@@ -9,16 +9,13 @@ import { useDeleteProfile, useProfiles } from "@/hooks/use-voice-profiles";
 import type { VoiceProfile } from "@/lib/api/voice";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 function StatusChip({ status }: { status: string }) {
-  const label = status === "ready" ? "Ready" : status === "failed" ? "Failed" : "Processing";
-  const tone =
-    status === "ready"
-      ? "bg-muted text-foreground"
-      : status === "failed"
-        ? "bg-warning text-warning-foreground"
-        : "bg-muted text-muted-foreground";
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${tone}`}>{label}</span>;
+  if (status === "ready") return <Badge tone="success">Ready</Badge>;
+  if (status === "failed") return <Badge tone="notice">Failed</Badge>;
+  return <Badge>Processing</Badge>;
 }
 
 /** Modal confirmation for deleting a voice; traps focus and closes on Escape. */
@@ -48,21 +45,12 @@ function DeleteDialog({
         undone.
       </p>
       <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          autoFocus
-          className="min-h-11 rounded bg-primary px-4 text-primary-foreground"
-          onClick={onConfirm}
-        >
+        <Button variant="danger" autoFocus onClick={onConfirm}>
           Delete voice
-        </button>
-        <button
-          type="button"
-          className="min-h-11 rounded border border-line px-4"
-          onClick={onCancel}
-        >
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -87,13 +75,9 @@ export function VoiceProfileList() {
     return (
       <div role="alert" className="space-y-2">
         <p>We couldn&apos;t load your voices.</p>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="min-h-11 rounded border border-line px-3"
-        >
+        <Button variant="secondary" size="sm" onClick={() => void refetch()}>
           Try again
-        </button>
+        </Button>
       </div>
     );
   }
@@ -126,15 +110,15 @@ export function VoiceProfileList() {
                 </p>
               )}
             </div>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setConfirming(p)}
               disabled={remove.isPending && remove.variables === p.id}
-              className="min-h-11 rounded border border-line px-3 text-sm"
               aria-label={`Delete ${p.name}`}
             >
               Delete
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

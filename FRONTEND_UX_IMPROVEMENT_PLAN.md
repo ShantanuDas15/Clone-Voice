@@ -1,6 +1,6 @@
 # CloneVoice — Frontend Design, UI & UX Improvement Plan
 
-> **Status:** Planning document, now with owner decisions (§11, 2026-10-08) and the first slice of U0 implemented: brand mark, palette tokens, fonts and the theme toggle (commit recorded in `FRONTEND_IMPLEMENTATION_PLAN.md` > Task Status Log > FE-UX0). The rest of U0-U7 is not started.
+> **Status:** Planning document, now with owner decisions (§11, 2026-10-08) and the U0 implemented in two slices: brand mark, palette tokens, fonts and the theme toggle (FE-UX0), then the Button/Alert/Badge primitives and their migration (FE-UX1) (commits recorded in `FRONTEND_IMPLEMENTATION_PLAN.md` > Task Status Log). Remaining in U0: the `Field` and `Card` primitives (U0.4 part 2). U1-U7 are not started.
 > **Produced:** 2026-10-08 by following `frontend-ux-improvement-prompt.md`.
 > **Citation convention:** `path:line` = file opened this session (paths relative to `frontend/` unless stated).
 > `shot:<name>` = a screenshot captured this session (scratchpad, not committed). `Proposal:` = not in the repo. `Assumption:` = not verified.
@@ -317,8 +317,8 @@ New test types introduced: **visual regression** (Playwright `toHaveScreenshot`,
   - U0.1 Extend `app/globals.css` and `tailwind.config.ts` with the §4.2-4.6 tokens (`signal`, `danger`, `success`, `line`, `surface`, `ink-muted`, `notice`), light/dark, plus a `data-theme` override and a small theme toggle slot (UX-01, UX-24).
   - U0.2 Self-host IBM Plex Sans and Mono with `next/font/local`; add `fontFamily`, `fontSize`, `borderRadius`; apply to `<body>` (UX-02).
   - U0.3 Move control borders to `line` (≥3:1) in a shared Field/Button style (UX-03).
-  - U0.4 Build `components/ui/{button,field,alert,badge,card}.tsx` with the §4.7 states, including a `focus-visible` ring and a stated-reason disabled pattern (UX-09, UX-10).
-  - U0.5 Replace every inline recipe and every `text-red-600 dark:text-red-400` with the primitives and `text-danger`; delete `StatusChip` in favour of `Badge` (UX-01, UX-10).
+  - U0.4 **(Button, Alert, Badge done in FE-UX1; Field, Card still open)** Build `components/ui/{button,field,alert,badge,card}.tsx` with the §4.7 states, including a `focus-visible` ring and a stated-reason disabled pattern (UX-09, UX-10).
+  - U0.5 **(done for buttons, field-level and form-level errors, and StatusChip → Badge in FE-UX1; input/select recipes wait for Field)** Replace every inline recipe and every `text-red-600 dark:text-red-400` with the primitives and `text-danger`; delete `StatusChip` in favour of `Badge` (UX-01, UX-10).
   - U0.6 Replace the accent `243 75% 50%` with `signal`; document the swap point for a brand colour (UX-11).
 - **Files likely affected:** `app/globals.css`, `tailwind.config.ts`, `app/layout.tsx`, `components/form-fields.tsx`, `components/ui/*` (new), and every component that carries a button/error class (`login-form`, `signup-form`, `upload-voice-form`, `text-to-speech-form`, `voice-profile-list`, `history-list`, `recorder`, `account-section`, `audio-uploader`, `app-shell`, `user-menu`, banners).
 - **Edge cases:** dark mode parity; `forced-colors` (Windows high contrast): focus ring and borders must not rely on colour alone; reduced motion; no flash of unstyled text (size-adjusted fallback font); CSP: fonts self-hosted, no new origins.

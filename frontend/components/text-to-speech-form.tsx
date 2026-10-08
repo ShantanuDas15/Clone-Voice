@@ -16,6 +16,8 @@ import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { getDraft, saveDraft } from "@/lib/draft";
 import { ApiError } from "@/lib/errors";
 import { TEXT_MAX, hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 
 const BUSY_COOLDOWN_S = 15; // no Retry-After on "service busy" (G-05)
 const RATE_COOLDOWN_S = 60; // 5/min per IP
@@ -181,9 +183,9 @@ export function TextToSpeechForm() {
             </p>
           )}
           {textError && (
-            <p role="alert" className="mt-1 text-sm text-danger">
+            <Alert tone="danger" className="mt-1">
               {textError}
-            </p>
+            </Alert>
           )}
         </div>
 
@@ -193,11 +195,7 @@ export function TextToSpeechForm() {
             this page open.
           </div>
         )}
-        {formError && (
-          <p role="alert" className="text-sm text-danger">
-            {formError}
-          </p>
-        )}
+        {formError && <Alert tone="danger">{formError}</Alert>}
         {degraded && (
           <p role="status" className="text-sm">
             Generating is paused while the service recovers. This page will update on its own.
@@ -210,21 +208,17 @@ export function TextToSpeechForm() {
         )}
 
         <div className="flex gap-2">
-          <button
+          <Button
             type="submit"
             disabled={pending || degraded || cooldown.remaining > 0}
-            className="min-h-11 rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-60"
+            loading={pending}
           >
             {pending ? "Generating…" : "Generate speech"}
-          </button>
+          </Button>
           {pending && (
-            <button
-              type="button"
-              onClick={() => controller.current?.abort()}
-              className="min-h-11 rounded border border-line px-4"
-            >
+            <Button variant="secondary" onClick={() => controller.current?.abort()}>
               Cancel
-            </button>
+            </Button>
           )}
         </div>
       </form>

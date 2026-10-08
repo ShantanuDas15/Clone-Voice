@@ -23,6 +23,7 @@
   --primary: 177 82% 24%; /* #0B6E69 signal */
   --primary-foreground: 0 0% 100%;
   --danger: 4 76% 40%; /* #B42318 */
+  --danger-foreground: 0 0% 100%; /* text on a danger fill */
   --success: 150 59% 30%; /* #1F7A4D */
   --warning: 38 92% 90%;
   --warning-foreground: 26 80% 22%;
@@ -41,6 +42,7 @@
     --primary: 174 50% 57%; /* #5CC9BF */
     --primary-foreground: 167 29% 6%; /* #0B1412 */
     --danger: 5 100% 75%; /* #FF8A80 */
+    --danger-foreground: 167 29% 6%;
     --success: 146 53% 63%; /* #6FD39B */
     --warning: 38 60% 16%;
     --warning-foreground: 38 90% 85%;
@@ -59,6 +61,7 @@
   --primary: 174 50% 57%;
   --primary-foreground: 167 29% 6%;
   --danger: 5 100% 75%;
+  --danger-foreground: 167 29% 6%;
   --success: 146 53% 63%;
   --warning: 38 60% 16%;
   --warning-foreground: 38 90% 85%;

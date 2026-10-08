@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { resendVerification } from "@/lib/api/auth";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
+import { Button } from "@/components/ui/button";
 
 type State = { kind: "idle" } | { kind: "sent" } | { kind: "error"; message: string };
 
@@ -35,14 +36,9 @@ export function ResendVerification({ className }: { className?: string }) {
 
   return (
     <span className={className}>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={busy}
-        className="underline disabled:opacity-60"
-      >
+      <Button variant="quiet" size="sm" onClick={onClick} disabled={busy} loading={busy}>
         {busy ? "Sending…" : "Resend verification email"}
-      </button>
+      </Button>
       <span role="status" aria-live="polite" className="ml-2">
         {state.kind === "sent" && "Email sent. Check your inbox."}
         {state.kind === "error" && state.message}

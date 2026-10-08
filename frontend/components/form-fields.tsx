@@ -1,4 +1,5 @@
 import { type InputHTMLAttributes, forwardRef } from "react";
+import { Alert } from "@/components/ui/alert";
 
 interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -25,9 +26,9 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         {...props}
       />
       {error && (
-        <p id={`${inputId}-error`} role="alert" className="mt-1 text-sm text-danger">
+        <Alert tone="danger" id={`${inputId}-error`} className="mt-1">
           {error}
-        </p>
+        </Alert>
       )}
     </div>
   );
