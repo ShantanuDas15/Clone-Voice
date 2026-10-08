@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { AudioPlayer } from "@/components/audio-player";
+import { Take } from "@/components/take";
 import { useAuth } from "@/components/auth-provider";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
 import { HISTORY_KEY, PROFILES_KEY, useProfiles } from "@/hooks/use-voice-profiles";
@@ -269,7 +269,12 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             <span className="text-sm font-normal text-muted-foreground">(AI-generated voice)</span>
           </h2>
           <p className="text-sm text-muted-foreground">“{result.text}”</p>
-          <AudioPlayer src={audioUrl} filename={result.filename} label="Generated speech" />
+          <Take
+            src={audioUrl}
+            blob={result.blob}
+            filename={result.filename}
+            label="Generated speech"
+          />
           <div className="flex flex-wrap gap-2 pt-1">
             <Button
               variant="secondary"
