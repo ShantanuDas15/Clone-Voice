@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { AudioPlayer } from "@/components/audio-player";
+import { Take } from "@/components/take";
 import { flattenHistory, useHistory } from "@/hooks/use-history";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
@@ -54,8 +54,9 @@ function Playback({ gen }: { gen: Generation }) {
   }
   if (state.phase === "ready") {
     return url ? (
-      <AudioPlayer
+      <Take
         src={url}
+        blob={state.blob}
         filename={`clonevoice-${gen.id}.wav`}
         label={`Generated audio from ${formatDateTime(gen.created_at)}`}
         autoPlay

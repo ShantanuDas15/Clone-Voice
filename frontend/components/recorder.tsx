@@ -11,6 +11,7 @@ import {
   recordingToFile,
 } from "@/lib/recording";
 import { Button } from "@/components/ui/button";
+import { Take } from "@/components/take";
 
 interface RecorderProps {
   /** Called with the finished take, or null when it is discarded or fails. */
@@ -80,8 +81,13 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
         <>
           <p role="status">Recorded {formatClock(state.seconds)}. Listen before you upload.</p>
           {previewUrl && (
-            // eslint-disable-next-line jsx-a11y/media-has-caption -- the user's own voice sample
-            <audio controls src={previewUrl} aria-label="Recording preview" className="w-full" />
+            <Take
+              src={previewUrl}
+              blob={state.blob}
+              filename="recording.webm"
+              label="Recording preview"
+              hideDownload
+            />
           )}
           <Button variant="secondary" onClick={discard} disabled={disabled}>
             Discard and re-record

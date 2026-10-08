@@ -142,7 +142,9 @@ describe("HistoryList", () => {
   it("fetches audio with auth on play and revokes the object URL on unmount", async () => {
     const view = wrap(<HistoryList />);
     await userEvent.click(await screen.findByRole("button", { name: "Play" }));
-    expect(await screen.findByLabelText(/generated audio from/i)).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText(/generated audio from/i, { selector: "audio" }),
+    ).toBeInTheDocument();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     view.unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
