@@ -4,6 +4,8 @@
  * does the I/O.
  */
 
+import { getDomain } from "tldts";
+
 export type Level = "pass" | "warn" | "fail";
 
 export interface CheckResult {
@@ -26,15 +28,13 @@ export function lowerHeaders(h: Headers): Headers {
 }
 
 /**
- * Approximate registrable domain: the last two labels, or the whole host for localhost and IPs.
- * It does not consult the public-suffix list, so `a.co.uk` and `b.co.uk` would wrongly look
- * same-site; the check reports it as a warning-grade heuristic.
+ * Registrable domain (eTLD+1) from the public-suffix list, the same list browsers use to decide
+ * "same-site". Private suffixes (`railway.app`, `vercel.app`) count as suffixes, so two apps on
+ * one shared host are correctly different sites. Hosts without a registrable domain (localhost,
+ * IPs, single labels) are returned whole.
  */
 export function registrableDomain(hostname: string): string {
-  if (hostname === "localhost" || /^[\d.]+$/.test(hostname) || hostname.includes(":")) {
-    return hostname;
-  }
-  return hostname.split(".").slice(-2).join(".");
+  return getDomain(hostname, { allowPrivateDomains: true }) ?? hostname;
 }
 
 /** The refresh cookie is SameSite=Lax, so it is only sent when both ends share a site. */

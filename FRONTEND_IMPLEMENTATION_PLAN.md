@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
-> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-07.
+> **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
+> **Last reviewed:** 2026-10-08.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -493,7 +493,7 @@ Legend: ✅ Done and verified · 🟡 Partial (works, named gap remains) · ⬜ 
 | 5 — History & account | 🟡 Partial | `40a05a7` | All app code (F19-F22) and unit/integration tests done; e2e and real-backend run not done. Details below. |
 | 6 — In-browser recording | 🟡 Partial | `67aac76` | Recorder, state machine, form integration and unit/integration tests done; e2e, real-browser recording and level meter not done. Details below. |
 | 7 — Hardening | 🟡 Partial | `bc5210f`, `e1a8561`, `13ca9b1`, `856ef58`, `7b69166`, `a5a1165`, `0fbbdd8`, `5b2e25c`, `4186e42`, `3ace3f4`, `fe91eb6`, `e112ca0`, `86ce187` | CSP, axe (jsdom and real browser), guardrail tests, responsive and resilience audits, a 33-test Playwright suite against the real backend, and OpenAPI contract tests and modal-dialog focus management and a Lighthouse budget gate and a Firefox e2e project and PII-scrubbed error reporting with web vitals (and a header CLS fix) done; Safari, the screen-reader pass, a real Sentry project and sourcemaps not done. Details below. |
-| 8 — Release | 🟡 Preparation only | `d012995` | Smoke script (`npm run smoke`) and `frontend/RUNBOOK.md` done and exercised against a local stack. Nothing deployed: needs hosting, a domain, real email and Google registration, and owner decisions Q3, Q4, Q8. Details below. |
+| 8 — Release | 🟡 Preparation only | `d012995`, `a56d97f` | Smoke script (`npm run smoke`) and `frontend/RUNBOOK.md` done and exercised against a local stack. Nothing deployed: needs hosting, a domain, real email and Google registration, and owner decisions Q3, Q4, Q8. Details below. |
 
 ### FE-P0 — Phase 0 (2026-10-06, branch `feat/FE-P0-foundation`)
 
@@ -917,6 +917,21 @@ Closes FE-P7g open item 1. Chosen over the other candidates (WebKit needs `sudo`
 **Open items from FE-P7n**
 1. The error message still says "Allowed: WAV, MP3, WEBM." (accurate: the alias is a name for WAV, not a new format). Other WAV aliases a client might send (for example `audio/vnd.wave` with unusual parameters is handled; `audio/x-pn-wav` is not) are untouched.
 2. Everything else is unchanged: Safari/WebKit (needs `sudo npx playwright install-deps`), the manual NVDA/VoiceOver and keyboard pass, e2e in CI, Phase 8 (owner decisions: hosting, domain, email, Google, Sentry, Q1/Q3/Q4/Q8), SQLite vs Postgres, ffmpeg recording decode.
+
+### FE-P8b — smoke same-site check uses the public-suffix list (2026-10-08, branch `fix/FE-P8b-public-suffix-samesite`, commit `a56d97f`)
+
+Closes FE-P8a open item 1. Chosen as the next step because every other remaining item needs a person, hosting, or a browser this host cannot run, while this one was small, testable and made the Phase 8 smoke check trustworthy (a false "same-site" pass would hide the exact cookie failure G-13 describes).
+
+| Area | Status | Evidence |
+|---|---|---|
+| `registrableDomain` | ✅ | `frontend/smoke/lib.mts` now calls `tldts.getDomain(host, { allowPrivateDomains: true })` instead of taking the last two labels. Private suffixes count (as browsers treat them for SameSite), so two tenants of `*.up.railway.app` are different sites; `a.co.uk` vs `b.co.uk` now fails; `localhost`, IPs and IPv6 are returned whole. `tldts` added as a devDependency (it was already in the tree via jsdom and msw). |
+| Tests | ✅ | `tests/smoke.test.ts` 16 → 18 tests: multi-label suffix, private suffix, IPv6, and the pass/fail pairs for `checkSameSite`. The new fail cases would pass wrongly under the old two-label logic. |
+
+**Verification run (local, Node 24):** `npm test` → 28 files, **333 passed** (2 new); `typecheck`, `lint`, `format:check` clean; `node smoke/run.mts` with no args still loads and exits 2. Smoke script not re-run against a live stack (only the pure check changed). Backend untouched. `npm audit --omit=dev` still reports the known Next 14 advisories (Q8).
+
+**Open items from FE-P8b**
+1. The public-suffix data is whatever the installed `tldts` ships; refresh it with `npm update tldts` before a release.
+2. Everything else from FE-P8a item 2-3 stands: Phase 8 proper needs the owner (hosting, same-site domain, real email, Google redirect, Sentry, Q1/Q3/Q4/Q8); Safari, the manual screen-reader pass, e2e in CI, SQLite vs Postgres, ffmpeg recording decode.
 
 ---
 
