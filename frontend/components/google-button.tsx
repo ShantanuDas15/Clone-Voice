@@ -1,3 +1,4 @@
+import { buttonVariants } from "@/components/ui/button";
 import { env } from "@/lib/env";
 import { googleStartUrl } from "@/lib/api/auth";
 
@@ -6,7 +7,7 @@ export function GoogleButton() {
   return (
     <a
       href={googleStartUrl(env.NEXT_PUBLIC_API_BASE_URL)}
-      className="flex min-h-11 w-full items-center justify-center rounded border border-line px-4 py-2"
+      className={buttonVariants({ variant: "secondary", fullWidth: true })}
     >
       Continue with Google
     </a>

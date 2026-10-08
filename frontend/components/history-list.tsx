@@ -8,6 +8,7 @@ import { useObjectUrl } from "@/hooks/use-object-url";
 import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
+import { Button } from "@/components/ui/button";
 
 const PREVIEW_CHARS = 140;
 
@@ -62,14 +63,14 @@ function Playback({ gen }: { gen: Generation }) {
   }
   return (
     <div className="space-y-1">
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => void load()}
         disabled={state.phase === "loading"}
-        className="min-h-11 rounded border border-line px-3 text-sm"
       >
         {state.phase === "loading" ? "Loading…" : state.phase === "error" ? "Try again" : "Play"}
-      </button>
+      </Button>
       {state.phase === "error" && (
         <p role="alert" className="text-sm">
           {state.message}
@@ -89,14 +90,14 @@ function HistoryItem({ gen }: { gen: Generation }) {
     <li className="space-y-2 rounded border border-border p-3">
       <p className="whitespace-pre-wrap break-words">{text}</p>
       {long && (
-        <button
-          type="button"
+        <Button
+          variant="quiet"
+          size="sm"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="min-h-11 text-sm underline"
         >
           {expanded ? "Show less" : "Show more"}
-        </button>
+        </Button>
       )}
       <p className="text-sm text-muted-foreground">
         {gen.voice_profile_name} · {formatDateTime(gen.created_at)}
@@ -125,13 +126,9 @@ export function HistoryList() {
     return (
       <div role="alert" className="space-y-2">
         <p>We couldn&apos;t load your history.</p>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="min-h-11 rounded border border-line px-3"
-        >
+        <Button variant="secondary" size="sm" onClick={() => void refetch()}>
           Try again
-        </button>
+        </Button>
       </div>
     );
   }
@@ -153,14 +150,13 @@ export function HistoryList() {
         ))}
       </ul>
       {hasNextPage && (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => void fetchNextPage()}
           disabled={isFetchingNextPage}
-          className="min-h-11 rounded border border-line px-4"
         >
           {isFetchingNextPage ? "Loading…" : "Load more"}
-        </button>
+        </Button>
       )}
     </div>
   );

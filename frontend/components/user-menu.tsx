@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 /** Header account controls: sign-in links, or the user's name and a sign-out button. */
 export function UserMenu() {
@@ -27,7 +28,7 @@ export function UserMenu() {
         <Link href="/login" className="underline-offset-4 hover:underline">
           Sign in
         </Link>
-        <Link href="/signup" className="rounded bg-primary px-3 py-1.5 text-primary-foreground">
+        <Link href="/signup" className={buttonVariants({ size: "sm" })}>
           Sign up
         </Link>
       </div>
@@ -45,16 +46,16 @@ export function UserMenu() {
       <span className="hidden max-w-[10rem] truncate text-muted-foreground sm:inline">
         {user?.name}
       </span>
-      <button
-        type="button"
-        className="min-h-11 rounded border border-line px-3"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={async () => {
           await logout();
           router.replace("/");
         }}
       >
         Sign out
-      </button>
+      </Button>
     </div>
   );
 }

@@ -14,6 +14,8 @@ import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { DELETE_CONFIRMATION, type NameValues, nameSchema } from "@/lib/validation/auth";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 
 function NameForm() {
   const { user, applyUser } = useAuth();
@@ -58,13 +60,9 @@ function NameForm() {
         error={errors.name?.message}
         {...register("name")}
       />
-      <button
-        type="submit"
-        disabled={isSubmitting || !isDirty}
-        className="min-h-11 rounded bg-primary px-4 text-primary-foreground disabled:opacity-60"
-      >
+      <Button type="submit" disabled={isSubmitting || !isDirty}>
         {isSubmitting ? "Saving…" : "Save name"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -158,14 +156,9 @@ function DeleteAccount() {
         This permanently erases your account, every voice and every generated clip. It can&apos;t be
         undone.
       </p>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        className="min-h-11 rounded border border-line px-4"
-      >
+      <Button variant="secondary" onClick={() => setOpen(true)} aria-haspopup="dialog">
         Delete my account…
-      </button>
+      </Button>
       {open && (
         <ModalPanel onClose={cancel} closeDisabled={busy}>
           <h3 id="del-account-title" className="font-medium">
@@ -191,28 +184,14 @@ function DeleteAccount() {
               it&apos;s you.
             </p>
           )}
-          {error && (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
-          )}
+          {error && <Alert tone="danger">{error}</Alert>}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void onDelete()}
-              disabled={!confirmed || busy}
-              className="min-h-11 rounded bg-primary px-4 text-primary-foreground disabled:opacity-60"
-            >
+            <Button variant="danger" onClick={() => void onDelete()} disabled={!confirmed || busy}>
               {busy ? "Deleting…" : "Delete account"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={cancel}
-              className="min-h-11 rounded border border-line px-4"
-            >
+            </Button>
+            <Button variant="secondary" disabled={busy} onClick={cancel}>
               Cancel
-            </button>
+            </Button>
           </div>
         </ModalPanel>
       )}

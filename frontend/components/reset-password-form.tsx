@@ -6,12 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { TextField } from "@/components/form-fields";
+import { Button } from "@/components/ui/button";
 import { resetPassword } from "@/lib/api/auth";
 import { useFragmentToken } from "@/lib/auth/fragment";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { clearSession } from "@/lib/auth/session";
 import { ApiError } from "@/lib/errors";
 import { type ResetValues, resetSchema } from "@/lib/validation/auth";
+import { Alert } from "@/components/ui/alert";
 
 type View = "checking" | "form" | "incomplete" | "invalid" | "done";
 
@@ -95,18 +97,10 @@ export function ResetPasswordForm() {
         error={errors.confirm?.message}
         {...register("confirm")}
       />
-      {formError && (
-        <p role="alert" className="text-sm text-danger">
-          {formError}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="min-h-11 w-full rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-60"
-      >
+      {formError && <Alert tone="danger">{formError}</Alert>}
+      <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
         {isSubmitting ? "Saving…" : "Set new password"}
-      </button>
+      </Button>
     </form>
   );
 }

@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 
 import { formatBytes } from "@/lib/format";
 import { validateAudioFile } from "@/lib/validation/audio";
+import { Alert } from "@/components/ui/alert";
 
 interface AudioUploaderProps {
   file: File | null;
@@ -67,9 +68,9 @@ export function AudioUploader({ file, onChange, disabled, error }: AudioUploader
         )}
       </div>
       {shownError && (
-        <p id={`${id}-error`} role="alert" className="mt-1 text-sm text-danger">
+        <Alert tone="danger" id={`${id}-error`} className="mt-1">
           {shownError}
-        </p>
+        </Alert>
       )}
     </div>
   );

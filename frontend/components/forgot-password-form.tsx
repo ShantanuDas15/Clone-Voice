@@ -6,10 +6,12 @@ import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { TextField } from "@/components/form-fields";
+import { Button } from "@/components/ui/button";
 import { forgotPassword } from "@/lib/api/auth";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { type ForgotValues, forgotSchema } from "@/lib/validation/auth";
+import { Alert } from "@/components/ui/alert";
 
 /** Neutral by design: the same confirmation shows whether or not the account exists. */
 export function ForgotPasswordForm() {
@@ -64,18 +66,10 @@ export function ForgotPasswordForm() {
         error={errors.email?.message}
         {...register("email")}
       />
-      {formError && (
-        <p role="alert" className="text-sm text-danger">
-          {formError}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="min-h-11 w-full rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-60"
-      >
+      {formError && <Alert tone="danger">{formError}</Alert>}
+      <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
         {isSubmitting ? "Sending…" : "Send reset link"}
-      </button>
+      </Button>
     </form>
   );
 }

@@ -16,6 +16,8 @@ import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { detectRecordingSupport } from "@/lib/recording";
 import { voiceNameSchema } from "@/lib/validation/audio";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 
 // The recorder (MediaRecorder, permissions) loads only when someone chooses to record (§5.10).
 const Recorder = dynamic(() => import("@/components/recorder").then((m) => m.Recorder), {
@@ -182,11 +184,7 @@ export function UploadVoiceForm() {
         {mode === "record" && recordingUnavailable === null ? (
           <>
             <Recorder key={recorderKey} onChange={setFile} disabled={pending} />
-            {fileError && (
-              <p role="alert" className="text-sm text-danger">
-                {fileError}
-              </p>
-            )}
+            {fileError && <Alert tone="danger">{fileError}</Alert>}
           </>
         ) : (
           <AudioUploader file={file} onChange={setFile} disabled={pending} error={fileError} />
@@ -231,9 +229,9 @@ export function UploadVoiceForm() {
           </span>
         </label>
         {consentError && (
-          <p role="alert" className="mt-1 text-sm text-danger">
+          <Alert tone="danger" className="mt-1">
             {consentError}
-          </p>
+          </Alert>
         )}
       </div>
 
@@ -249,11 +247,7 @@ export function UploadVoiceForm() {
           )}
         </div>
       )}
-      {formError && (
-        <p role="alert" className="text-sm text-danger">
-          {formError}
-        </p>
-      )}
+      {formError && <Alert tone="danger">{formError}</Alert>}
       {created && (
         <p role="status" className="text-sm">
           Voice “{created}” created.
@@ -264,13 +258,9 @@ export function UploadVoiceForm() {
           Uploading is paused while the service recovers. This page will update on its own.
         </p>
       )}
-      <button
-        type="submit"
-        disabled={pending || degraded}
-        className="min-h-11 rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-60"
-      >
+      <Button type="submit" disabled={pending || degraded} loading={pending}>
         {pending ? "Working…" : "Create voice"}
-      </button>
+      </Button>
     </form>
   );
 }

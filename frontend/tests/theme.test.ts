@@ -113,6 +113,13 @@ describe("design-token guardrails", () => {
     );
     expect(offenders).toEqual([]);
   });
+
+  it("builds buttons and messages from the ui primitives, not ad-hoc recipes", () => {
+    const outside = FILES.filter((f) => !f.includes(path.join("components", "ui")));
+    // Form controls (input/select) keep their own recipe until the Field primitive lands (U0.4 part 2).
+    const recipe = /bg-primary px-|border border-line px-|text-sm text-danger|"text-danger"/;
+    expect(outside.filter((f) => recipe.test(read(f)))).toEqual([]);
+  });
 });
 
 /** WCAG 2.x contrast computed from the HSL tokens actually shipped in globals.css. */
@@ -174,6 +181,7 @@ describe("palette contrast (both themes)", () => {
         ["danger", "background"],
         ["success", "surface"],
         ["primary-foreground", "primary"],
+        ["danger-foreground", "danger"],
         ["warning-foreground", "warning"],
       ] as const) {
         expect(ratio(tok(t, fg), tok(t, bg)), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
