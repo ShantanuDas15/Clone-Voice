@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) and FE-UX2 (Input, Select, Textarea) implemented the same day.
+> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea) and FE-UX3 (route split and rename) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -985,6 +985,26 @@ The first implementation slice of `FRONTEND_UX_IMPROVEMENT_PLAN.md` (phase U0). 
 1. U0 is complete apart from U0.6 (document the `signal` swap point) and the visual-regression baseline; JS headroom on the form routes is about 2.3 KB, so `Dialog` (U3.1) should reuse existing code.
 2. Next phase is U1 (route split to Generate · Voices · History · Account, `NavLink`, mobile tab bar), which touches routes, e2e, smoke and RUNBOOK; it needs its own branch and a grep checklist.
 3. Run `/graphify --update` to refresh semantic nodes for the changed plan docs.
+
+### FE-UX3 — UX plan, U1.1/U1.2/U1.6: route split, rename, NavLink (2026-10-08, branch `feat/UX-U1-routes`, commit `78ff7b6`)
+
+Implements owner decision §11.2 (option C): `/profile` is split by job and the generator is renamed **Generate** (not "Studio").
+
+| Area | Status | Evidence |
+|---|---|---|
+| New routes | ✅ | `/generate` (was `/dashboard`), `/voices` (create form + list), `/history`, `/account`; each has exactly one `h1` and a matching title. Nav labels: Generate · Voices · History · Account. |
+| Old URLs | ✅ | `next.config.mjs` `redirects()`: `/dashboard` → `/generate`, `/profile` → `/voices`, permanent (308), query kept. Checked against the production server with curl (`/profile?tab=history` → `/voices?tab=history`). |
+| `next=` handling | ✅ | `lib/auth/next-path.ts`: default is `/generate`; the old paths in a `next=` are mapped; look-alikes such as `/profile-x` are not. Signup, Google callback, verify-email and the empty-voice link now point at the new routes. |
+| `NavLink` (UX-19) | ✅ | `components/nav-link.tsx`: `aria-current="page"` plus a bold underline (not colour alone). The "Create one" link in the voice picker is now a client-side `Link` instead of a full reload (part of UX-06). |
+| Tests | ✅ | `tests/navigation.test.tsx` (new), `tests/next-path.test.ts`, `tests/auth-ui.test.tsx`, `tests/auth-gate.test.tsx`, `tests/email-flows.test.tsx` updated. 13 e2e specs and `e2e/helpers.ts` updated by hand to the new routes (history check on `/history`, display-name checks on `/account`); `responsive.spec.ts` now covers all four routes. |
+
+**Verification run (local, Node 24):** `npm test` -> 32 files, **378 passed** (365 -> 378); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Production server with the API mocked, real Chromium, at 375 and 1280 px: each of the four routes renders one `h1`, marks exactly its own nav link `aria-current="page"`, and has zero horizontal overflow; `/dashboard` lands on `/generate`. `npm run perf` (median of 5) JS 180.9-197.8 KB, CLS 0, TBT <= 5 ms. **LCP flapped:** three runs each had one or two routes between 2.56 and 2.64 s (a different route each time, and the same routes passed at 1.96-2.26 s in the other runs). The public routes' JS changed by about 0.1 KB, so I read this as host noise, not a regression, but the LCP margin to 2.5 s is thin and the first CI `perf` run should be watched (already flagged in FE-UX0). Backend untouched. **The e2e suite was edited but NOT run** (needs the real backend and model weights), so the e2e route updates are unverified.
+
+**Open items from FE-UX3**
+1. Not done from U1: U1.3 mobile bottom tab bar (the header now has four nav links plus the menu, so on a phone it wraps to more rows; no overflow, but taller), U1.4 inline verification `Alert` replacing the sticky banner, U1.5 desktop two-column layouts.
+2. Run the e2e suite against the real stack before relying on the route edits; a missed reference would show up as a timeout, not a type error. `RUNBOOK.md`, `README.md` and `smoke/` had no references to the old routes (grep).
+3. Old routes work only through the redirect; nothing else links to them. Remove the redirects in a later release if no traffic uses them.
+4. `/graphify --update` is still needed for the changed plan docs.
 
 ---
 
