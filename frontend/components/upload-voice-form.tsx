@@ -170,7 +170,7 @@ export function UploadVoiceForm() {
                   setFile(null);
                   setFileError(undefined);
                 }}
-                className={`min-h-11 rounded border px-4 ${mode === m ? "border-primary bg-muted font-medium" : "border-border"}`}
+                className={`min-h-11 rounded border px-4 ${mode === m ? "border-primary bg-muted font-medium" : "border-line"}`}
               >
                 {m === "file" ? "Upload a file" : "Record now"}
               </button>
@@ -183,7 +183,7 @@ export function UploadVoiceForm() {
           <>
             <Recorder key={recorderKey} onChange={setFile} disabled={pending} />
             {fileError && (
-              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              <p role="alert" className="text-sm text-danger">
                 {fileError}
               </p>
             )}
@@ -231,7 +231,7 @@ export function UploadVoiceForm() {
           </span>
         </label>
         {consentError && (
-          <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="mt-1 text-sm text-danger">
             {consentError}
           </p>
         )}
@@ -250,7 +250,7 @@ export function UploadVoiceForm() {
         </div>
       )}
       {formError && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {formError}
         </p>
       )}

@@ -58,7 +58,7 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
       {callbackError && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {callbackError}
         </p>
       )}
@@ -78,7 +78,7 @@ export function LoginForm() {
         {...register("password")}
       />
       {formError && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {formError}
         </p>
       )}

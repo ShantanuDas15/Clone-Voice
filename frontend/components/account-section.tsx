@@ -162,7 +162,7 @@ function DeleteAccount() {
         type="button"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        className="min-h-11 rounded border border-border px-4"
+        className="min-h-11 rounded border border-line px-4"
       >
         Delete my account…
       </button>
@@ -192,7 +192,7 @@ function DeleteAccount() {
             </p>
           )}
           {error && (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
@@ -209,7 +209,7 @@ function DeleteAccount() {
               type="button"
               disabled={busy}
               onClick={cancel}
-              className="min-h-11 rounded border border-border px-4"
+              className="min-h-11 rounded border border-line px-4"
             >
               Cancel
             </button>

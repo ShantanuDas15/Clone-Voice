@@ -94,7 +94,7 @@ export function SignupForm() {
         </p>
       )}
       {formError && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {formError}
         </p>
       )}

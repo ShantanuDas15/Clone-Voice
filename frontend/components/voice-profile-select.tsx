@@ -26,7 +26,7 @@ export function VoiceProfileSelect({ value, onChange, disabled }: Props) {
         value={value}
         disabled={disabled || isPending || ready.length === 0}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 block min-h-11 w-full rounded border border-border bg-background px-3"
+        className="mt-1 block min-h-11 w-full rounded border border-line bg-surface px-3"
       >
         <option value="">{isPending ? "Loading…" : "Choose a voice"}</option>
         {ready.map((p) => (

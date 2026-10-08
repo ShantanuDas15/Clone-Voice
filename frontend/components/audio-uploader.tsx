@@ -43,7 +43,7 @@ export function AudioUploader({ file, onChange, disabled, error }: AudioUploader
           setDragging(false);
           if (!disabled) accept(e.dataTransfer.files[0]);
         }}
-        className={`mt-1 rounded border border-dashed p-4 text-sm ${dragging ? "border-primary bg-muted" : "border-border"}`}
+        className={`mt-1 rounded border border-dashed p-4 text-sm ${dragging ? "border-primary bg-muted" : "border-line"}`}
       >
         <input
           ref={inputRef}
@@ -67,7 +67,7 @@ export function AudioUploader({ file, onChange, disabled, error }: AudioUploader
         )}
       </div>
       {shownError && (
-        <p id={`${id}-error`} role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+        <p id={`${id}-error`} role="alert" className="mt-1 text-sm text-danger">
           {shownError}
         </p>
       )}

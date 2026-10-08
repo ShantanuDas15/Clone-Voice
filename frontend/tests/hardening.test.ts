@@ -20,11 +20,25 @@ describe("security guardrails (Definition of Done 5, 9)", () => {
     expect(APP_FILES.filter((f) => read(f).includes("dangerouslySetInnerHTML"))).toEqual([]);
   });
 
+  // The one sanctioned exception is the non-secret theme preference in lib/theme.ts (below).
+  const THEME_FILE = path.join("lib", "theme.ts");
+
   it("never touches browser storage or cookies (the access token is memory-only)", () => {
-    const offenders = APP_FILES.filter((f) =>
-      /\b(localStorage|sessionStorage|indexedDB|document\.cookie)\b/.test(read(f)),
+    const offenders = APP_FILES.filter(
+      (f) =>
+        f !== THEME_FILE &&
+        /\b(localStorage|sessionStorage|indexedDB|document\.cookie)\b/.test(read(f)),
     );
     expect(offenders).toEqual([]);
+  });
+
+  it("writes only the theme-preference cookie, and never touches storage, in lib/theme.ts", () => {
+    const src = read(THEME_FILE);
+    expect(src).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\b/);
+    const writes = src.match(/document\.cookie\s*=/g) ?? [];
+    expect(writes).toHaveLength(1);
+    expect(src).toContain("THEME_COOKIE");
+    expect(src).not.toMatch(/(access|refresh).?token|password|email/i);
   });
 
   it("only exposes the documented NEXT_PUBLIC_ variables", () => {
