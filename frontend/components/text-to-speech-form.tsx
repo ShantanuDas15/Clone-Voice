@@ -4,8 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { AudioPlayer } from "@/components/audio-player";
+import { useAuth } from "@/components/auth-provider";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
-import { HISTORY_KEY, PROFILES_KEY } from "@/hooks/use-voice-profiles";
+import { HISTORY_KEY, PROFILES_KEY, useProfiles } from "@/hooks/use-voice-profiles";
 import { useDegraded } from "@/hooks/use-health";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { useCooldown, useElapsedSeconds } from "@/hooks/use-timers";
@@ -13,6 +14,7 @@ import { type SynthesisResult, synthesize } from "@/lib/api/synthesize";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { getDraft, saveDraft } from "@/lib/draft";
 import { ApiError } from "@/lib/errors";
+import { firstRun } from "@/lib/first-run";
 import { TEXT_MAX, hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -45,10 +47,12 @@ function errorMessage(e: ApiError): string {
 }
 
 /** Pick a voice, enter text, generate, then play or download the result. */
-export function TextToSpeechForm() {
+export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }) {
+  const { user } = useAuth();
+  const profiles = useProfiles();
   const client = useQueryClient();
   const initial = getDraft();
-  const [voiceId, setVoiceId] = useState(initial.voiceId);
+  const [voiceId, setVoiceId] = useState(initialVoiceId ?? initial.voiceId);
   const [text, setText] = useState(initial.text);
   const [textError, setTextError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
@@ -68,6 +72,13 @@ export function TextToSpeechForm() {
   const audioUrl = useObjectUrl(result?.blob ?? null);
 
   useEffect(() => saveDraft({ voiceId, text }), [voiceId, text]);
+
+  // A preselected or remembered voice that is gone (deleted, or not ready) must not linger as an
+  // invisible selection: clear it once the list is known.
+  useEffect(() => {
+    if (!voiceId || !profiles.data) return;
+    if (!profiles.data.some((p) => p.id === voiceId && p.status === "ready")) setVoiceId("");
+  }, [voiceId, profiles.data]);
 
   // R9: warn before leaving mid-generation.
   useEffect(() => {
@@ -135,6 +146,16 @@ export function TextToSpeechForm() {
 
   const warnChars = hasLikelyUnsupportedChars(text);
 
+  // Why Generate is unavailable, shown next to the button (UR4). While the list loads we don't
+  // block; the server still enforces both rules.
+  const blocker =
+    user && !profiles.isPending
+      ? firstRun({
+          emailVerified: Boolean(user.email_verified_at),
+          hasReadyVoice: (profiles.data ?? []).some((p) => p.status === "ready"),
+        }).blocker
+      : null;
+
   return (
     <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
       <form
@@ -201,11 +222,17 @@ export function TextToSpeechForm() {
         <div className="flex gap-2">
           <Button
             type="submit"
-            disabled={pending || degraded || cooldown.remaining > 0}
+            disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
+            aria-describedby={blocker ? "tts-blocked" : undefined}
             loading={pending}
           >
             {pending ? "Generating…" : "Generate speech"}
           </Button>
+          {blocker && (
+            <p id="tts-blocked" className="self-center text-sm text-muted-foreground">
+              {blocker}
+            </p>
+          )}
           {pending && (
             <Button variant="secondary" onClick={() => controller.current?.abort()}>
               Cancel

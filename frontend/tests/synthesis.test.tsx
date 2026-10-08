@@ -324,7 +324,7 @@ describe("TextToSpeechForm", () => {
     expect(screen.getByRole("link", { name: "Download WAV" })).toBeInTheDocument();
   });
 
-  it("leaves the verification notice to the page-level alert and does not block the server's answer", async () => {
+  it("disables Generate for an unverified user and says why next to the button", async () => {
     server.use(
       mswHttp.post(`${API}/auth/refresh`, () => HttpResponse.json(fixtures.token)),
       mswHttp.get(`${API}/auth/me`, () =>
@@ -332,7 +332,9 @@ describe("TextToSpeechForm", () => {
       ),
     );
     wrap(<TextToSpeechForm />);
-    await screen.findByLabelText("Text");
-    expect(screen.queryByText(/verify your email/i)).toBeNull();
+    const button = await screen.findByRole("button", { name: "Generate speech" });
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(screen.getByText("Verify your email first.")).toBeInTheDocument();
+    expect(button).toHaveAccessibleDescription("Verify your email first.");
   });
 });

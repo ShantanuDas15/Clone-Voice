@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { VerifyEmailAlert } from "@/components/verify-email-alert";
+import { FirstRunChecklist } from "@/components/first-run-checklist";
 import { TextToSpeechForm } from "@/components/text-to-speech-form";
 
 export const metadata: Metadata = { title: "Generate speech" };
 
-export default function GeneratePage() {
+export default function GeneratePage({
+  searchParams,
+}: {
+  searchParams: { voice?: string | string[] };
+}) {
+  const voice = typeof searchParams.voice === "string" ? searchParams.voice : undefined;
   return (
     <section>
       <h1 className="text-2xl font-bold">Generate speech</h1>
@@ -17,8 +22,8 @@ export default function GeneratePage() {
         </Link>
         .
       </p>
-      <VerifyEmailAlert />
-      <TextToSpeechForm />
+      <FirstRunChecklist />
+      <TextToSpeechForm initialVoiceId={voice} />
     </section>
   );
 }

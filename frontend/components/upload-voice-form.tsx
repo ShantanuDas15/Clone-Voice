@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { AudioUploader } from "@/components/audio-uploader";
@@ -14,7 +15,7 @@ import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { detectRecordingSupport } from "@/lib/recording";
 import { voiceNameSchema } from "@/lib/validation/audio";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 
 // The recorder (MediaRecorder, permissions) loads only when someone chooses to record (§5.10).
@@ -55,7 +56,7 @@ export function UploadVoiceForm() {
   const [consentError, setConsentError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
-  const [created, setCreated] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
   const [mode, setMode] = useState<SampleMode>("file");
   const [recorderKey, setRecorderKey] = useState(0);
   const [recordingUnavailable, setRecordingUnavailable] = useState<string | null>(null);
@@ -107,7 +108,7 @@ export function UploadVoiceForm() {
     try {
       const profile = await upload.mutateAsync();
       void client.invalidateQueries({ queryKey: PROFILES_KEY }); // show the new voice (found by e2e)
-      setCreated(profile.name);
+      setCreated({ id: profile.id, name: profile.name });
       setName("");
       setFile(null);
       setRecorderKey((k) => k + 1); // a fresh recorder for the next voice
@@ -240,9 +241,15 @@ export function UploadVoiceForm() {
       )}
       {formError && <Alert tone="danger">{formError}</Alert>}
       {created && (
-        <p role="status" className="text-sm">
-          Voice “{created}” created.
-        </p>
+        <div className="space-y-2">
+          <Alert tone="success">Voice “{created.name}” created.</Alert>
+          <Link
+            href={`/generate?voice=${encodeURIComponent(created.id)}`}
+            className={buttonVariants()}
+          >
+            Generate speech with “{created.name}”
+          </Link>
+        </div>
       )}
       {degraded && (
         <p role="status" className="text-sm">

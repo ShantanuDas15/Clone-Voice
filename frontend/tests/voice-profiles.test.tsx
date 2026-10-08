@@ -213,6 +213,9 @@ describe("UploadVoiceForm", () => {
     wrap(<UploadVoiceForm />);
     await fillAndSubmit();
     expect(await screen.findByText(/created\./i)).toBeInTheDocument();
+    // The next step is one click away, with the new voice preselected.
+    const next = screen.getByRole("link", { name: "Generate speech with “My voice”" });
+    expect(next).toHaveAttribute("href", `/generate?voice=${fixtures.profile.id}`);
     expect(post).toHaveBeenCalledTimes(1);
     const [url, form, config] = post.mock.calls[0] as [string, FormData, { timeout: number }];
     expect(url).toBe("/voice/upload");
