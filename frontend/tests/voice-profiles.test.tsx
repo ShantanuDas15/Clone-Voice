@@ -410,3 +410,20 @@ describe("UploadVoiceForm", () => {
     expect(button).toHaveAccessibleDescription("Verify your email first.");
   });
 });
+
+describe("AudioUploader", () => {
+  const wav = () => new File([new Uint8Array(2000)], "sample.wav", { type: "audio/wav" });
+
+  it("has a visible Choose file button labelling the real input, and names the pick", async () => {
+    wrap(<UploadVoiceForm />);
+    const input = (await screen.findByLabelText("Voice sample")) as HTMLInputElement;
+    expect(input.type).toBe("file");
+    expect(input.className).toContain("sr-only");
+    const button = screen.getByText("Choose file");
+    expect(button.tagName).toBe("LABEL");
+    expect(button).toHaveAttribute("for", input.id);
+    await userEvent.setup().upload(input, wav());
+    expect(await screen.findByTestId("selected-file")).toHaveTextContent("sample.wav");
+    expect(screen.getByText("Choose a different file")).toBeInTheDocument();
+  });
+});

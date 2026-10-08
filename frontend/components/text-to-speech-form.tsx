@@ -58,6 +58,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<(SynthesisResult & { text: string }) | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
   const inFlight = useRef(false);
   const cooldown = useCooldown();
   const degraded = useDegraded();
@@ -94,11 +95,15 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   // Abort the browser request when leaving the page/component.
   useEffect(() => () => controller.current?.abort(), []);
 
-  async function onSubmit(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    void run(text);
+  }
+
+  async function run(source: string) {
     if (inFlight.current || cooldown.remaining > 0) return; // R4
     setFormError(null);
-    const parsed = synthesisTextSchema.safeParse(text);
+    const parsed = synthesisTextSchema.safeParse(source);
     setTextError(parsed.success ? undefined : parsed.error.issues[0]?.message);
     if (!voiceId) {
       setFormError("Choose a voice first.");
@@ -172,6 +177,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           </label>
           <Textarea
             id="tts-text"
+            ref={textRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={TEXT_MAX}
@@ -202,9 +208,18 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
         </div>
 
         {pending && (
-          <div role="status" aria-live="polite" className="text-sm">
-            Generating… {elapsed} s. This can take a minute or more on slow servers; please keep
-            this page open.
+          <div role="status" aria-live="polite" className="space-y-2 text-sm">
+            <p>
+              Generating…{" "}
+              {/* Hidden from assistive tech so the ticking seconds are not announced every second. */}
+              <span aria-hidden className="font-mono tabular-nums">
+                {elapsed} s
+              </span>{" "}
+              This can take a minute or more on slow servers; please keep this page open.
+            </p>
+            <div aria-hidden className="h-1 overflow-hidden rounded bg-muted">
+              <div className="h-full w-1/3 animate-indeterminate rounded bg-primary motion-reduce:w-full motion-reduce:animate-none" />
+            </div>
           </div>
         )}
         {formError && <Alert tone="danger">{formError}</Alert>}
@@ -252,6 +267,29 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           </h2>
           <p className="text-sm text-muted-foreground">“{result.text}”</p>
           <AudioPlayer src={audioUrl} filename={result.filename} label="Generated speech" />
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                textRef.current?.focus();
+                textRef.current?.select();
+              }}
+            >
+              Edit text
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
+              onClick={() => {
+                setText(result.text);
+                void run(result.text);
+              }}
+            >
+              Generate again
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             If you leave this page, find past audio in History.
           </p>

@@ -1,10 +1,11 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 
+import { Alert } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
 import { formatBytes } from "@/lib/format";
 import { validateAudioFile } from "@/lib/validation/audio";
-import { Alert } from "@/components/ui/alert";
 
 interface AudioUploaderProps {
   file: File | null;
@@ -13,9 +14,12 @@ interface AudioUploaderProps {
   error?: string;
 }
 
-/** Keyboard-operable file picker with drag-and-drop and client-side pre-validation (R6, R8). */
+/**
+ * File picker with a visible button, drag-and-drop and client-side pre-validation (R6, R8). The
+ * real `<input type="file">` stays in the page (visually hidden, still the only tab stop) so
+ * keyboard, screen-reader and automation behaviour is the platform's; the button is its label.
+ */
 export function AudioUploader({ file, onChange, disabled, error }: AudioUploaderProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const id = useId();
   const [dragging, setDragging] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -44,10 +48,9 @@ export function AudioUploader({ file, onChange, disabled, error }: AudioUploader
           setDragging(false);
           if (!disabled) accept(e.dataTransfer.files[0]);
         }}
-        className={`mt-1 rounded border border-dashed p-4 text-sm ${dragging ? "border-primary bg-muted" : "border-line"}`}
+        className={`mt-1 space-y-2 rounded border border-dashed p-4 text-sm ${dragging ? "border-primary bg-muted" : "border-line"}`}
       >
         <input
-          ref={inputRef}
           id={id}
           type="file"
           accept=".wav,.mp3,.webm,audio/wav,audio/mpeg,audio/webm"
@@ -55,15 +58,23 @@ export function AudioUploader({ file, onChange, disabled, error }: AudioUploader
           aria-invalid={shownError ? true : undefined}
           aria-describedby={`${id}-help${shownError ? ` ${id}-error` : ""}`}
           onChange={(e) => accept(e.target.files?.[0])}
-          className="block min-h-11 w-full"
+          className="peer sr-only"
         />
-        <p id={`${id}-help`} className="mt-2 text-muted-foreground">
-          Drop a file here or choose one. WAV, MP3 or WEBM, up to 25 MB; at least a few seconds of
-          clear speech.
+        <label
+          htmlFor={id}
+          className={`${buttonVariants({ variant: "secondary" })} cursor-pointer peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-disabled:cursor-not-allowed peer-disabled:opacity-60`}
+        >
+          {file ? "Choose a different file" : "Choose file"}
+        </label>
+        <p id={`${id}-help`} className="text-muted-foreground">
+          Or drop a file here. WAV, MP3 or WEBM, up to 25 MB; at least a few seconds of clear
+          speech.
         </p>
         {file && (
-          <p className="mt-2" data-testid="selected-file">
-            {file.name} · {formatBytes(file.size)}
+          <p data-testid="selected-file">
+            <span className="font-mono tabular-nums">
+              {file.name} · {formatBytes(file.size)}
+            </span>
           </p>
         )}
       </div>
