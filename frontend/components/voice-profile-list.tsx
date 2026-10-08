@@ -76,9 +76,12 @@ export function VoiceProfileList() {
   }
   if (data.length === 0) {
     return (
-      <p className="text-muted-foreground">
-        You haven&apos;t created a voice yet. Add one with the form above.
-      </p>
+      <div className="space-y-3">
+        <p className="text-muted-foreground">You haven&apos;t created a voice yet.</p>
+        <Button onClick={() => document.getElementById("voice-name")?.focus()}>
+          Create a voice
+        </Button>
+      </div>
     );
   }
 

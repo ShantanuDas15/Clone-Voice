@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth-provider";
 import { AudioUploader } from "@/components/audio-uploader";
 import { TextField } from "@/components/form-fields";
 import { useDegraded } from "@/hooks/use-health";
+import { useOnline } from "@/hooks/use-online";
 import { PROFILES_KEY } from "@/hooks/use-voice-profiles";
 import { fetchTerms } from "@/lib/api/terms";
 import { uploadProfile } from "@/lib/api/voice";
@@ -140,6 +141,8 @@ export function UploadVoiceForm() {
 
   const pending = upload.isPending;
   const degraded = useDegraded();
+  const online = useOnline();
+  const blocker = !online ? "You're offline." : unverified ? "Verify your email first." : null;
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4" aria-label="Create a voice">
@@ -258,15 +261,15 @@ export function UploadVoiceForm() {
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="submit"
-          disabled={pending || degraded || unverified}
-          aria-describedby={unverified ? "upload-blocked" : undefined}
+          disabled={pending || degraded || blocker !== null}
+          aria-describedby={blocker ? "upload-blocked" : undefined}
           loading={pending}
         >
           {pending ? "Creating voice…" : "Create voice"}
         </Button>
-        {unverified && (
+        {blocker && (
           <p id="upload-blocked" className="text-sm text-muted-foreground">
-            Verify your email first.
+            {blocker}
           </p>
         )}
       </div>

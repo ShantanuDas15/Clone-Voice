@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { MobileTabs } from "@/components/mobile-tabs";
 import { UserMenu } from "@/components/user-menu";
 import { DegradedBanner } from "@/components/degraded-banner";
+import { OfflineBanner } from "@/components/offline-banner";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Theme } from "@/lib/theme";
@@ -18,6 +19,7 @@ export function AppShell({ children, theme }: { children: ReactNode; theme: Them
       >
         Skip to content
       </a>
+      <OfflineBanner />
       <DegradedBanner />
       <header className="border-b border-border">
         <nav
