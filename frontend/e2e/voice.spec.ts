@@ -2,16 +2,15 @@ import { expect, test } from "@playwright/test";
 
 import { SAMPLE_WAV, createVoice, signUp, signUpVerified, uniqueEmail } from "./helpers";
 
-test("an unverified user is told to verify and the server refuses the upload (403)", async ({
-  page,
-}) => {
+test("an unverified user cannot create a voice and is told why", async ({ page }) => {
   await signUp(page, uniqueEmail("unverified"));
   await page.goto("/voices");
   await page.getByLabel("Voice name").fill("Nope");
   await page.locator("input[type=file]").setInputFiles(SAMPLE_WAV);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
-  await page.getByRole("button", { name: "Create voice" }).click();
-  await expect(page.getByText(/verify your email/i).first()).toBeVisible();
+  const create = page.getByRole("button", { name: "Create voice" });
+  await expect(create).toBeDisabled();
+  await expect(page.getByText("Verify your email first.")).toBeVisible();
 });
 
 test("upload a real sample, see it listed, then delete it", async ({ page }) => {

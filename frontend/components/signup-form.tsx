@@ -7,12 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useAuth } from "@/components/auth-provider";
-import { TextField } from "@/components/form-fields";
+import { PasswordField, TextField } from "@/components/form-fields";
+import { OrDivider } from "@/components/or-divider";
 import { Button } from "@/components/ui/button";
 import { GoogleButton } from "@/components/google-button";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
-import { type SignupValues, signupSchema } from "@/lib/validation/auth";
+import { PASSWORD_MAX, PASSWORD_MIN, type SignupValues, signupSchema } from "@/lib/validation/auth";
 import { Alert } from "@/components/ui/alert";
 
 export function SignupForm() {
@@ -68,6 +69,7 @@ export function SignupForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
       <GoogleButton />
+      <OrDivider>or use email</OrDivider>
       <TextField
         label="Name"
         autoComplete="name"
@@ -81,9 +83,9 @@ export function SignupForm() {
         error={errors.email?.message}
         {...register("email")}
       />
-      <TextField
+      <PasswordField
         label="Password"
-        type="password"
+        hint={`${PASSWORD_MIN} to ${PASSWORD_MAX} characters`}
         autoComplete="new-password"
         error={errors.password?.message}
         {...register("password")}

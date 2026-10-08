@@ -304,7 +304,7 @@ describe("UploadVoiceForm", () => {
 
   it("explains a missing terms page when url is null (G-18)", async () => {
     wrap(<UploadVoiceForm />);
-    expect(await screen.findByText(/not published yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/terms are being finalised/i)).toBeInTheDocument();
   });
 
   it.each([
@@ -405,7 +405,8 @@ describe("UploadVoiceForm", () => {
     );
     wrap(<UploadVoiceForm />);
     await screen.findByLabelText("Voice name");
-    expect(screen.queryByText(/verify your email/i)).toBeNull();
-    expect(screen.getByRole("button", { name: "Create voice" })).toBeEnabled();
+    const button = screen.getByRole("button", { name: "Create voice" });
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveAccessibleDescription("Verify your email first.");
   });
 });

@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) and FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) implemented the same day.
+> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) and FE-UX6 (landing page, auth polish, copy pass) implemented the same day.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -1043,6 +1043,27 @@ The first slice of phase U2: removes the first-minute dead end (UX-06) and the l
 1. Rest of U2 not done: U2.1 landing page (copy must follow the owner decision in §11.3: no retention figure), U2.2 auth form polish and the single "Create account" label, U2.5 honest progress and result actions ("Edit text", "Generate again"), U2.6 copy pass (incl. the consent sentence and "Working…"), U2.7 styled file drop zone.
 2. The upload form's own submit stays enabled for an unverified user (the server answers 403 with the existing message); only Generate follows UR4 so far. Do the same for Create voice with U2.6.
 3. Run the e2e suite against the real stack; `/graphify --update` for the plan docs is still pending.
+
+### FE-UX6 — UX plan, U2.1/U2.2/U2.6: landing page, auth form polish, copy pass (2026-10-08, branch `feat/UX-U2-public-copy`, commit `efd5f70`)
+
+| Area | Status | Evidence |
+|---|---|---|
+| Landing page (UX-04) | ✅ | `app/page.tsx`: one `h1`, a concrete value sentence (10 to 30 seconds of a voice you have the right to use), "Create account" (primary) and "Sign in" (secondary), and three plain statements that are true by construction (consent is required to clone, deleting a voice erases everything made with it, speech is labelled AI-generated in the app). **No retention figure is published** (owner decision, UX plan §11.3); no demo audio (§11.4). Server component, no added JS. |
+| Auth forms (UX-14) | ✅ | `components/form-fields.tsx`: `TextField` gets an always-visible `hint` linked by `aria-describedby`; new `PasswordField` with a "Show password" checkbox. Signup and reset-password show "8 to 128 characters" before typing; login, signup and reset use the show switch (the confirm field has none). `components/or-divider.tsx` separates Google from the email fields. |
+| One action name (UX-13) | ✅ | "Create account" everywhere (header, landing, signup button). |
+| Copy pass (UX-13) | ✅ | "Working…" -> "Creating voice…"; "Loading…" -> "Loading voices…", "Loading audio…", "Loading more…"; the consent line no longer exposes internal state: the terms version shows only with a real terms URL, otherwise "Terms are being finalised." |
+| Create voice blocked with a reason (UR4) | ✅ | An unverified user gets a disabled Create voice button with "Verify your email first." linked by `aria-describedby` (matches Generate). |
+| Guardrail | ✅ | `tests/public-copy.test.tsx` fails on "Working…", "Get started", "Sign up" as an action, a bare "Loading…" label, or "not published yet" anywhere in `app/` or `components/`. |
+
+**Not done from this slice:** the Google provider mark (the official mark is a four-colour logo and the colour test forbids raw hex in components; add it as an SVG asset with the brand's own guidance if wanted).
+
+**Verification run (local, Node 24):** `npm test` -> 35 files, **404 passed** (395 -> 404); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Real Chromium against the production build (API stubbed to 401), light and dark at 320, 375 and 1280 px on `/`, `/signup`, `/login`, `/reset-password`: one `h1` each, no horizontal overflow, no console errors. `npm run perf`: JS 180.6-197.8 KB (login/signup about 2.2 KB under the 200 KB budget), CLS 0.001, TBT <= 6 ms. LCP was 1.9-2.3 s on most routes but one route read 2.56-2.61 s in two of three runs (`/` once, `/login` once; both passed in the other runs). The same intermittent single-route overrun has appeared in every recent run, including changes that did not touch that route, so I treat it as host noise; the margin is thin, so check the first CI `perf` run. Backend untouched. **e2e not run**: `e2e/voice.spec.ts` (unverified user now sees a disabled button) and `e2e/layout-shift.spec.ts` ("Create account" link) were edited by hand.
+
+**Open items from FE-UX6**
+1. Rest of U2: U2.5 honest progress and result actions ("Edit text", "Generate again") and U2.7 styled file drop zone.
+2. JS headroom on `/login` and `/signup` is about 2.2 KB; new shared form code needs a budget check.
+3. Backend asks UBD-2 (terms URL) and UBD-4 (expose retention) still pending; the in-app "kept for 30 days" text in `components/history-list.tsx` is still hard-coded.
+4. `/graphify --update` for the plan docs is still pending.
 
 ---
 
