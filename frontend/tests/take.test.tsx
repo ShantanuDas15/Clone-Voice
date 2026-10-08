@@ -136,6 +136,38 @@ describe("Take", () => {
     expect(screen.getByRole("button", { name: "Play Speech" })).toBeInTheDocument();
   });
 
+  it("draws the waveform in only when asked, and gives every take its own clip id", async () => {
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        decodeAudioData() {
+          return Promise.resolve({ getChannelData: () => new Float32Array([0.2, 1, 0.5, 0.1]) });
+        }
+        close() {
+          return Promise.resolve();
+        }
+      },
+    );
+    window.AudioContext = globalThis.AudioContext;
+    const blob = () => new Blob([new Uint8Array(10)]);
+    const { container } = render(
+      <>
+        <Take src="blob:a" blob={blob()} filename="a.wav" label="A" animateIn />
+        <Take src="blob:b" blob={blob()} filename="b.wav" label="B" />
+      </>,
+    );
+    await waitFor(() => expect(container.querySelectorAll("svg")).toHaveLength(2));
+    const [first, second] = [...container.querySelectorAll("svg")];
+    expect(first?.getAttribute("class")).toContain("animate-draw-in");
+    expect(second?.getAttribute("class")).not.toContain("animate-draw-in");
+    const ids = [...container.querySelectorAll("clipPath")].map((c) => c.id);
+    expect(new Set(ids).size).toBe(2);
+    for (const svg of [first, second]) {
+      const id = svg?.querySelector("clipPath")?.id;
+      expect(svg?.querySelector(`[clip-path="url(#${id})"]`)).not.toBeNull();
+    }
+  });
+
   it("jumps 2 s with the arrow keys and stays within the clip", () => {
     const { container } = render(<Take src="blob:x" filename="a.wav" label="Speech" />);
     const el = audioEl(container);

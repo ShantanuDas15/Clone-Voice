@@ -274,6 +274,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             blob={result.blob}
             filename={result.filename}
             label="Generated speech"
+            animateIn
           />
           <div className="flex flex-wrap gap-2 pt-1">
             <Button

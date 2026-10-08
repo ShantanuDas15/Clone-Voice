@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { formatClock } from "@/lib/recording";
@@ -16,6 +16,8 @@ interface TakeProps {
   autoPlay?: boolean;
   /** Omit the download link (e.g. a preview of a recording that is about to be uploaded). */
   hideDownload?: boolean;
+  /** Draw the waveform in once when it first appears (a finished generation); off for replays. */
+  animateIn?: boolean;
 }
 
 const BARS = 64;
@@ -27,7 +29,7 @@ const BARS = 64;
  * and the slider. If the shape cannot be computed the controls still work; if the audio cannot be
  * played the take says so and keeps the download.
  */
-export function Take({ src, blob, filename, label, autoPlay, hideDownload }: TakeProps) {
+export function Take({ src, blob, filename, label, autoPlay, hideDownload, animateIn }: TakeProps) {
   const audio = useRef<HTMLAudioElement>(null);
   const [peaks, setPeaks] = useState<number[] | null>(null);
   const [duration, setDuration] = useState(0);
@@ -114,7 +116,7 @@ export function Take({ src, blob, filename, label, autoPlay, hideDownload }: Tak
         </span>
       </div>
       <div className="relative h-12 rounded focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary">
-        {peaks && <Waveform peaks={peaks} progress={progress} />}
+        {peaks && <Waveform peaks={peaks} progress={progress} animateIn={animateIn} />}
         {!peaks && <div aria-hidden className="absolute inset-x-0 top-1/2 h-0.5 bg-border" />}
         <input
           type="range"
@@ -149,7 +151,17 @@ function DownloadLink({ src, filename }: { src: string; filename: string }) {
 }
 
 /** Bars in two colours: the played part (accent) over the rest (muted), split at the playhead. */
-function Waveform({ peaks, progress }: { peaks: number[]; progress: number }) {
+function Waveform({
+  peaks,
+  progress,
+  animateIn,
+}: {
+  peaks: number[];
+  progress: number;
+  animateIn?: boolean;
+}) {
+  // Unique per take: several takes can share a page (History), and clip ids are document-global.
+  const clipId = `take-played-${useId().replace(/:/g, "")}`;
   const w = peaks.length * 4;
   const bars = peaks.map((p, i) => {
     const h = Math.max(2, p * 44);
@@ -161,15 +173,15 @@ function Waveform({ peaks, progress }: { peaks: number[]; progress: number }) {
       focusable="false"
       viewBox={`0 0 ${w} 48`}
       preserveAspectRatio="none"
-      className="absolute inset-0 h-full w-full"
+      className={`absolute inset-0 h-full w-full ${animateIn ? "animate-draw-in" : ""}`.trim()}
     >
       <defs>
-        <clipPath id="take-played">
+        <clipPath id={clipId}>
           <rect x={0} y={0} width={w * progress} height={48} />
         </clipPath>
       </defs>
       <g className="fill-border">{bars}</g>
-      <g className="fill-primary" clipPath="url(#take-played)">
+      <g className="fill-primary" clipPath={`url(#${clipId})`}>
         {bars}
       </g>
     </svg>

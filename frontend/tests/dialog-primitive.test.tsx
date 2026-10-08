@@ -36,6 +36,7 @@ describe("Dialog", () => {
     const dialog = screen.getByRole("alertdialog", { name: "Delete it?" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(screen.getByTestId("dialog-scrim")).toContainElement(dialog);
+    expect(screen.getByTestId("dialog-scrim").className).toContain("animate-fade-in");
     expect(document.body.style.overflow).toBe("hidden");
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("alertdialog")).toBeNull();

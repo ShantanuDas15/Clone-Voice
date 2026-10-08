@@ -114,6 +114,14 @@ describe("design-token guardrails", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("uses only the motion tokens for durations (fast = 120 ms, base = 200 ms)", () => {
+    const offenders = FILES.filter((f) => /\bduration-(?:\d|\[)/.test(read(f)));
+    expect(offenders).toEqual([]);
+    const config = read("tailwind.config.ts");
+    expect(config).toContain('fast: "120ms"');
+    expect(config).toContain('base: "200ms"');
+  });
+
   it("builds buttons and messages from the ui primitives, not ad-hoc recipes", () => {
     const outside = FILES.filter((f) => !f.includes(path.join("components", "ui")));
     const recipe =

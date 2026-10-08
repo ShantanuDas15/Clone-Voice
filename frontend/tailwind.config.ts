@@ -23,14 +23,27 @@ const config: Config = {
         warning: "hsl(var(--warning) / <alpha-value>)",
         "warning-foreground": "hsl(var(--warning-foreground) / <alpha-value>)",
       },
-      // Used only by the indeterminate "generating" bar (state, not decoration; UX plan §4.10).
+      // Motion tokens (UX plan §4.5): `fast` for feedback to a press or toggle, `base` for things
+      // appearing. All collapse under prefers-reduced-motion (app/globals.css).
+      transitionDuration: { fast: "120ms", base: "200ms" },
+      // Allowed motion only (§4.10): the indeterminate bar while a request is in flight, a dialog
+      // appearing, and the one-time waveform draw-in when a generated take finishes.
       keyframes: {
         indeterminate: {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(300%)" },
         },
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        "draw-in": {
+          from: { opacity: "0", transform: "scaleY(0.15)" },
+          to: { opacity: "1", transform: "scaleY(1)" },
+        },
       },
-      animation: { indeterminate: "indeterminate 1.4s ease-in-out infinite" },
+      animation: {
+        indeterminate: "indeterminate 1.4s ease-in-out infinite",
+        "fade-in": "fade-in 200ms ease-out both",
+        "draw-in": "draw-in 350ms ease-out both",
+      },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
