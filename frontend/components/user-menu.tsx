@@ -7,6 +7,14 @@ import { useAuth } from "@/components/auth-provider";
 import { NavLink } from "@/components/nav-link";
 import { Button, buttonVariants } from "@/components/ui/button";
 
+/** The signed-in destinations, one per job (UX plan §5.1). */
+export const APP_LINKS = [
+  { href: "/generate", label: "Generate" },
+  { href: "/voices", label: "Voices" },
+  { href: "/history", label: "History" },
+  { href: "/account", label: "Account" },
+] as const;
+
 /** Header account controls: sign-in links, or the user's name and a sign-out button. */
 export function UserMenu() {
   const { status, user, logout } = useAuth();
@@ -18,7 +26,7 @@ export function UserMenu() {
   if (status === "loading") {
     return (
       <div aria-hidden className="flex min-h-11 items-center">
-        <div className="h-6 w-24 animate-pulse rounded bg-muted" />
+        <div className="h-6 w-24 animate-pulse rounded bg-muted sm:w-72" />
       </div>
     );
   }
@@ -38,10 +46,14 @@ export function UserMenu() {
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:gap-x-4">
-      <NavLink href="/generate">Generate</NavLink>
-      <NavLink href="/voices">Voices</NavLink>
-      <NavLink href="/history">History</NavLink>
-      <NavLink href="/account">Account</NavLink>
+      {/* Below `sm` these live in the bottom tab bar (mobile-tabs.tsx). */}
+      <div className="hidden items-center gap-x-4 sm:flex">
+        {APP_LINKS.map(({ href, label }) => (
+          <NavLink key={href} href={href} className="inline-flex min-h-11 items-center">
+            {label}
+          </NavLink>
+        ))}
+      </div>
       <span className="hidden max-w-[10rem] truncate text-muted-foreground sm:inline">
         {user?.name}
       </span>

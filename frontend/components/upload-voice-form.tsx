@@ -4,10 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 
-import { useAuth } from "@/components/auth-provider";
 import { AudioUploader } from "@/components/audio-uploader";
 import { TextField } from "@/components/form-fields";
-import { ResendVerification } from "@/components/resend-verification";
 import { useDegraded } from "@/hooks/use-health";
 import { PROFILES_KEY } from "@/hooks/use-voice-profiles";
 import { fetchTerms } from "@/lib/api/terms";
@@ -47,7 +45,6 @@ function uploadErrorMessage(e: ApiError): string {
 
 /** Create a voice profile: name, sample and an explicit, versioned consent attestation. */
 export function UploadVoiceForm() {
-  const { user } = useAuth();
   const client = useQueryClient();
   const terms = useQuery({ queryKey: ["terms"], queryFn: fetchTerms, staleTime: 5 * 60_000 });
   const [name, setName] = useState("");
@@ -137,17 +134,11 @@ export function UploadVoiceForm() {
     }
   }
 
-  const unverified = user !== null && !user.email_verified_at;
   const pending = upload.isPending;
   const degraded = useDegraded();
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4" aria-label="Create a voice">
-      {unverified && (
-        <p className="text-sm">
-          Verify your email address to upload a voice. <ResendVerification />
-        </p>
-      )}
       <TextField
         label="Voice name"
         name="voice-name"

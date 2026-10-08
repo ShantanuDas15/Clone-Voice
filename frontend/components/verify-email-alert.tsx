@@ -3,12 +3,19 @@
 import { useAuth } from "@/components/auth-provider";
 import { ResendVerification } from "@/components/resend-verification";
 
-/** Persistent notice for signed-in users whose email isn't verified yet (blocks upload/synthesis server-side). */
-export function VerificationBanner() {
+/**
+ * The one place the unverified-email gate is explained. It sits inline at the top of the pages
+ * that need a verified address (Generate, Voices) and renders nothing once verified; the server
+ * still enforces the gate.
+ */
+export function VerifyEmailAlert() {
   const { status, user } = useAuth();
   if (status !== "authenticated" || !user || user.email_verified_at) return null;
   return (
-    <div className="sticky bottom-0 z-30 border-t border-border bg-warning px-4 py-2 text-center text-sm text-warning-foreground">
+    <div
+      role="status"
+      className="mb-6 max-w-xl rounded border border-border bg-warning p-3 text-sm text-warning-foreground"
+    >
       Verify your email address ({user.email}) to upload voices and generate speech.{" "}
       <ResendVerification />
     </div>

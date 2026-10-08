@@ -52,6 +52,17 @@ describe("route layout", () => {
     }
   });
 
+  it("explains the verification gate once, on the pages that need it", () => {
+    const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
+    for (const route of ["generate", "voices"]) {
+      expect(read(`app/(app)/${route}/page.tsx`)).toContain("<VerifyEmailAlert />");
+    }
+    for (const rel of ["components/text-to-speech-form.tsx", "components/upload-voice-form.tsx"]) {
+      expect(read(rel)).not.toContain("ResendVerification");
+    }
+    expect(read("components/app-shell.tsx")).not.toMatch(/sticky|VerificationBanner/);
+  });
+
   it("redirects the old routes permanently (308)", async () => {
     // @ts-expect-error -- plain .mjs config without type declarations
     const mod = (await import("../next.config.mjs")) as {
