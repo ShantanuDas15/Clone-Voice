@@ -147,6 +147,21 @@ describe("LoginForm", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/voices"));
   });
 
+  it("explains why the user is here after a session ended", async () => {
+    search = "reason=expired&next=%2Fvoices";
+    signedOut();
+    wrap(<LoginForm />);
+    expect(await screen.findByText("Your session ended. Sign in to continue.")).toBeInTheDocument();
+  });
+
+  it("shows no such message on an ordinary visit", async () => {
+    search = "next=%2Fvoices";
+    signedOut();
+    wrap(<LoginForm />);
+    await screen.findByLabelText("Email");
+    expect(screen.queryByText(/session ended/i)).toBeNull();
+  });
+
   it("ignores an external next target", async () => {
     search = "next=https%3A%2F%2Fevil.test";
     signedOut();

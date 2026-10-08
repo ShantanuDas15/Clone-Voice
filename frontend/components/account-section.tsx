@@ -2,19 +2,19 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { useAuth } from "@/components/auth-provider";
 import { TextField } from "@/components/form-fields";
-import { useDialog } from "@/hooks/use-dialog";
 import * as authApi from "@/lib/api/auth";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { DELETE_CONFIRMATION, type NameValues, nameSchema } from "@/lib/validation/auth";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Alert } from "@/components/ui/alert";
 
 function NameForm() {
@@ -64,30 +64,6 @@ function NameForm() {
         {isSubmitting ? "Saving…" : "Save name"}
       </Button>
     </form>
-  );
-}
-
-/** The account-erasure modal: traps focus, closes on Escape unless a request is in flight. */
-function ModalPanel({
-  onClose,
-  closeDisabled,
-  children,
-}: {
-  onClose: () => void;
-  closeDisabled: boolean;
-  children: ReactNode;
-}) {
-  const ref = useDialog<HTMLDivElement>(onClose, closeDisabled);
-  return (
-    <div
-      ref={ref}
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="del-account-title"
-      className="space-y-3 rounded border border-border bg-muted p-4"
-    >
-      {children}
-    </div>
   );
 }
 
@@ -160,7 +136,7 @@ function DeleteAccount() {
         Delete my account…
       </Button>
       {open && (
-        <ModalPanel onClose={cancel} closeDisabled={busy}>
+        <Dialog titleId="del-account-title" onClose={cancel} closeDisabled={busy}>
           <h3 id="del-account-title" className="font-medium">
             Delete your account?
           </h3>
@@ -193,7 +169,7 @@ function DeleteAccount() {
               Cancel
             </Button>
           </div>
-        </ModalPanel>
+        </Dialog>
       )}
     </div>
   );

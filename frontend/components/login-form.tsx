@@ -24,6 +24,7 @@ export function LoginForm() {
   const params = useSearchParams();
   const next = sanitizeNext(params.get("next"));
   const callbackError = googleErrorMessage(params.get("error"));
+  const sessionEnded = params.get("reason") === "expired";
   const inFlight = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -60,6 +61,7 @@ export function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
+      {sessionEnded && <Alert>Your session ended. Sign in to continue.</Alert>}
       {callbackError && <Alert tone="danger">{callbackError}</Alert>}
       <GoogleButton />
       <OrDivider>or use email</OrDivider>

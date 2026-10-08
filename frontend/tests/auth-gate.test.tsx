@@ -60,4 +60,15 @@ describe("AuthGate", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
     expect(replace).not.toHaveBeenCalledWith(expect.stringContaining("/login"));
   });
+
+  it("says the session ended when it ends while the page is open (e.g. signed out in another tab)", async () => {
+    wrap();
+    await screen.findByRole("button", { name: "sign out" });
+    // Another tab signing out reaches this tab as a cleared session, not a deliberate sign-out.
+    const { clearSession } = await import("@/lib/auth/session");
+    clearSession();
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/login?reason=expired&next=%2Fvoices"),
+    );
+  });
 });
