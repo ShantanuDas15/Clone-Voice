@@ -16,8 +16,11 @@ const level = (rs: { name: string; level: string }[], name: string) =>
   rs.find((r) => r.name === name)?.level;
 
 describe("registrableDomain / checkSameSite", () => {
-  it("uses the last two labels, or the whole host for localhost and IPs", () => {
+  it("uses the public-suffix list, or the whole host for localhost and IPs", () => {
     expect(registrableDomain("app.example.com")).toBe("example.com");
+    expect(registrableDomain("app.example.co.uk")).toBe("example.co.uk");
+    expect(registrableDomain("web-1.up.railway.app")).toBe("web-1.up.railway.app");
+    expect(registrableDomain("::1")).toBe("::1");
     expect(registrableDomain("localhost")).toBe("localhost");
     expect(registrableDomain("127.0.0.1")).toBe("127.0.0.1");
   });
@@ -31,6 +34,17 @@ describe("registrableDomain / checkSameSite", () => {
     const r = checkSameSite("https://app.example.com", "https://x.up.railway.app");
     expect(r.level).toBe("fail");
     expect(r.detail).toContain("G-13");
+  });
+
+  it("fails two sites under a multi-label public suffix (a.co.uk vs b.co.uk)", () => {
+    expect(checkSameSite("https://a.co.uk", "https://b.co.uk").level).toBe("fail");
+    expect(checkSameSite("https://app.a.co.uk", "https://api.a.co.uk").level).toBe("pass");
+  });
+
+  it("fails two tenants of one shared host (private suffix railway.app)", () => {
+    expect(checkSameSite("https://web.up.railway.app", "https://api.up.railway.app").level).toBe(
+      "fail",
+    );
   });
 });
 
