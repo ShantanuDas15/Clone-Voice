@@ -54,9 +54,10 @@ describe("route layout", () => {
 
   it("explains the verification gate once, on the pages that need it", () => {
     const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
-    for (const route of ["generate", "voices"]) {
-      expect(read(`app/(app)/${route}/page.tsx`)).toContain("<VerifyEmailAlert />");
-    }
+    expect(read("app/(app)/voices/page.tsx")).toContain("<VerifyEmailAlert />");
+    // Generate folds the same notice into the first-run checklist, so it is not repeated.
+    expect(read("app/(app)/generate/page.tsx")).toContain("<FirstRunChecklist />");
+    expect(read("app/(app)/generate/page.tsx")).not.toContain("<VerifyEmailAlert />");
     for (const rel of ["components/text-to-speech-form.tsx", "components/upload-voice-form.tsx"]) {
       expect(read(rel)).not.toContain("ResendVerification");
     }
