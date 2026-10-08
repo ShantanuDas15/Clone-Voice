@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useDialog } from "@/hooks/use-dialog";
 import { useDeleteProfile, useProfiles } from "@/hooks/use-voice-profiles";
 import type { VoiceProfile } from "@/lib/api/voice";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 
 function StatusChip({ status }: { status: string }) {
   if (status === "ready") return <Badge tone="success">Ready</Badge>;
@@ -18,7 +18,7 @@ function StatusChip({ status }: { status: string }) {
   return <Badge>Processing</Badge>;
 }
 
-/** Modal confirmation for deleting a voice; traps focus and closes on Escape. */
+/** Modal confirmation for deleting a voice; traps focus and closes on Escape or a scrim click. */
 function DeleteDialog({
   profile,
   onCancel,
@@ -28,23 +28,16 @@ function DeleteDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const ref = useDialog<HTMLDivElement>(onCancel);
   return (
-    <div
-      ref={ref}
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="del-title"
-      className="mt-4 rounded border border-border bg-muted p-4"
-    >
-      <h3 id="del-title" className="font-medium">
+    <Dialog titleId="del-title" onClose={onCancel}>
+      <h3 id="del-title" className="text-lg font-semibold">
         Delete “{profile.name}”?
       </h3>
-      <p className="mt-1 text-sm">
+      <p className="text-sm">
         This also permanently removes every audio clip generated with this voice. It can&apos;t be
         undone.
       </p>
-      <div className="mt-3 flex gap-2">
+      <div className="flex gap-2">
         <Button variant="danger" autoFocus onClick={onConfirm}>
           Delete voice
         </Button>
@@ -52,7 +45,7 @@ function DeleteDialog({
           Cancel
         </Button>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
