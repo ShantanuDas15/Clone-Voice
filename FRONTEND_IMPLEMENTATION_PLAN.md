@@ -1257,6 +1257,15 @@ New `frontend/playwright.visual.config.ts` and `frontend/visual/public.spec.ts`,
 1. Add signed-in baselines with mocked responses, and run `test:visual` in CI on the same OS that generated them.
 2. U7.4 rollout note, the FE-UX17 CLS decisions, WebKit and the manual U6.3 remain.
 
+### FE-UX19 — UX plan, U7.2: signed-in visual baselines (2026-10-09, branch `feat/FE-UX19-signed-in-baselines`, commit `2f144d1`)
+
+`frontend/visual/signed-in.spec.ts` adds **30 baselines**: `/generate`, `/voices`, `/history`, `/account` (plus the `/generate` first-run state: unverified, no voices) x 375/768/1280 px x light/dark. The API is mocked with CORS headers (verified user, one ready and one failed voice, one history row); the config now pins `en-US` and `UTC` so dates do not drift. Total **54 baselines, 54/54 on a second run**; `npm test` 451 passed, typecheck and lint clean. Viewed by eye: `voices-1280-light`, `generate-first-run-375-dark` (the tab bar appears mid-image: a full-page capture artefact of the fixed bar, not a defect). The other 28 were not opened.
+
+**Not done:** no baselines for open dialogs, error or offline states, or a finished `Take`; not wired into CI.
+
+**Open items from FE-UX19**
+1. U7.4 rollout note, the FE-UX17 CLS decisions, CI wiring for `test:visual`, WebKit, and the manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
