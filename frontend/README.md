@@ -29,11 +29,40 @@ The app fails fast at startup if `NEXT_PUBLIC_API_BASE_URL` is missing or malfor
 | `npm run smoke`        | Release smoke test against a deployed web + API (see `RUNBOOK.md`) |
 | `npm run perf`         | Lighthouse budgets on the public routes (see below)                |
 
+## Routes
+
+| Route                                                                                                | Who       | Purpose                                                   |
+| ---------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------- |
+| `/`                                                                                                  | public    | Landing page                                              |
+| `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/verify-email`, `/auth/google/callback` | public    | Account entry and recovery                                |
+| `/generate`                                                                                          | signed in | Pick a voice, enter text, generate and play/download      |
+| `/voices`                                                                                            | signed in | Create a voice (upload or record), list and delete voices |
+| `/history`                                                                                           | signed in | Past generations, replay and download                     |
+| `/account`                                                                                           | signed in | Name, email verification, delete account                  |
+
+`/dashboard` and `/profile` (the pre-redesign names) answer with a 308 to `/generate` and
+`/voices`, and `?next=` values that still carry the old paths are mapped the same way
+(`lib/auth/next-path.ts`), so old bookmarks and emailed links keep working.
+
+## Design system and accessibility
+
+- Colour, type, radius and motion are tokens (`app/globals.css`, `tailwind.config.ts`); components
+  use token utilities only. `tests/theme.test.ts` fails on `dark:` variants, raw colours, ad-hoc
+  durations and hand-rolled button/alert recipes, and asserts WCAG contrast for every token pair in
+  light, dark and `prefers-contrast: more`.
+- Buttons, alerts, badges, fields and the dialog live in `components/ui/`; new screens should use
+  them rather than new class recipes.
+- Targets are at least 44 px (the tab bar 56 px), checked by `e2e/responsive.spec.ts` at 320, 768
+  and 1280 px, which also asserts no horizontal scroll and reflow at 400% zoom.
+- Motion honours `prefers-reduced-motion`; the Upload/Record choice follows the radio keyboard model.
+- Still manual: a screen-reader pass (NVDA, VoiceOver) over signup, create voice, generate,
+  history and account.
+
 ## Performance budget
 
 `npm run perf` audits `/`, `/login`, `/signup` and `/forgot-password` with Lighthouse's default
 mobile profile (slow 4G, 4x CPU), takes the median of 3 runs (`PERF_RUNS`) and exits 1 if any route
-exceeds: LCP 2500 ms, JS 200 KB transferred (gzipped), CLS 0.1, TBT 300 ms. It needs a production
+exceeds: LCP 2500 ms, JS 200 KB transferred (gzipped), CLS 0.1, TBT 300 ms (measured CLS is about 0.001; the UX plan asks for 0.02). It needs a production
 server (`npm run build && npx next start -p 3000`, or `PERF_BASE_URL`) and uses Playwright's
 Chromium (or `CHROME_PATH`). Needs Node 22+ (Lighthouse's requirement). The pass/fail logic is
 unit-tested in `tests/perf-budget.test.ts`; the budget itself lives in `perf/budget.mts`.
