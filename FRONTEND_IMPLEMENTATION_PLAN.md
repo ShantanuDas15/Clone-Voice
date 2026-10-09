@@ -1311,6 +1311,19 @@ Tests: `tests/draft.test.ts` (6: owner-only, other user, replacement, no user, s
 **Open items from FE-UX25**
 1. Read the first CI result for the `visual` job. Remaining: the first-run checklist shift (owner), WebKit, manual U6.3.
 
+### FE-UX26 — Owner decision: reserve space for the first-run checklist (2026-10-09, branch `fix/FE-UX26-checklist-shift`, commit `e1dcd60`)
+
+Decision (owner): reserve space. `FirstRunChecklist` now renders an `aria-hidden` placeholder (`min-h` 16.625rem below 360 px, 15.375rem above) while a **verified** user's voice list loads, instead of nothing, so the form below does not jump down when the checklist arrives. (An unverified user's checklist renders with the page, so it never shifted; the shifting case was verified-with-no-voice.) Heights were measured in Chromium (266 px at 320, 246 px from 360 up).
+
+**Measured (Chromium, API mocked, voice list delayed 600 ms, verified user with no voice, one page per width):** CLS **0.23 / 0.23 / 0.23 / 0.23 / 0.24 / 0.28 / 0.14** before at 320/360/375/400/600/768/1280 px; **0.048 / 0.042 / 0.040 / 0.040 / 0.032 / 0.038 / 0.019** after. The remainder is the session skeleton giving way to the page (footer), unrelated to the checklist and unchanged. Only 320-768 px are below the 0.05 spec bound by a small margin; 0.1 is the e2e bound for the unverified case (FE-UX23).
+
+**Cost, as chosen:** a returning verified user who has a voice sees a blank gap of that height until the list loads, then the form moves up (a shift in the other direction; not measured separately). A checklist taller than the placeholder (very long email addresses wrapping) still shifts by the difference.
+
+Tests: a new case in `tests/first-run.test.tsx` (placeholder present while loading, gone once the checklist shows); **negative control:** returning `null` instead fails it. `npm test` 459 passed; typecheck, lint, prettier clean; all 54 visual baselines still pass unchanged. Not run: the real-backend e2e `layout-shift` spec.
+
+**Open items from FE-UX26**
+1. Re-run `e2e/layout-shift.spec.ts` and read the CI `visual` job (FE-UX23, FE-UX25). Remaining: WebKit, manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
