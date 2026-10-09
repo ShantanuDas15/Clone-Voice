@@ -10,6 +10,17 @@ import { useProfiles } from "@/hooks/use-voice-profiles";
 import { firstRun } from "@/lib/first-run";
 
 /**
+ * Holds the checklist's space while it is still unknown whether it will show, so the form below
+ * does not jump down when it arrives (UX-25/UR17). A returning user, who never sees the
+ * checklist, gets a gap of this height that closes once the voice list loads.
+ */
+function Reserved() {
+  return (
+    <div aria-hidden="true" className="mb-6 min-h-[16.625rem] min-[360px]:min-h-[15.375rem]" />
+  );
+}
+
+/**
  * Shown on Generate until a verified email and a ready voice both exist: the path to a first
  * take, with the next action as the primary button. Renders nothing once it is complete.
  */
@@ -20,7 +31,7 @@ export function FirstRunChecklist() {
 
   const verified = Boolean(user.email_verified_at);
   // Wait for the list before judging the voice step, so a returning user never sees a flash.
-  if (verified && profiles.isPending) return null;
+  if (verified && profiles.isPending) return <Reserved />;
   const hasReadyVoice = (profiles.data ?? []).some((p) => p.status === "ready");
   const hasFailed = (profiles.data ?? []).some((p) => p.status === "failed");
   const state = firstRun({ emailVerified: verified, hasReadyVoice });

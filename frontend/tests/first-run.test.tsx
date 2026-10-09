@@ -104,6 +104,22 @@ describe("FirstRunChecklist", () => {
     expect(screen.getAllByRole("listitem")[1]).toHaveAttribute("aria-current", "step");
   });
 
+  it("holds the checklist's space while a verified user's voice list loads (no layout shift)", async () => {
+    setup({ verified: true, profiles: [] });
+    server.use(
+      mswHttp.get(`${API}/voice/profiles`, async () => {
+        await new Promise((r) => setTimeout(r, 150));
+        return HttpResponse.json([]);
+      }),
+    );
+    const { container } = wrap(<FirstRunChecklist />);
+    await waitFor(() => expect(container.querySelector('div[aria-hidden="true"]')).not.toBeNull());
+    expect(container.querySelector('div[aria-hidden="true"]')?.className).toMatch(/min-h-/);
+    expect(screen.queryByRole("region", { name: /get your first result/i })).toBeNull();
+    await screen.findByRole("link", { name: "Create a voice" });
+    expect(container.querySelector('div[aria-hidden="true"]')).toBeNull();
+  });
+
   it("verified with only a failed voice: says the upload failed", async () => {
     setup({ verified: true, profiles: [{ ...fixtures.profile, status: "failed" }] });
     wrap(<FirstRunChecklist />);
