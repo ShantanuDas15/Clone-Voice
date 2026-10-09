@@ -32,6 +32,14 @@ Set `CSP_ENFORCE=1` to run the whole suite under an **enforcing** Content-Securi
 
 ## Notes
 
+- **WebKit cannot run this suite over plain HTTP.** The API sets the refresh cookie with `Secure`
+  (`backend/api/auth.py`), Chromium and Firefox accept it on `http://localhost`, WebKit does not
+  store it (probed: Chromium keeps `refresh_token`, WebKit has no cookies), so every signed-in spec
+  loses its session on the first full navigation. Tried on 2026-10-09 with a `webkit` project:
+  9 passed, 27 failed, 9 skipped, all of the failures at sign-in. Running it needs the web app and API
+  behind local HTTPS (for example a TLS-terminating proxy with a trusted certificate); the mocked
+  smoke (`npm run test:cross-browser`) covers WebKit structurally in the meantime.
+
 - Two projects run the same specs: `chromium` and `firefox` (Firefox's fake microphone comes from
   `firefoxUserPrefs`; Playwright's `microphone` permission is Chromium-only). Safari/WebKit is a
   manual check.

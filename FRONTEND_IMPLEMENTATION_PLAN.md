@@ -1335,6 +1335,13 @@ Earlier entries said WebKit needed `sudo npx playwright install-deps`. **That wa
 **Open items from FE-UX27**
 1. Decide whether the CSP soak needs a reporting endpoint (WebKit shows nothing without it). Run the real e2e on WebKit when the recipe allows. Remaining: manual U6.3.
 
+### FE-UX28 — UX plan, U7.1: real-backend e2e on WebKit, attempted (2026-10-09, branch `test/FE-UX28-webkit-e2e`, commit `24ca07a`; docs only)
+
+Ran the full e2e (real backend and weights, SQLite, console email) with a temporary `webkit` project: **9 passed, 27 failed, 9 skipped** (13.5 min). Every failure is at sign-in: `signUpVerified` cannot reach `/voices` because the session is lost on the first full navigation. Cause confirmed by a probe: after sign-up the API's `Secure` refresh cookie (`backend/api/auth.py`, hardcoded `secure=True`) is stored by Chromium but **not by WebKit over `http://localhost`** (no cookies at all). That is a limit of the local plain-HTTP setup, **not evidence of a product defect**, and also not evidence that Safari works over HTTPS: that is still untested. No `webkit` project was kept (it would only fail); `frontend/e2e/README.md` records the limit and what would be needed (local HTTPS). No code change; the backend was not touched.
+
+**Open items from FE-UX28**
+1. Run the e2e against HTTPS to verify Safari properly (a TLS proxy with a trusted certificate), or do the manual Safari pass. Plus the CSP reporting decision (FE-UX27), the CI `visual` result, and the manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
