@@ -10,19 +10,9 @@ import { useProfiles } from "@/hooks/use-voice-profiles";
 import { firstRun } from "@/lib/first-run";
 
 /**
- * Holds the checklist's space while it is still unknown whether it will show, so the form below
- * does not jump down when it arrives (UX-25/UR17). A returning user, who never sees the
- * checklist, gets a gap of this height that closes once the voice list loads.
- */
-function Reserved() {
-  return (
-    <div aria-hidden="true" className="mb-6 min-h-[16.625rem] min-[360px]:min-h-[15.375rem]" />
-  );
-}
-
-/**
  * Shown on Generate until a verified email and a ready voice both exist: the path to a first
- * take, with the next action as the primary button. Renders nothing once it is complete.
+ * take, with the next action as the primary button. Renders nothing once it is complete. It sits
+ * below the form, so its late arrival moves nothing above it (UR17).
  */
 export function FirstRunChecklist() {
   const { status, user } = useAuth();
@@ -31,7 +21,7 @@ export function FirstRunChecklist() {
 
   const verified = Boolean(user.email_verified_at);
   // Wait for the list before judging the voice step, so a returning user never sees a flash.
-  if (verified && profiles.isPending) return <Reserved />;
+  if (verified && profiles.isPending) return null;
   const hasReadyVoice = (profiles.data ?? []).some((p) => p.status === "ready");
   const hasFailed = (profiles.data ?? []).some((p) => p.status === "failed");
   const state = firstRun({ emailVerified: verified, hasReadyVoice });
@@ -40,7 +30,7 @@ export function FirstRunChecklist() {
   return (
     <section
       aria-labelledby="first-run-title"
-      className="mb-6 max-w-xl rounded border border-border bg-muted p-4"
+      className="mt-6 max-w-xl rounded border border-border bg-muted p-4"
     >
       <h2 id="first-run-title" className="mb-3 text-lg font-semibold">
         Get your first result

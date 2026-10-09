@@ -1359,6 +1359,17 @@ After the fixes every WebKit spec passes or skips on purpose (re-run per file, n
 **Open items from FE-UX29**
 1. Resolve the FE-UX26 regression (owner's call: put the checklist after the form, or revert to no reservation). Plus the CSP reporting decision (FE-UX27), the CI `visual` result, and the manual U6.3.
 
+### FE-UX30 — Owner decision: first-run checklist below the form; undoes FE-UX26 (2026-10-09, branch `fix/FE-UX30-checklist-below-form`, commit `b901b70`)
+
+After FE-UX29 showed FE-UX26's reserved space put a 0.24-0.25 CLS on returning users, the owner chose to render the checklist **after the form**. `/generate` now renders `TextToSpeechForm` then `FirstRunChecklist` (`mt-6`); the placeholder and its test are removed. **FE-UX26 is superseded** (its measurements stay true for what they measured: first-run users 0.04, but it cost returning users).
+
+**Measured (real Chromium + real backend):** `e2e/layout-shift.spec.ts` **9/9 pass** (returning user and unverified user at 320/360/412 px; they were 3 failures before this change). First-run user (verified, no voice; mocked, voice list delayed 600 ms, 800 px viewport): CLS **0.17 / 0.13 / 0.10 / 0.04** at 320/375/768/1280 px, against 0.23 / 0.23 / 0.28 / 0.14 with the checklist on top and 0.04 with the reservation. So it is **better than the original but not zero**: the checklist arriving pushes the footer down (it is inside an 800 px viewport on a short page), and nothing above the checklist moves. The residual only exists for brand-new users and only while the footer is on screen.
+
+Tests: `tests/first-run.test.tsx` gains an order check (checklist follows the form on the Generate page); **negative control:** putting the checklist back on top fails it. The 6 `generate-first-run-*` visual baselines were regenerated (375 light viewed); the other 48 pass unchanged. `npm test` 458 passed; typecheck, lint, prettier clean.
+
+**Open items from FE-UX30**
+1. If the residual first-run shift matters, the remaining fix is a fixed-height footer area or `min-height` on the page body; not done. Remaining: the CSP reporting decision (FE-UX27), the CI `visual` result, the manual U6.3, and a real Safari pass.
+
 ---
 
 ## 9. Definition of Done (release checklist)

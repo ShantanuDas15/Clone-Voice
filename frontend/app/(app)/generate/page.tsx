@@ -22,8 +22,8 @@ export default function GeneratePage({
         </Link>
         .
       </p>
-      <FirstRunChecklist />
       <TextToSpeechForm initialVoiceId={voice} />
+      <FirstRunChecklist />
     </section>
   );
 }
