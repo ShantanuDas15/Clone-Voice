@@ -1342,6 +1342,23 @@ Ran the full e2e (real backend and weights, SQLite, console email) with a tempor
 **Open items from FE-UX28**
 1. Run the e2e against HTTPS to verify Safari properly (a TLS proxy with a trusted certificate), or do the manual Safari pass. Plus the CSP reporting decision (FE-UX27), the CI `visual` result, and the manual U6.3.
 
+### FE-UX29 — UX plan, U7.1: real-backend e2e on WebKit over HTTPS (2026-10-09, branch `test/FE-UX29-webkit-https`, commit `cd9e8dc`)
+
+FE-UX28's cause was right, and the fix works: behind a local TLS proxy (`e2e/tools/https-proxy.mjs`, `playwright.https.config.ts`, recipe in `e2e/README.md`) WebKit stores the `Secure` cookie and sign-in works. First full run: **30 passed, 6 failed, 9 skipped**. None of the six was a product defect:
+
+| Spec(s) | Cause | Fix |
+|---|---|---|
+| `account`, `soak` (and `resilience`, which passed by luck) | specs hardcoded `localhost:3000` (a URL regex, and the CORS header on mocked responses) | derive the origin from `page.url()` |
+| `a11y` signed-in x2, `csp`, `recording` | no "Record now" option: Playwright's WebKit has no `getUserMedia`, and real Safari records a format we reject, so the form shows "Your browser can't record audio here" (UR16, working as designed) | specs assert that explanation and skip the recorder steps when the option is absent; `recording` skips |
+| `csp` | WebKit's "report-only mode without report-to" console note (FE-UX27) matched the spec's CSP-console filter | ignore that one message |
+
+After the fixes every WebKit spec passes or skips on purpose (re-run per file, not as one 20-minute run). Chromium re-run of the edited specs (account, soak, resilience, a11y, csp, recording): **16/16 pass**. Typecheck, lint, prettier clean. Safari the product is still not verified: this is Playwright's WebKit build on Linux, not Safari on macOS or iOS, and the recorder path is not exercised.
+
+**Found while re-running the Chromium suite: a regression from FE-UX26.** `e2e/layout-shift.spec.ts` > "signed in, after a reload" (returning user, has a voice) now fails at all three widths: **CLS 0.24-0.25 against the 0.05 bound**; it passed before FE-UX26. The reserved space FE-UX26 added is a blank gap for returning users that closes when the voice list loads. I understated that cost there ("a gap of that height"): it is large and it hits the majority of visits. The unverified case from FE-UX23 passes (bound 0.1). See the open item.
+
+**Open items from FE-UX29**
+1. Resolve the FE-UX26 regression (owner's call: put the checklist after the form, or revert to no reservation). Plus the CSP reporting decision (FE-UX27), the CI `visual` result, and the manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
