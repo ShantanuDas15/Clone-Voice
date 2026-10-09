@@ -1279,6 +1279,13 @@ Checked against the code before marking: U0.6 (`--primary` is the single teal sw
 
 **Left in the UX plan:** the Google provider mark (U2.2) and the draft restore (U3.2, needs an owner decision), the FE-UX17 CLS decisions (owner), CI wiring for `test:visual`, WebKit, and the manual U6.3.
 
+### FE-UX22 — UX plan, U2.2: Google provider mark (2026-10-09, branch `feat/FE-UX22-google-mark`, commit `e58f693`)
+
+New `components/google-mark.tsx` (inline SVG "G", decorative, `aria-hidden`) shown in `GoogleButton` with `gap-2`. Its four fills are Google's mandated brand colours, so the raw-colour guardrail in `tests/theme.test.ts` now skips that one file (the exemption is stated in the test and the file header). The 12 `/login` and `/signup` visual baselines were regenerated (`login-375-dark` viewed: mark renders, button label unchanged). `npm test` 451 passed, typecheck and lint clean. Not run: `npm run perf` (a ~1 KB inline SVG, no new request), WebKit.
+
+**Open items from FE-UX22**
+1. Remaining in the UX plan: draft restore (U3.2) and the FE-UX17 CLS decisions (owner), CI wiring for `test:visual`, WebKit, manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)

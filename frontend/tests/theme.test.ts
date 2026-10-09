@@ -106,7 +106,8 @@ describe("design-token guardrails", () => {
   });
 
   it("has no raw palette colours or hex values in components", () => {
-    const offenders = FILES.filter((f) =>
+    // google-mark.tsx holds Google's mandated brand colours (see its header).
+    const offenders = FILES.filter((f) => !f.endsWith("google-mark.tsx")).filter((f) =>
       /\b(?:bg|text|border|ring|fill|stroke)-(?:red|green|blue|indigo|violet|purple|pink|slate|gray|zinc|neutral|stone)-\d{2,3}\b|#[0-9a-fA-F]{6}\b/.test(
         read(f),
       ),
