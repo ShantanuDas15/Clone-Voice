@@ -1,7 +1,7 @@
 # CloneVoice — Frontend Phase-Wise Implementation Plan
 
 > **Status:** IN PROGRESS — Phase 0 (FE-P0, `63d2bd4`) Phase 1 (FE-P1, `36a424f`) Phase 2 (FE-P2, `a6c2913`) Phase 3 (FE-P3, `9b131dc`) and Phase 4 (FE-P4, `91efb3d`) implemented 2026-10-06 Phase 5 (FE-P5, `40a05a7`) Phase 6 (FE-P6, `67aac76`) the first slice of Phase 7 (FE-P7, `bc5210f`) its e2e/real-backend slice (FE-P7b, `e1a8561`) its browser-audit slice (FE-P7c, `13ca9b1`) its OpenAPI contract-test slice (FE-P7d, `856ef58`) its dialog-focus slice (FE-P7e, `7b69166`) its Lighthouse-budget slice (FE-P7f, `a5a1165`) its Firefox slice (FE-P7g, `0fbbdd8`) its observability slice (FE-P7h, `5b2e25c`) its documentation-reconciliation slice (FE-P7m, `dba0be3`) its CI-perf slice (FE-P7l, `e112ca0`) its soak-test slice (FE-P7k, `fe91eb6`) its narrow-header slice (FE-P7j, `3ace3f4`) and its banner-layout-shift slice (FE-P7i, `4186e42`) implemented 2026-10-07; its backend-alias fix (FE-P7n, `86ce187`) and Phase 8 preparation (FE-P8a, `d012995`: smoke script and runbook; FE-P8b, `a56d97f`: public-suffix same-site check) done, deployment itself not started. See the Task Status Log below.
-> **Last reviewed:** 2026-10-08. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) FE-UX6 (landing page, auth polish, copy pass) FE-UX7 (progress, result actions, file drop zone) FE-UX8 (Dialog primitive, session-ended message) FE-UX9 (offline handling, error recovery, empty-state actions) FE-UX10 (Take player with waveform) FE-UX11 (live level meter) and FE-UX12 (motion tokens, dialog fade, waveform draw-in) implemented the same day.
+> **Last reviewed:** 2026-10-09. UX-plan slices FE-UX0 (brand, tokens, fonts, theme toggle) FE-UX1 (Button, Alert, Badge primitives) FE-UX2 (Input, Select, Textarea), FE-UX3 (route split and rename) FE-UX4 (tab bar, inline verify alert, two-column layouts) FE-UX5 (first-run checklist, blocked-Generate reason, voice CTA) FE-UX6 (landing page, auth polish, copy pass) FE-UX7 (progress, result actions, file drop zone) FE-UX8 (Dialog primitive, session-ended message) FE-UX9 (offline handling, error recovery, empty-state actions) FE-UX10 (Take player with waveform) FE-UX11 (live level meter) and FE-UX12 (motion tokens, dialog fade, waveform draw-in) implemented the same day; FE-UX13 (radio keyboard model) followed on 2026-10-09.
 > **Backend dependencies done:** BD-1, BD-2 (milestone FE-1, `155049e`) and BD-4, BD-5, BD-6 (milestone FE-2, `9fc3bac`), 2026-10-05. G-01, G-02, G-06, G-07 are resolved and G-09 is mostly resolved (F20 unblocked). Only BD-3 (stable error codes, Retry-After on busy responses) remains open.
 > **Produced:** 2026-10-05 by following `frontend-plan-prompt.md`.
 > **Citation convention:** `path:line` = code/markdown line read this session; `file > heading` = markdown section.
@@ -1174,6 +1174,19 @@ Completes phase U4 of `FRONTEND_UX_IMPROVEMENT_PLAN.md`.
 2. Skeleton loaders still pulse (`animate-pulse`); they are a loading state, not decoration, and stop under reduced motion, but the plan could be read as banning looping motion, so say if you want them static.
 3. Next: U6 (accessibility and performance: arrow keys on the Upload/Record choice, forced-colors and `prefers-contrast` pass, 200-400% zoom reflow at 320 px, the manual NVDA/VoiceOver pass that needs a person) then U7 (cross-browser, visual baselines, docs, release gate).
 4. `/graphify --update` for the plan docs is still pending.
+
+### FE-UX13 — UX plan, U6.1: radio keyboard model for the sample source choice (2026-10-09, branch `feat/UX-U6-a11y-radio`, commit `d552fe9`)
+
+| Area | Status | Evidence |
+|---|---|---|
+| Arrow-key handling (U6.1, UX-17) | ✅ | `components/upload-voice-form.tsx`: the "Upload a file / Record now" `role="radio"` group now has roving `tabIndex` (one tab stop), Arrow keys move and select with wrap-around, Home/End jump, and focus follows selection. |
+| Forced colours (U6.2, part) | ✅ | The selected choice gets a 2 px `Highlight` border under `forced-colors`, so the state does not rely on background colour. Not checked in a real forced-colors browser. |
+| Tests | ✅ | `tests/recording.test.tsx` (+1: tab stops, arrows, wrap, Home/End). |
+
+**Verification run (local, Node 24):** `npm test` -> 39 files, **450 passed** (449 -> 450); `typecheck`, `lint`, `format:check` clean; `npm run build` ok. Backend untouched. **e2e, `npm run perf` and axe-in-browser not run.**
+
+**Open items from FE-UX13**
+1. Rest of U6: U6.2 contrast/`prefers-contrast` re-verify and a real forced-colors pass, U6.3 manual NVDA/VoiceOver (needs a person), U6.4 perf budget confirmation, U6.5 44 px targets and 320 px reflow at 200-400% zoom. Then U7.
 
 ---
 

@@ -276,6 +276,32 @@ describe("UploadVoiceForm recording", () => {
     await vi.waitFor(() => expect(uploads).toBe(1));
   });
 
+  it("follows the radio keyboard model: one tab stop, arrows move and select (U6.1)", async () => {
+    wrap();
+    const user = userEvent.setup();
+    const file = await screen.findByRole("radio", { name: "Upload a file" });
+    const record = screen.getByRole("radio", { name: "Record now" });
+    expect(file).toHaveAttribute("tabindex", "0");
+    expect(record).toHaveAttribute("tabindex", "-1");
+
+    file.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(record).toHaveFocus();
+    expect(record).toHaveAttribute("aria-checked", "true");
+    expect(record).toHaveAttribute("tabindex", "0");
+    expect(file).toHaveAttribute("tabindex", "-1");
+
+    await user.keyboard("{ArrowRight}"); // wraps
+    expect(file).toHaveFocus();
+    expect(file).toHaveAttribute("aria-checked", "true");
+    await user.keyboard("{End}");
+    expect(record).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(file).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(record).toHaveAttribute("aria-checked", "true");
+  });
+
   it("hides recording and explains why where it is unsupported", async () => {
     FakeRecorder.supported = ["audio/mp4"];
     wrap();
