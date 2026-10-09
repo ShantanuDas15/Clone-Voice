@@ -26,7 +26,7 @@ export function AppShell({ children, theme }: { children: ReactNode; theme: Them
           aria-label="Primary"
           className="mx-auto flex max-w-5xl flex-col items-start gap-y-1 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2"
         >
-          <Link href="/">
+          <Link href="/" className="inline-flex min-h-11 items-center">
             <Logo />
           </Link>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

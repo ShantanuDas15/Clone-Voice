@@ -19,10 +19,16 @@ async function smallTargets(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const out: string[] = [];
     document
-      .querySelectorAll("button, input:not([type=checkbox]):not([type=radio]), select, textarea")
+      .querySelectorAll(
+        "a[href], button, input:not([type=checkbox]):not([type=radio]), select, textarea",
+      )
       .forEach((el) => {
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) return;
+        if (el.closest(".sr-only")) return; // visually hidden (the file input)
+        // Links inside running text are exempt (WCAG 2.5.8 inline exception); the logo,
+        // nav and tab links are not.
+        if (el.tagName === "A" && getComputedStyle(el).display === "inline") return;
         if (r.height < 43.5)
           out.push(
             `${el.tagName.toLowerCase()} "${(el.textContent || (el as HTMLInputElement).name || "").trim().slice(0, 30)}" ${Math.round(r.height)}px`,

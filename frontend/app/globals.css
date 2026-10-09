@@ -67,6 +67,35 @@
   --warning-foreground: 38 90% 85%;
 }
 
+/*
+ * prefers-contrast: more (UX-03, U6.2): darker outlines and secondary text, nothing else changes.
+ * Three blocks because the theme has three entry points (see above); tests/theme.test.ts asserts
+ * each reaches 7:1 for secondary text and 4.5:1 for outlines.
+ */
+@media (prefers-contrast: more) {
+  /* contrast-light */
+  :root {
+    --line: 210 6% 28%;
+    --border: 210 5% 42%;
+    --muted-foreground: 216 10% 18%;
+  }
+  /* contrast-dark */
+  :root[data-theme="dark"] {
+    --line: 150 6% 70%;
+    --border: 150 5% 40%;
+    --muted-foreground: 100 9% 85%;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  /* contrast-dark-os */
+  :root:not([data-theme="light"]) {
+    --line: 150 6% 70%;
+    --border: 150 5% 40%;
+    --muted-foreground: 100 9% 85%;
+  }
+}
+
 body {
   @apply bg-background font-sans text-foreground antialiased;
 }
