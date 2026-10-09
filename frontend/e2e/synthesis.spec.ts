@@ -20,8 +20,8 @@ test("generate → play → download → history → replay from history (real w
   });
   await page.getByRole("button", { name: "Generate speech" }).click();
 
-  const player = page.getByLabel("Generated speech");
-  await expect(player).toBeVisible({ timeout: 300_000 });
+  const player = page.locator('audio[aria-label="Generated speech"]');
+  await expect(player).toBeAttached({ timeout: 300_000 }); // the <audio> has no UI of its own
   expect(synthRequests).toBe(1);
 
   // The blob is real, decodable WAV audio.
@@ -42,9 +42,9 @@ test("generate → play → download → history → replay from history (real w
   // History shows it with the voice name, and past audio plays through the authed endpoint.
   await page.goto("/history");
   await expect(page.getByText("Hello there.")).toBeVisible();
-  await page.getByRole("button", { name: "Play" }).click();
-  const past = page.getByLabel(/generated audio from/i);
-  await expect(past).toBeVisible();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  const past = page.locator('audio[aria-label^="Generated audio from"]');
+  await expect(past).toBeAttached();
   const pastDuration = await past.evaluate(async (el: HTMLAudioElement) => {
     await new Promise((resolve) => {
       if (el.readyState >= 1) resolve(null);

@@ -50,10 +50,10 @@ test("forgot → reset changes the password, ends other sessions and reuse is re
   await expect(tab.getByRole("link", { name: "Sign in" })).toBeVisible();
 
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
-  await page.getByLabel("Password").fill("brand-new-password-1");
+  await page.getByLabel("Password", { exact: true }).fill("brand-new-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/generate/);
 

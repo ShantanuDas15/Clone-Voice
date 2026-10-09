@@ -45,7 +45,7 @@ export async function signUp(page: Page, email: string, name = "E2E User"): Prom
   await page.goto("/signup");
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/generate/);
 }
@@ -83,5 +83,7 @@ export async function createVoice(page: Page, name = "E2E voice"): Promise<void>
 export async function signOut(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Sign in" }),
+  ).toBeVisible();
 }

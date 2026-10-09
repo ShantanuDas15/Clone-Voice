@@ -214,6 +214,7 @@ describe("palette contrast (both themes)", () => {
         ["danger", "surface"],
         ["danger", "background"],
         ["success", "surface"],
+        ["success", "muted"], // the success Badge
         ["primary-foreground", "primary"],
         ["danger-foreground", "danger"],
         ["warning-foreground", "warning"],

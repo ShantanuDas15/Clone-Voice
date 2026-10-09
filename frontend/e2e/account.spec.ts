@@ -15,17 +15,17 @@ test("rename, then delete the account: signed out and login no longer works", as
 
   await page.getByRole("button", { name: /delete my account/i }).click();
   await page.getByLabel(/type delete/i).fill("DELETE");
-  await page.getByLabel("Password").fill("wrong-password-xx");
+  await page.getByLabel("Password", { exact: true }).fill("wrong-password-xx");
   await page.getByRole("button", { name: "Delete account" }).click();
   await expect(page.getByText("That password is incorrect.")).toBeVisible();
 
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Delete account" }).click();
   await expect(page).toHaveURL(/localhost:3000\/$/);
 
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
 });
