@@ -21,7 +21,7 @@ test("rename, then delete the account: signed out and login no longer works", as
 
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Delete account" }).click();
-  await expect(page).toHaveURL(/localhost:3000\/$/);
+  await expect(page).toHaveURL(/^https?:\/\/localhost:\d+\/$/);
 
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
