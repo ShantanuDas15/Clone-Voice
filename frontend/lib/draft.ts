@@ -1,22 +1,34 @@
 /**
- * In-memory draft of the generate form so the user's voice and text survive a mid-flow
- * redirect to /login and back (R2). Deliberately not persisted: text is private (R16).
+ * In-memory drafts so a user's work survives an expired session: redirect to /login and back (R2).
+ * Never persisted (text is private, R16) and tagged with the owner's user id: a different user
+ * signing in on the same tab sees nothing, and a deliberate sign-out clears it (`clearDraft`).
+ * Consent is deliberately not kept; it must be confirmed again.
  */
-export interface SynthesisDraft {
+export interface Draft {
   voiceId: string;
   text: string;
+  voiceName: string;
 }
 
-let draft: SynthesisDraft = { voiceId: "", text: "" };
+const EMPTY: Draft = { voiceId: "", text: "", voiceName: "" };
 
-export function getDraft(): SynthesisDraft {
-  return draft;
+let owner: string | null = null;
+let draft: Draft = EMPTY;
+
+/** The draft saved by `userId`, or an empty one when it belongs to someone else. */
+export function getDraft(userId: string | undefined): Draft {
+  return userId !== undefined && owner === userId ? draft : EMPTY;
 }
 
-export function saveDraft(next: Partial<SynthesisDraft>): void {
+/** Merge `next` into the draft for `userId`; another user's draft is discarded first. */
+export function saveDraft(userId: string | undefined, next: Partial<Draft>): void {
+  if (userId === undefined) return;
+  if (owner !== userId) draft = EMPTY;
+  owner = userId;
   draft = { ...draft, ...next };
 }
 
 export function clearDraft(): void {
-  draft = { voiceId: "", text: "" };
+  owner = null;
+  draft = EMPTY;
 }

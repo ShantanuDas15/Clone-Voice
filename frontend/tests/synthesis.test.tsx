@@ -5,10 +5,10 @@ import { HttpResponse, http as mswHttp } from "msw";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AuthProvider, __resetBootstrapForTests } from "@/components/auth-provider";
+import { AuthProvider, __resetBootstrapForTests, useAuth } from "@/components/auth-provider";
 import { TextToSpeechForm } from "@/components/text-to-speech-form";
 import { parseFilename, parseGenerationId } from "@/lib/api/synthesize";
-import { clearDraft } from "@/lib/draft";
+import { clearDraft, saveDraft } from "@/lib/draft";
 import { __resetSessionForTests } from "@/lib/auth/session";
 import { hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
 import { fixtures } from "@/mocks/handlers";
@@ -369,6 +369,38 @@ describe("TextToSpeechForm", () => {
     unmount();
     wrap(<TextToSpeechForm />);
     expect(await screen.findByLabelText("Text")).toHaveValue("Keep me");
+  });
+
+  it("does not restore the draft after a deliberate sign-out, and not for another user", async () => {
+    function SignOut() {
+      const { logout } = useAuth();
+      return (
+        <button type="button" onClick={() => void logout()}>
+          Out
+        </button>
+      );
+    }
+    const first = wrap(
+      <>
+        <TextToSpeechForm />
+        <SignOut />
+      </>,
+    );
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Text"), "Secret");
+    await user.click(screen.getByRole("button", { name: "Out" }));
+    first.unmount();
+
+    __resetBootstrapForTests();
+    wrap(<TextToSpeechForm />);
+    expect(await screen.findByLabelText("Text")).toHaveValue("");
+
+    // Another user's draft is never shown: simulate the previous owner differing.
+    clearDraft();
+    saveDraft("someone-else", { text: "Not yours" });
+    first.unmount();
+    wrap(<TextToSpeechForm />);
+    expect(await screen.findByLabelText("Text")).toHaveValue("");
   });
 
   it("shows a player error state when the audio can't be decoded", async () => {

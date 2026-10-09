@@ -1,5 +1,6 @@
 "use client";
 
+import { getDraft, saveDraft } from "@/lib/draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -51,6 +52,7 @@ function uploadErrorMessage(e: ApiError): string {
 export function UploadVoiceForm() {
   const client = useQueryClient();
   const terms = useQuery({ queryKey: ["terms"], queryFn: fetchTerms, staleTime: 5 * 60_000 });
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string>();
   const [file, setFile] = useState<File | null>(null);
@@ -71,8 +73,18 @@ export function UploadVoiceForm() {
     setRecordingUnavailable(support.supported ? null : support.reason);
   }, []);
 
-  const { user } = useAuth();
   const unverified = user !== null && !user.email_verified_at;
+  // Restore this user's draft name once the session is known, then keep saving it (see
+  // `lib/draft.ts`; consent is never kept).
+  const draftReady = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user || draftReady.current === user.id) return;
+    draftReady.current = user.id;
+    setName((n) => n || getDraft(user.id).voiceName);
+  }, [user]);
+  useEffect(() => {
+    if (user && draftReady.current === user.id) saveDraft(user.id, { voiceName: name });
+  }, [user, name]);
   const upload = useMutation({
     mutationFn: () =>
       uploadProfile(

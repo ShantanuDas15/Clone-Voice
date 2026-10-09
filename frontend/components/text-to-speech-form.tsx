@@ -52,9 +52,8 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const { user } = useAuth();
   const profiles = useProfiles();
   const client = useQueryClient();
-  const initial = getDraft();
-  const [voiceId, setVoiceId] = useState(initialVoiceId ?? initial.voiceId);
-  const [text, setText] = useState(initial.text);
+  const [voiceId, setVoiceId] = useState(initialVoiceId ?? "");
+  const [text, setText] = useState("");
   const [textError, setTextError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<(SynthesisResult & { text: string }) | null>(null);
@@ -74,7 +73,19 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const elapsed = useElapsedSeconds(pending);
   const audioUrl = useObjectUrl(result?.blob ?? null);
 
-  useEffect(() => saveDraft({ voiceId, text }), [voiceId, text]);
+  // Restore this user's draft once the session is known (it is empty for anyone else), and only
+  // then start saving, so the empty initial state never overwrites it.
+  const draftReady = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user || draftReady.current === user.id) return;
+    draftReady.current = user.id;
+    const saved = getDraft(user.id);
+    setVoiceId((v) => v || saved.voiceId);
+    setText((t) => t || saved.text);
+  }, [user]);
+  useEffect(() => {
+    if (user && draftReady.current === user.id) saveDraft(user.id, { voiceId, text });
+  }, [user, voiceId, text]);
 
   // A preselected or remembered voice that is gone (deleted, or not ready) must not linger as an
   // invisible selection: clear it once the list is known.

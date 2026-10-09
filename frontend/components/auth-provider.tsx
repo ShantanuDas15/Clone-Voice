@@ -66,7 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const endSession = useCallback(() => {
     setUser(null);
     setStatus("unauthenticated");
-    clearDraft();
+    // The draft is kept on an expired session (restored only for the same user, `lib/draft.ts`);
+    // a deliberate sign-out clears it below.
     queryClient.clear(); // R16: no cached data survives sign-out.
   }, [queryClient]);
 
@@ -131,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Offline logout still clears local state; the cookie expires on its own.
         }
         setSignedOutOnPurpose(true);
+        clearDraft();
         clearSession();
         endSession();
       },
@@ -138,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applyUser: setUser,
       discardSession: () => {
         setSignedOutOnPurpose(true);
+        clearDraft();
         clearSession();
         endSession();
       },
