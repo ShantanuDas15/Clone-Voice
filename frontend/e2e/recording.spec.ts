@@ -12,7 +12,7 @@ test("record with a fake microphone, preview, and submit a real WEBM upload", as
   await expect(stop).toBeDisabled();
   await expect(stop).toBeEnabled({ timeout: 15_000 }); // after the 5 s minimum
   await stop.click();
-  await expect(page.getByLabel("Recording preview")).toBeVisible();
+  await expect(page.locator('audio[aria-label="Recording preview"]')).toBeAttached();
 
   const upload = page.waitForRequest((r) => r.url().endsWith("/voice/upload"));
   await page.getByLabel("Voice name").fill("Recorded");

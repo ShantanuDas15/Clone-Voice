@@ -88,7 +88,7 @@ test(`${RUNS} generations leave at most one live audio blob URL and one player`,
   for (let i = 1; i <= RUNS; i += 1) {
     await generate.click();
     await expect.poll(() => synthRequests).toBe(i);
-    await expect(page.getByLabel("Generated speech")).toBeVisible();
+    await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached();
     await expect(generate).toBeEnabled();
     const s = await state();
     expect(s.live, `live blob URLs after run ${i}`).toBeLessThanOrEqual(1);

@@ -24,7 +24,7 @@
   --primary-foreground: 0 0% 100%;
   --danger: 4 76% 40%; /* #B42318 */
   --danger-foreground: 0 0% 100%; /* text on a danger fill */
-  --success: 150 59% 30%; /* #1F7A4D */
+  --success: 150 59% 28%; /* #1D7247, 4.5:1 on the muted Badge fill */
   --warning: 38 92% 90%;
   --warning-foreground: 26 80% 22%;
 }

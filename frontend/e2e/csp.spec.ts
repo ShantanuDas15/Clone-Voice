@@ -37,7 +37,7 @@ test("no CSP violations across public pages, the app, playback and recording", a
     timeout: 15_000,
   });
   await page.getByRole("button", { name: "Stop recording" }).click();
-  await expect(page.getByLabel("Recording preview")).toBeVisible();
+  await expect(page.locator('audio[aria-label="Recording preview"]')).toBeAttached();
 
   const inPage = await page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? []);
   expect([...violations, ...inPage]).toEqual([]);

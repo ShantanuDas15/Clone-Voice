@@ -28,7 +28,7 @@ test("signup keeps the session across reloads, stores no token, and logs out", a
   await expect(page).toHaveURL(/\/login/);
 
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/generate/);
 });
@@ -39,7 +39,7 @@ test("wrong password gives one generic message", async ({ page }) => {
   await signOut(page);
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("not-the-password");
+  await page.getByLabel("Password", { exact: true }).fill("not-the-password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
 });
@@ -61,7 +61,9 @@ test("two tabs refreshing together never log each other out; logout propagates",
   }
 
   await a.getByRole("button", { name: "Sign out" }).click();
-  await expect(b.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(
+    b.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Sign in" }),
+  ).toBeVisible();
 });
 
 test("an expired access token mid-session recovers silently", async ({ page }) => {

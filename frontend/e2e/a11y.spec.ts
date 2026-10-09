@@ -23,6 +23,10 @@ test("canary: the real-browser audit does flag low contrast and an unlabeled inp
 const SCHEMES = ["light", "dark"] as const;
 
 async function audit(page: Page, label: string) {
+  // Axe reads computed colours, so let the 200 ms dialog fade finish (mid-fade is blended).
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running"),
+  );
   expect(await seriousViolations(page), label).toEqual([]);
 }
 
@@ -61,6 +65,7 @@ for (const scheme of SCHEMES) {
     await audit(page, `delete-voice dialog (${scheme})`);
     await page.getByRole("button", { name: "Cancel" }).click();
 
+    await page.goto("/account"); // delete-account moved here with the route split
     await page.getByRole("button", { name: /delete my account/i }).click();
     await audit(page, `delete-account dialog (${scheme})`);
 

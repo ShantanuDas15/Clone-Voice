@@ -25,6 +25,9 @@ test("both confirmation dialogs are keyboard-operable modals in a real browser",
   await expect(dialog).toHaveCount(0);
   await expect(rowDelete).toBeFocused();
 
+  // Delete-account lives on /account since the route split.
+  await page.goto("/account");
+
   // Delete-account: first field focused, focus never leaves, Escape restores the trigger.
   const trigger = page.getByRole("button", { name: /delete my account/i });
   await trigger.focus();

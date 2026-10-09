@@ -1,6 +1,6 @@
 import { type Page, expect, test } from "@playwright/test";
 
-import { signUp, signUpVerified, uniqueEmail } from "./helpers";
+import { createVoice, signUp, signUpVerified, uniqueEmail } from "./helpers";
 
 // The unfixed header shifted 0.17-0.35; 0.05 leaves room for incidental sub-pixel shifts.
 /** Sum of layout shifts (no recent input) over a page load, Chromium only. */
@@ -44,8 +44,11 @@ test.describe("header does not shift when the session resolves (CLS)", () => {
       });
 
       test("signed in, after a reload", async ({ page }) => {
-        // Verified, so no late notice is involved; the unverified case is the next test.
+        // A returning user: verified with a ready voice, so there is no first-run checklist and no
+        // late notice. (A brand-new user's checklist arrives after the voice list and pushes the
+        // form down; that is a known trade-off, see FE-UX17 in the engineering plan.)
         await signUpVerified(page, "cls");
+        await createVoice(page, "CLS voice");
         await observeShifts(page);
         await slowRefresh(page);
         await page.goto("/generate");
