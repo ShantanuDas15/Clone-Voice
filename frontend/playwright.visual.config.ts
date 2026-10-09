@@ -12,7 +12,13 @@ export default defineConfig({
   expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: "disabled" } },
   workers: 1,
   reporter: [["list"]],
-  use: { baseURL: "http://localhost:3000", ...devices["Desktop Chrome"], reducedMotion: "reduce" },
+  use: {
+    baseURL: "http://localhost:3000",
+    ...devices["Desktop Chrome"],
+    reducedMotion: "reduce",
+    locale: "en-US",
+    timezoneId: "UTC",
+  },
   projects: [{ name: "chromium" }],
   webServer: {
     command:
