@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, __resetBootstrapForTests } from "@/components/auth-provider";
 import { FirstRunChecklist } from "@/components/first-run-checklist";
 import { StepList } from "@/components/step-list";
+import GeneratePage from "@/app/(app)/generate/page";
 import { TextToSpeechForm } from "@/components/text-to-speech-form";
 import { clearDraft } from "@/lib/draft";
 import { firstRun } from "@/lib/first-run";
@@ -104,20 +105,12 @@ describe("FirstRunChecklist", () => {
     expect(screen.getAllByRole("listitem")[1]).toHaveAttribute("aria-current", "step");
   });
 
-  it("holds the checklist's space while a verified user's voice list loads (no layout shift)", async () => {
+  it("sits below the form on the Generate page, so its late arrival moves nothing above it", async () => {
     setup({ verified: true, profiles: [] });
-    server.use(
-      mswHttp.get(`${API}/voice/profiles`, async () => {
-        await new Promise((r) => setTimeout(r, 150));
-        return HttpResponse.json([]);
-      }),
-    );
-    const { container } = wrap(<FirstRunChecklist />);
-    await waitFor(() => expect(container.querySelector('div[aria-hidden="true"]')).not.toBeNull());
-    expect(container.querySelector('div[aria-hidden="true"]')?.className).toMatch(/min-h-/);
-    expect(screen.queryByRole("region", { name: /get your first result/i })).toBeNull();
-    await screen.findByRole("link", { name: "Create a voice" });
-    expect(container.querySelector('div[aria-hidden="true"]')).toBeNull();
+    wrap(<GeneratePage searchParams={{}} />);
+    const heading = await screen.findByRole("heading", { name: "Get your first result" });
+    const text = screen.getByLabelText("Text");
+    expect(text.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("verified with only a failed voice: says the upload failed", async () => {
