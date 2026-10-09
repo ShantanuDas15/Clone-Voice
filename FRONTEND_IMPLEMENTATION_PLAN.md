@@ -1266,6 +1266,13 @@ New `frontend/playwright.visual.config.ts` and `frontend/visual/public.spec.ts`,
 **Open items from FE-UX19**
 1. U7.4 rollout note, the FE-UX17 CLS decisions, CI wiring for `test:visual`, WebKit, and the manual U6.3.
 
+### FE-UX20 — UX plan, U7.4: staged rollout note (2026-10-09, branch `docs/FE-UX20-rollout-note`, commit `32b1acc`; docs only)
+
+`frontend/RUNBOOK.md` gains "Staged rollout of the UX redesign": six stages (tokens and primitives, routes and shell, core flows, states, voice take and motion, accessibility), each with its real commit hashes, the user-visible change and the signal to revert on; stage 2 (URL changes) is flagged as the riskiest. No code or test change, so the suite was not re-run.
+
+**Open items from FE-UX20**
+1. Nothing in U0-U7 is left to build. Remaining: the FE-UX17 CLS decisions (owner), CI wiring for `test:visual`, WebKit, and the manual screen-reader pass (U6.3, needs a person).
+
 ---
 
 ## 9. Definition of Done (release checklist)
