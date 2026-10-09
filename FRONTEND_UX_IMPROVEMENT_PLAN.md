@@ -486,6 +486,27 @@ Finding → Phase → Task → Test type. **U**=unit, **I**=integration (MSW), *
 **Regression**
 12. Unit, integration, e2e, axe, Lighthouse and smoke suites pass with zero failures; contract tests unchanged (no backend change); engineering-plan Task Status Log updated.
 
+### 9.1 Status against this checklist (2026-10-09, FE-UX31)
+
+"Re-run" = executed today against the current `main`; "per log" = recorded in `FRONTEND_IMPLEMENTATION_PLAN.md` earlier and not re-checked now.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | axe clean, token contrast asserted | **Met** | Re-run: e2e `a11y` passes on Chromium and Firefox (and WebKit over HTTPS, FE-UX29); `tests/theme.test.ts` in the 459 unit tests |
+| 2 | Every flow by keyboard alone, `aria-current` | **Partial** | `dialog-keyboard` e2e and the radio keyboard model are tested; no spec drives each of the 8 flows with the keyboard only |
+| 3 | Manual NVDA and VoiceOver pass | **Not done** | needs a person |
+| 4 | 44 px targets, 320 px and 400% reflow, forced-colors | **Met** | Re-run: `responsive` e2e (targets, reflow, long email at 320 px); forced-colors per log (FE-UX14) |
+| 5 | Layouts at 320/375/768/1280/1920, baselines committed | **Partial** | 54 baselines at 375/768/1280, light and dark; 320 px is covered by `responsive` only; **1920 px was never checked** |
+| 6 | Chromium and Firefox e2e green; Safari tested or listed | **Met, Safari partial** | Re-run: full suite, **81 passed, 9 skipped (Chromium-only layout-shift specs on Firefox), 0 failed**. WebKit: mocked smoke 16/16, real e2e over HTTPS passes or skips on purpose (FE-UX27/29). Real Safari on macOS/iOS: not run |
+| 7 | Every component has the §4.7 states, no disabled control without a reason | **Partial** | the reason pattern is tested for Generate and Voices; an exhaustive state-by-component audit was not done |
+| 8 | Every UR10 status code, offline, mic denial, playback failure, expired audio tested | **Met per log** | FE-UX8/9/13 and the `resilience` e2e (re-run, passes); not re-audited code by code |
+| 9 | Reduced motion: no animation | **Met per log** | FE-UX12 e2e; the `a11y`/visual runs use reduced motion |
+| 10 | No hardcoded colour or one-off radius; no gradient, shadow, ALL-CAPS, numbered non-sequence | **Partial** | the token lint covers colours and durations (one stated exemption: the Google mark's brand colours); **nothing automated checks radii, shadows, gradients or ALL-CAPS** |
+| 11 | Perf budgets, no soak leak | **Met, margin gone** | Re-run (`npm run perf`): LCP 1.96-2.27 s, CLS 0.001, TBT <= 15 ms, JS 181-200 KB; `/login` is **199.9 KB against the 200 KB budget (0.1 KB headroom)**; `soak` e2e passes |
+| 12 | All suites zero failures; log updated | **Partial** | Re-run: unit 459, e2e 81/0 failed, visual 54, Lighthouse gate. Not run: `npm run smoke` (needs a deployed target). The CI `visual` job has never run |
+
+**Reading it:** nothing is failing. Four items are not yet fully evidenced (2, 5, 7, 10), one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
+
 ---
 
 ## 10. Backend dependencies and open questions
