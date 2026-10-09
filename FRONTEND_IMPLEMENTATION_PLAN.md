@@ -1324,6 +1324,17 @@ Tests: a new case in `tests/first-run.test.tsx` (placeholder present while loadi
 **Open items from FE-UX26**
 1. Re-run `e2e/layout-shift.spec.ts` and read the CI `visual` job (FE-UX23, FE-UX25). Remaining: WebKit, manual U6.3.
 
+### FE-UX27 — UX plan, U7.1: WebKit and Firefox structural smoke (2026-10-09, branch `test/FE-UX27-webkit-smoke`, commit `dec523a`)
+
+Earlier entries said WebKit needed `sudo npx playwright install-deps`. **That was wrong for this host:** `npx playwright install webkit` alone launches it (Playwright WebKit 26.6). New `visual/cross-browser.spec.ts` (API mocked, no backend; shared `visual/mock-api.ts`) visits the 4 public and 4 signed-in routes at 375 and 1280 px and asserts: exactly one `h1`, no page error, no console error, no horizontal overflow. `npm run test:cross-browser` runs it on WebKit and Firefox; `npm run test:visual` is now Chromium only (the screenshots are Chromium baselines) so CI is unaffected.
+
+**Result: WebKit 16/16, Firefox 16/16**, after one finding: WebKit logs a console error on every page, "the Content Security Policy ... was delivered in report-only mode, but does not specify a 'report-to'; the policy will have no effect". Our soak policy sets no `report-to`/`report-uri` (`lib/csp.ts`, `middleware.ts`), so in Safari the report-only policy does nothing and the soak there tells us nothing; the spec ignores that one message. Enforcing mode (`CSP_ENFORCE=1`) is unaffected. Not fixed (adding a reporting endpoint is an owner call). Chromium visual 54/54, `npm test` 459, typecheck and lint clean.
+
+**Not covered on WebKit:** the real-backend e2e (recording, synthesis, real audio decoding in `Take`), the screenshot look, and a manual Safari pass. Safari is therefore smoke-tested only, not verified.
+
+**Open items from FE-UX27**
+1. Decide whether the CSP soak needs a reporting endpoint (WebKit shows nothing without it). Run the real e2e on WebKit when the recipe allows. Remaining: manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
