@@ -68,6 +68,15 @@ The frontend is stateless and owns no database, so rolling back is redeploying t
 
 ## 4. Diagnosing problems
 
+### Old links to `/dashboard` or `/profile`
+
+The redesign renamed the signed-in routes to `/generate`, `/voices`, `/history` and `/account`.
+The old `/dashboard` and `/profile` paths answer with a 308 to `/generate` and `/voices`, and a
+`?next=` that still names them is mapped the same way after sign-in, so emailed links and
+bookmarks keep working. If one of them returns 404, the redirects in `next.config.mjs` were lost.
+The smoke script does not exercise them; check with `curl -sI $WEB/dashboard` (expect `308` and
+`location: /generate`).
+
 ### "I keep getting signed out" / session lost on reload
 
 The session lives in an `HttpOnly` refresh cookie. In the browser's network tab look at
