@@ -1286,6 +1286,13 @@ New `components/google-mark.tsx` (inline SVG "G", decorative, `aria-hidden`) sho
 **Open items from FE-UX22**
 1. Remaining in the UX plan: draft restore (U3.2) and the FE-UX17 CLS decisions (owner), CI wiring for `test:visual`, WebKit, manual U6.3.
 
+### FE-UX23 — Owner decision on the 320 px unverified CLS bound (2026-10-09, branch `fix/cls-bound-320`, commit `0743840`)
+
+Decision (owner): raise the bound for "signed in but unverified" in `e2e/layout-shift.spec.ts` from 0.05 to 0.1 (Google's "good" threshold; FE-UX17 measured 0.056, from the footer moving). Only that one spec changed; the other layout-shift specs keep 0.05. **Not re-run:** the e2e needs the real backend and weights, so the spec is edited but unexecuted; the bound is above the measured value, so it should pass. The first-run checklist shift (an unrelated, larger shift for brand-new users) is still open.
+
+**Open items from FE-UX23**
+1. Run `e2e/layout-shift.spec.ts` on the next e2e pass to confirm. Remaining in the UX plan: draft restore (U3.2), the checklist shift, CI wiring for `test:visual`, WebKit, manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
