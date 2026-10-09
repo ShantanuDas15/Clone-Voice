@@ -1293,6 +1293,17 @@ Decision (owner): raise the bound for "signed in but unverified" in `e2e/layout-
 **Open items from FE-UX23**
 1. Run `e2e/layout-shift.spec.ts` on the next e2e pass to confirm. Remaining in the UX plan: draft restore (U3.2), the checklist shift, CI wiring for `test:visual`, WebKit, manual U6.3.
 
+### FE-UX24 — UX plan, U3.2: draft restore across an expired session (2026-10-09, branch `feat/FE-UX24-draft-restore`, commit `3e19798`)
+
+Design (the one FE-UX8 proposed): `lib/draft.ts` is now keyed by user id (`getDraft(userId)`, `saveDraft(userId, …)`). It holds the generate voice and text and the new voice name, in memory only. `AuthProvider.endSession` no longer clears it, so an expired session (redirect to `/login?reason=expired`) keeps it; `logout` and `discardSession` (deliberate sign-out, account deletion) call `clearDraft()` explicitly. A different user sees an empty draft, and their first save discards the old one. Both forms restore once the session is known, then start saving (so the empty initial state never overwrites it). **Consent is deliberately not restored** (it must be confirmed again), and the file is never kept.
+
+Tests: `tests/draft.test.ts` (6: owner-only, other user, replacement, no user, sign-out, no consent field) and an integration test in `tests/synthesis.test.tsx` (no restore after sign-out, nor for another owner). **Negative control:** removing `clearDraft()` from `logout` fails the integration test. `npm test` 458 passed; typecheck, lint, prettier clean.
+
+**Limits:** a sign-out in another tab arrives as the same `cleared` event as an expiry, so that draft is kept in memory for the same user only; it never survives a reload. Not covered by an e2e test; the upload form's name restore has no dedicated test (it shares the generate form's pattern).
+
+**Open items from FE-UX24**
+1. Remaining: the first-run checklist shift, CI wiring for `test:visual`, WebKit, manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
