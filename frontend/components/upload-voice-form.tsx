@@ -27,6 +27,7 @@ const Recorder = dynamic(() => import("@/components/recorder").then((m) => m.Rec
 });
 
 type SampleMode = "file" | "record";
+const SAMPLE_MODES: readonly SampleMode[] = ["file", "record"];
 
 /** Copy for an upload failure, by kind (R3/R8). Network drops mid-upload usually mean a too-large body. */
 function uploadErrorMessage(e: ApiError): string {
@@ -84,6 +85,27 @@ export function UploadVoiceForm() {
       ),
     retry: false, // R5: never auto-retry an upload
   });
+
+  function selectMode(m: SampleMode) {
+    setMode(m);
+    setFile(null);
+    setFileError(undefined);
+  }
+
+  // U6.1: WAI-ARIA radio keyboard model: arrows move and select, Home/End jump, one tab stop.
+  function onModeKeyDown(e: React.KeyboardEvent, current: SampleMode) {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    let next: SampleMode | undefined;
+    if (step !== undefined) {
+      const i = SAMPLE_MODES.indexOf(current);
+      next = SAMPLE_MODES[(i + step + SAMPLE_MODES.length) % SAMPLE_MODES.length];
+    } else if (e.key === "Home") next = SAMPLE_MODES[0];
+    else if (e.key === "End") next = SAMPLE_MODES[SAMPLE_MODES.length - 1];
+    if (!next) return;
+    e.preventDefault();
+    if (next !== current) selectMode(next);
+    document.getElementById(`sample-mode-${next}`)?.focus();
+  }
 
   // R9: warn before leaving while an upload/analysis is running.
   useEffect(() => {
@@ -159,18 +181,17 @@ export function UploadVoiceForm() {
         <legend className="sr-only">Sample source</legend>
         {recordingUnavailable === null ? (
           <div role="radiogroup" aria-label="How to add a sample" className="flex gap-2 text-sm">
-            {(["file", "record"] as const).map((m) => (
+            {SAMPLE_MODES.map((m) => (
               <button
                 key={m}
+                id={`sample-mode-${m}`}
                 type="button"
                 role="radio"
                 aria-checked={mode === m}
-                onClick={() => {
-                  setMode(m);
-                  setFile(null);
-                  setFileError(undefined);
-                }}
-                className={`min-h-11 rounded border px-4 ${mode === m ? "border-primary bg-muted font-medium" : "border-line"}`}
+                tabIndex={mode === m ? 0 : -1}
+                onClick={() => selectMode(m)}
+                onKeyDown={(e) => onModeKeyDown(e, m)}
+                className={`min-h-11 rounded border px-4 forced-colors:border-2 ${mode === m ? "border-primary bg-muted font-medium forced-colors:border-[Highlight]" : "border-line"}`}
               >
                 {m === "file" ? "Upload a file" : "Record now"}
               </button>
