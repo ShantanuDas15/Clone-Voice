@@ -19,7 +19,12 @@ export default defineConfig({
     locale: "en-US",
     timezoneId: "UTC",
   },
-  projects: [{ name: "chromium" }],
+  projects: [
+    { name: "chromium", testIgnore: /cross-browser/ },
+    // Screenshots differ per engine, so the other engines run only the structural smoke spec.
+    { name: "webkit", testMatch: /cross-browser/, use: devices["Desktop Safari"] },
+    { name: "firefox", testMatch: /cross-browser/, use: devices["Desktop Firefox"] },
+  ],
   webServer: {
     command:
       "NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run build && npx next start -p 3000",
