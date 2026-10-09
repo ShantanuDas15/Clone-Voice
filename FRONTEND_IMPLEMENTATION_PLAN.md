@@ -1304,6 +1304,13 @@ Tests: `tests/draft.test.ts` (6: owner-only, other user, replacement, no user, s
 **Open items from FE-UX24**
 1. Remaining: the first-run checklist shift, CI wiring for `test:visual`, WebKit, manual U6.3.
 
+### FE-UX25 — UX plan, U7.2: visual tests in CI (2026-10-09, branch `chore/FE-UX25-visual-ci`, commit `4664f07`; CI config only)
+
+`.github/workflows/frontend.yml` gains a `visual` job (Node 20, Playwright Chromium, `npm run test:visual`, diff images uploaded as an artifact on failure). It is **advisory** (`continue-on-error: true`): the baselines were generated on a local Ubuntu host, and **this job has never run on GitHub's runner**, so whether they match is unknown. The YAML parses; nothing else was run. After the first CI run: if green, delete `continue-on-error`; if it fails on font or anti-aliasing noise, download the artifact and either regenerate the baselines from that run or raise `maxDiffPixelRatio`.
+
+**Open items from FE-UX25**
+1. Read the first CI result for the `visual` job. Remaining: the first-run checklist shift (owner), WebKit, manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
