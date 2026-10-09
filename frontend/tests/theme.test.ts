@@ -169,6 +169,32 @@ describe("palette contrast (both themes)", () => {
     return v;
   };
 
+  it("has a prefers-contrast: more override per theme entry point that reaches 7:1 / 4.5:1", () => {
+    const more = {
+      light: { ...light, ...block("/* contrast-light */") },
+      dark: { ...dark, ...block("/* contrast-dark */") },
+      darkOs: { ...darkMedia, ...block("/* contrast-dark-os */") },
+    };
+    expect(block("/* contrast-dark-os */")).toEqual(block("/* contrast-dark */"));
+    for (const [name, t] of Object.entries(more)) {
+      for (const bg of ["background", "surface", "muted"] as const) {
+        expect(
+          ratio(tok(t, "muted-foreground"), tok(t, bg)),
+          `${name} text on ${bg}`,
+        ).toBeGreaterThanOrEqual(7);
+      }
+      for (const bg of ["background", "surface"] as const) {
+        expect(ratio(tok(t, "line"), tok(t, bg)), `${name} line on ${bg}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
+      expect(
+        ratio(tok(t, "border"), tok(t, "background")),
+        `${name} border`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it("keeps the OS-driven dark block identical to the explicit dark block", () => {
     for (const k of Object.keys(dark)) expect(darkMedia[k], k).toEqual(dark[k]);
   });
