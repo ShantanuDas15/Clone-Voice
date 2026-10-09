@@ -42,6 +42,27 @@ origin, no trailing slash), `FRONTEND_URL` (base of emailed links), `GOOGLE_REDI
 3. Do the checks a script cannot (below), then flip `CSP_ENFORCE=1` once browsing every flow shows
    no CSP violations in the console.
 
+### Staged rollout of the UX redesign (plan U7.4)
+
+The redesign landed as small commits, so a regression can be bisected or the release cut in
+stages. Ship (and run the smoke script after) each stage in order; a later stage depends on the
+earlier ones, so never ship one without everything above it.
+
+| Stage                         | Commits                                                 | What changes for users                                                                                            | Revert if                                                                  |
+| ----------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1. Tokens and primitives (U0) | `6b7281d` FE-UX0, `7dc993d` FE-UX1, `b82eab6` FE-UX2    | New palette, font, theme toggle, button and field styling; no route or layout change                              | Contrast, font or LCP regression (`npm run perf`)                          |
+| 2. Routes and shell (U1)      | `78ff7b6` FE-UX3, `be38858` FE-UX4                      | `/dashboard` and `/profile` become `/generate`, `/voices`, `/history`, `/account` (308 redirects); mobile tab bar | Old links fail: `curl -sI $WEB/dashboard` must give 308 to `/generate`     |
+| 3. Core flows (U2)            | `44e49df` FE-UX5, `efd5f70` FE-UX6, `025d9b5` FE-UX7    | First-run checklist, landing and auth copy, generate progress and result actions, file drop zone                  | A first-time user cannot reach a first result                              |
+| 4. States (U3)                | `d628dea` FE-UX8, `aba1849` FE-UX9                      | Dialogs, session-ended message, offline handling, error recovery                                                  | A dialog traps focus or an error page renders blank                        |
+| 5. Voice take (U4, U5)        | `9ed6ea5` FE-UX10, `b26cd6a` FE-UX11, `c5447fd` FE-UX12 | Waveform player, live mic meter, motion                                                                           | Playback or recording fails (the native `<audio>` is kept as the fallback) |
+| 6. Accessibility (U6)         | `d552fe9` FE-UX13, `a5d4bd3` FE-UX14, `0d91969` FE-UX17 | Radio keyboard model, high-contrast tokens, success contrast fix                                                  | Keyboard or axe regression                                                 |
+
+Tests and docs commits (FE-UX15, 16, 18, 19) are not part of the runtime and need no staging. Stage
+2 is the riskiest (URLs change), so give it the longest soak before stage 3. Revert a stage with
+`git revert` of its commits in reverse order, then redeploy (section 3). Known open items at the
+time of writing: the 320 px unverified CLS bound and the first-run checklist shift (plan FE-UX17),
+WebKit and the manual screen-reader pass (U6.3) are not done.
+
 ### Manual release checks
 
 - Sign up, open the **real** verification email, verify. Forgot password, open the reset email, set a
