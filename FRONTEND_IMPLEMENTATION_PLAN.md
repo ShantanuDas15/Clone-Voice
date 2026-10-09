@@ -1370,6 +1370,15 @@ Tests: `tests/first-run.test.tsx` gains an order check (checklist follows the fo
 **Open items from FE-UX30**
 1. If the residual first-run shift matters, the remaining fix is a fixed-height footer area or `min-height` on the page body; not done. Remaining: the CSP reporting decision (FE-UX27), the CI `visual` result, the manual U6.3, and a real Safari pass.
 
+### FE-UX31 — UX plan: release gate check (2026-10-09, branch `docs/FE-UX31-release-gate`, commit `451f8da`; docs only)
+
+Re-ran everything runnable today on `main`: the **full e2e on Chromium and Firefox (81 passed, 9 skipped, 0 failed**, real backend and weights; the FE-UX17 failure and the FE-UX23/26/30 layout-shift work are now green) and `npm run perf` (all four public routes within budget). Then scored `FRONTEND_UX_IMPROVEMENT_PLAN.md` §9 item by item (new §9.1): 5 met, 5 partial, 1 not done (manual screen reader), none failing. No code change.
+
+**Watch:** `/login` ships **199.9 KB of 200 KB** JS (it was 194 KB before the Google mark); the next addition to a public route will fail the gate, so budget for it or lazy-load. Not checked: 1920 px layout; nothing automated for radii, shadows, gradients or ALL-CAPS.
+
+**Open items from FE-UX31**
+1. Items 2, 5, 7, 10 of §9.1 (keyboard-only flow specs, 1920 px, a state audit, a style lint), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result, and the manual U6.3 plus a real Safari pass.
+
 ---
 
 ## 9. Definition of Done (release checklist)
