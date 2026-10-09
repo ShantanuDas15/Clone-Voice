@@ -61,3 +61,30 @@ jobs:
           cat next.log
           exit 1
       - run: npm run perf
+
+  # Visual-regression baselines (UX plan U7.2). The API is mocked, so no backend is needed.
+  # Advisory (continue-on-error) until a first CI run shows the committed baselines, which were
+  # generated on a local Ubuntu host, match this runner; then remove continue-on-error.
+  # Intentional UI changes: `npm run test:visual -- --update-snapshots`, review the diff by eye.
+  visual:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:visual
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: visual-diffs
+          path: frontend/test-results
+          retention-days: 7
