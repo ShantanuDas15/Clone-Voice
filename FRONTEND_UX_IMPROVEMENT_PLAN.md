@@ -415,7 +415,7 @@ New test types introduced: **visual regression** (Playwright `toHaveScreenshot`,
 ### U7 — Release hardening
 - **Goal:** cross-browser and regression safety before the redesign ships.
 - **Tasks**
-  - U7.1 **(done, FE-UX17; Chromium 44/45, Firefox 36/36 with 9 Chromium-only skips; WebKit not run)** Run the full e2e on Chromium and Firefox (Safari/WebKit when the host can run it, which needs `sudo npx playwright install-deps`).
+  - U7.1 **(done, FE-UX17; Chromium 44/45, Firefox 36/36 with 9 Chromium-only skips; WebKit not run)** Run the full e2e on Chromium and Firefox (Safari/WebKit: `npx playwright install webkit` was enough on this host, no `install-deps`; a mocked structural smoke now runs there, FE-UX27; the full real-backend e2e was not run on WebKit).
   - U7.2 **(done, FE-UX18 public routes, FE-UX19 signed-in routes)** Freeze visual-regression baselines at 375/768/1280 in light and dark; review diffs by eye once.
   - U7.3 **(done, FE-UX16)** Update `frontend/README.md`, `RUNBOOK.md`, smoke script routes and the engineering plan's log.
   - U7.4 **(done, FE-UX20; `frontend/RUNBOOK.md`)** Staged rollout note: ship tokens/primitives (U0) first, then IA (U1), so a regression is easy to bisect.

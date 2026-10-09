@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:visual": "playwright test -c playwright.visual.config.ts",
+    "test:visual": "playwright test -c playwright.visual.config.ts --project=chromium",
+    "test:cross-browser": "playwright test -c playwright.visual.config.ts --project=webkit --project=firefox",
     "perf": "node perf/run.mjs",
     "smoke": "node smoke/run.mts"
   },
