@@ -5,6 +5,11 @@ import { signUpVerified } from "./helpers";
 test("record with a fake microphone, preview, and submit a real WEBM upload", async ({ page }) => {
   await signUpVerified(page, "record");
   await page.goto("/voices");
+  await expect(page.getByLabel("Voice name")).toBeVisible();
+  test.skip(
+    (await page.getByRole("radio", { name: "Record now" }).count()) === 0,
+    "this browser records in a format the server does not accept (WebKit); upload is offered instead",
+  );
   await page.getByRole("radio", { name: "Record now" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();
 

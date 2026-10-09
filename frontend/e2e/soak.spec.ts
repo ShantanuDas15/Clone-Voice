@@ -65,7 +65,7 @@ test(`${RUNS} generations leave at most one live audio blob URL and one player`,
       body: wav,
       headers: {
         "content-disposition": `attachment; filename="synthesized_${GENERATION_ID}.wav"`,
-        "access-control-allow-origin": "http://localhost:3000",
+        "access-control-allow-origin": new URL(page.url()).origin,
         "access-control-allow-credentials": "true",
         "access-control-expose-headers": "Content-Disposition",
       },

@@ -32,17 +32,27 @@ Set `CSP_ENFORCE=1` to run the whole suite under an **enforcing** Content-Securi
 
 ## Notes
 
-- **WebKit cannot run this suite over plain HTTP.** The API sets the refresh cookie with `Secure`
-  (`backend/api/auth.py`), Chromium and Firefox accept it on `http://localhost`, WebKit does not
-  store it (probed: Chromium keeps `refresh_token`, WebKit has no cookies), so every signed-in spec
-  loses its session on the first full navigation. Tried on 2026-10-09 with a `webkit` project:
-  9 passed, 27 failed, 9 skipped, all of the failures at sign-in. Running it needs the web app and API
-  behind local HTTPS (for example a TLS-terminating proxy with a trusted certificate); the mocked
-  smoke (`npm run test:cross-browser`) covers WebKit structurally in the meantime.
+- **WebKit needs HTTPS.** The API sets the refresh cookie with `Secure` (`backend/api/auth.py`);
+  Chromium and Firefox accept it on `http://localhost`, WebKit stores nothing, so over plain HTTP
+  every signed-in spec fails at sign-in (27 of 45, 2026-10-09). Run it behind local TLS instead:
+
+  ```bash
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/k.pem -out /tmp/c.pem -days 2 \
+    -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost"
+  node e2e/tools/https-proxy.mjs /tmp/k.pem /tmp/c.pem &     # 3443 -> web, 8443 -> API
+  # API: as in the recipe above but ALLOWED_ORIGINS='["https://localhost:3443"]' and
+  #      FRONTEND_URL=https://localhost:3443
+  NEXT_PUBLIC_API_BASE_URL=https://localhost:8443/api/v1 npm run build
+  NEXT_PUBLIC_API_BASE_URL=https://localhost:8443/api/v1 npx next start -p 3000 &
+  E2E_BACKEND_LOG=/tmp/backend.log npx playwright test -c playwright.https.config.ts
+  ```
+
+  Result with this recipe: all applicable specs pass; the Chromium-only layout-shift specs and the
+  real-microphone recording spec skip (Playwright's WebKit has no `getUserMedia`, and real Safari
+  records a format the server does not accept, so the form offers upload instead, UR16).
 
 - Two projects run the same specs: `chromium` and `firefox` (Firefox's fake microphone comes from
-  `firefoxUserPrefs`; Playwright's `microphone` permission is Chromium-only). Safari/WebKit is a
-  manual check.
+  `firefoxUserPrefs`; Playwright's `microphone` permission is Chromium-only). WebKit has its own HTTPS recipe (above).
 
 - `emailedToken()` reads the backend log and decodes the quoted-printable console email.
 - Recording uses Chromium's fake microphone. The WEBM it produces passes the server's container

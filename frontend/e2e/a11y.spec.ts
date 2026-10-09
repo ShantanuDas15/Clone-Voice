@@ -57,9 +57,16 @@ for (const scheme of SCHEMES) {
     await createVoice(page, "Audit voice");
     await audit(page, `/voices (${scheme})`);
 
-    await page.getByRole("radio", { name: "Record now" }).click();
-    await audit(page, `recorder idle (${scheme})`);
-    await page.getByRole("radio", { name: "Upload a file" }).click();
+    // WebKit cannot record WEBM, so the recorder is replaced by an explanation (UR16).
+    await expect(page.getByLabel("Voice name")).toBeVisible();
+    const record = page.getByRole("radio", { name: "Record now" });
+    if (await record.count()) {
+      await record.click();
+      await audit(page, `recorder idle (${scheme})`);
+      await page.getByRole("radio", { name: "Upload a file" }).click();
+    } else {
+      await expect(page.getByText(/can't (record audio here|accept)/)).toBeVisible();
+    }
 
     await page.getByRole("button", { name: "Delete Audit voice" }).click();
     await audit(page, `delete-voice dialog (${scheme})`);

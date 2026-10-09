@@ -33,7 +33,7 @@ test("a 503 with Retry-After on the voice list shows an error and Try again reco
           status: 503,
           headers: {
             "Retry-After": "5",
-            "access-control-allow-origin": "http://localhost:3000",
+            "access-control-allow-origin": new URL(page.url()).origin,
             "access-control-allow-credentials": "true",
             "access-control-expose-headers": "Retry-After",
           },

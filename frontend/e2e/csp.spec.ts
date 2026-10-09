@@ -6,6 +6,9 @@ import { createVoice, signUpVerified } from "./helpers";
 async function collectViolations(page: Page): Promise<string[]> {
   const found: string[] = [];
   page.on("console", (m) => {
+    // WebKit also prints a note that a report-only policy without `report-to` has no effect (the
+    // soak policy sets none, FE-UX27); that is not a violation.
+    if (/delivered in report-only mode/i.test(m.text())) return;
     if (/content security policy|violates the following/i.test(m.text())) found.push(m.text());
   });
   await page.addInitScript(() => {
@@ -31,13 +34,18 @@ test("no CSP violations across public pages, the app, playback and recording", a
   await page.goto("/generate");
   await page.waitForLoadState("networkidle");
   await page.goto("/voices");
-  await page.getByRole("radio", { name: "Record now" }).click();
-  await page.getByRole("button", { name: "Start recording" }).click();
-  await expect(page.getByRole("button", { name: "Stop recording" })).toBeEnabled({
-    timeout: 15_000,
-  });
-  await page.getByRole("button", { name: "Stop recording" }).click();
-  await expect(page.locator('audio[aria-label="Recording preview"]')).toBeAttached();
+  // Where recording is unsupported (WebKit) the recorder is not offered (UR16); wait for the form
+  // to settle, then run the recording part only if it is there.
+  await expect(page.getByLabel("Voice name")).toBeVisible();
+  if (await page.getByRole("radio", { name: "Record now" }).count()) {
+    await page.getByRole("radio", { name: "Record now" }).click();
+    await page.getByRole("button", { name: "Start recording" }).click();
+    await expect(page.getByRole("button", { name: "Stop recording" })).toBeEnabled({
+      timeout: 15_000,
+    });
+    await page.getByRole("button", { name: "Stop recording" }).click();
+    await expect(page.locator('audio[aria-label="Recording preview"]')).toBeAttached();
+  }
 
   const inPage = await page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? []);
   expect([...violations, ...inPage]).toEqual([]);
