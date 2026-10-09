@@ -1247,6 +1247,16 @@ The e2e suite (real FastAPI backend, real weights, SQLite, console email; recipe
 1. Decide the 320 px unverified CLS bound (above) and whether a first-run user's checklist shift is acceptable or the checklist should move (for example into the page grid beside the form) so it cannot push the form.
 2. U7.2 visual baselines, U7.4 rollout note, WebKit, and the manual U6.3 remain.
 
+### FE-UX18 — UX plan, U7.2: visual-regression baselines (2026-10-09, branch `feat/FE-UX18-visual-baselines`, commit `8824d4d`)
+
+New `frontend/playwright.visual.config.ts` and `frontend/visual/public.spec.ts`, run with `npm run test:visual`. The API is mocked at the network layer (signed out, health ok), so **no backend is needed**. Public routes (`/`, `/login`, `/signup`, `/forgot-password`) x 375/768/1280 px x light/dark (theme set through the `cv-theme` cookie) = **24 full-page baselines** in `frontend/visual/__screenshots__/` (760 KB, committed; no platform suffix, so regenerate them on the CI OS). Reduced motion on, animations disabled, `maxDiffPixelRatio` 0.002. Two baselines (`home-1280-dark`, `signup-375-light`) were reviewed by eye; the other 22 were not. A second run passed 24/24 (deterministic on this host). `npm test` 451 passed; `typecheck`, `lint` clean.
+
+**Not done:** signed-in routes (`/generate`, `/voices`, `/history`, `/account`) have no baselines yet; they need mocked session, voices and history responses. The baselines are not wired into CI.
+
+**Open items from FE-UX18**
+1. Add signed-in baselines with mocked responses, and run `test:visual` in CI on the same OS that generated them.
+2. U7.4 rollout note, the FE-UX17 CLS decisions, WebKit and the manual U6.3 remain.
+
 ---
 
 ## 9. Definition of Done (release checklist)
