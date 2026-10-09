@@ -1273,6 +1273,12 @@ New `frontend/playwright.visual.config.ts` and `frontend/visual/public.spec.ts`,
 **Open items from FE-UX20**
 1. Nothing in U0-U7 is left to build. Remaining: the FE-UX17 CLS decisions (owner), CI wiring for `test:visual`, WebKit, and the manual screen-reader pass (U6.3, needs a person).
 
+### FE-UX21 — UX plan close-out: U0.6 and U3.6 (2026-10-09, branch `docs/FE-UX21-plan-closeout`, commit `7ccb801`; docs only)
+
+Checked against the code before marking: U0.6 (`--primary` is the single teal swap point in `app/globals.css`, documented in plan §11.1 and guarded by the token lint) and U3.6 (`VerifyEmailAlert` renders once on `/voices`; `/generate` shows the same notice only inside the first-run checklist, so no page shows it twice). Both were done earlier but never marked. No code change. I also correct my FE-UX20 summary: its commit is `32b1acc`, as recorded above.
+
+**Left in the UX plan:** the Google provider mark (U2.2) and the draft restore (U3.2, needs an owner decision), the FE-UX17 CLS decisions (owner), CI wiring for `test:visual`, WebKit, and the manual U6.3.
+
 ---
 
 ## 9. Definition of Done (release checklist)
