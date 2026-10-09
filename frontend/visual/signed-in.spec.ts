@@ -37,7 +37,7 @@ const voices = [
 ];
 const generation = {
   id: "33333333-3333-4333-8333-333333333333",
-  voice_profile_id: voices[0].id,
+  voice_profile_id: "22222222-2222-4222-8222-222222222222",
   voice_profile_name: "My voice",
   status: "completed",
   input_text: "Hello there.",
