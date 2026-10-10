@@ -60,3 +60,12 @@ describe("unit-test job Node version (FE-UX42)", () => {
     expect(readFileSync(path.resolve(__dirname, "../.nvmrc"), "utf8").trim()).toBe(String(major));
   });
 });
+
+describe("required checks always report (FE-UX45)", () => {
+  it("has no path filter on the triggers, so a docs-only or backend-only PR still gets check, perf and visual", () => {
+    const head = read("frontend.yml").split("\njobs:")[0] ?? "";
+    expect(head).toMatch(/\non:\s*\n\s+push:/);
+    expect(head).toMatch(/\n\s+pull_request:/);
+    expect(head).not.toMatch(/^\s*paths(-ignore)?:/m);
+  });
+});

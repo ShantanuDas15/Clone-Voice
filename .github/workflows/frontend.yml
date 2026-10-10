@@ -1,10 +1,11 @@
 name: frontend
 
+# No `paths:` filter, on purpose. `check`, `perf` and `visual` are required status checks on `main`
+# (branch protection), so a pull request that only touches the backend or the docs must still get
+# them reported; with a path filter they would never run and the PR could not be merged.
 on:
   push:
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
   pull_request:
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
 
 jobs:
   check:
