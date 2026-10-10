@@ -1504,6 +1504,17 @@ On the owner's instruction **"Include administrators" is on for `main`** (`enfor
 **Open items from FE-UX45**
 1. Owner: decide whether to update `CLAUDE.md` §3.7 to the pull-request flow, and whether the backend workflows should be required too.
 
+### FE-UX47 — Loose ends from UX plan §12: one name constant, rulebook matches the protection (2026-10-10, branch `feat/FE-UX47-loose-ends`, commit `e35e8e6`)
+
+Audited every §12 decision against the repo instead of assuming. **Done earlier and confirmed:** 1-8, 11, 13, 14 and the redirect test of 15 (`navigation.test.tsx` pins both 308s). **Found not done:** decision 12's "move the product name to one constant". `CloneVoice` was hard-coded in four code files. **Fixed:** `lib/brand.ts` (`BRAND_NAME`), used by the root metadata title and template, the logo, the degraded banner and the terms content; `tests/brand.test.tsx` fails if the literal appears in code or strings under `app/`, `components/`, `lib/` or `hooks/` (comments may name it; **negative control:** a stray literal fails it) and checks the logo renders it. A rename after the trademark check is now a one-line change. `npm test` 554 passed; typecheck, lint, prettier clean.
+
+**Also fixed: the rulebook contradicted the repo.** `CLAUDE.md` §3.7 told every session to merge locally and `git push origin main`, which the protection enabled in FE-UX43/45 rejects; a future session would fail or reach for a bypass. §3.7 now describes the pull-request flow (open the PR with no AI attribution, wait for `check`/`perf`/`visual`, treat a red check as a finding, `gh pr merge --merge --delete-branch`, pull, re-run the suite, confirm the `main` run) and forbids bypassing or weakening the protection. This is the owner's rulebook; the change only follows the owner's own decision to include administrators, and is the first change merged under it by the rulebook's own text.
+
+**Not done, and why:** the backend workflows are still not required checks, because `backend-audit.yml` and `backend-schema.yml` have path filters (as `frontend.yml` had), so requiring them would block every frontend-only PR; remove the filters first if they should gate. Everything else open needs a person: `CSP_ENFORCE=1` after one clean release, counsel's terms text, the screen-reader and real-Safari pass (`frontend/A11Y_MANUAL_CHECKLIST.md`), the name and trademark check.
+
+**Open items from FE-UX47**
+1. Owner decisions only; no code is waiting.
+
 ---
 
 ## 9. Definition of Done (release checklist)
