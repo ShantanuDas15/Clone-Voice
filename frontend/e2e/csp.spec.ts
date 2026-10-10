@@ -1,4 +1,5 @@
 import { type Page, expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 import { createVoice, signUpVerified } from "./helpers";
 
@@ -61,4 +62,58 @@ test("the CSP header is present with a per-response nonce", async ({ request }) 
   const nonce = (h: string) => /'nonce-([^']+)'/.exec(h)?.[1];
   expect(nonce(header(a))).toBeTruthy();
   expect(nonce(header(a))).not.toBe(nonce(header(b)));
+});
+
+test.describe("violation reporting (FE-UX40)", () => {
+  test("a real violation reaches the endpoint and is logged scrubbed", async ({
+    page,
+    browserName,
+  }) => {
+    const logPath = process.env.E2E_FRONTEND_LOG;
+    test.skip(!logPath, "set E2E_FRONTEND_LOG to the web server's log file (e2e/README.md)");
+    test.skip(browserName === "webkit", "WebKit needs the HTTPS recipe (e2e/README.md)");
+    // Playwright cannot see a browser-initiated report request, so the proof is the server's log.
+    await page.goto("/login#token=SECRET-FRAGMENT");
+    await page.waitForLoadState("networkidle");
+    const probe = `/csp-probe-${Date.now()}`;
+    await page.evaluate((path) => {
+      // An image from a host the policy does not allow. (A script inserted from page code is
+      // trusted under `strict-dynamic`, so it is not a usable probe.) `.invalid` never resolves.
+      const img = document.createElement("img");
+      img.src = `https://csp-probe.invalid${path}.png?secret=QUERY-SECRET`;
+      document.body.appendChild(img);
+    }, probe);
+    let line = "";
+    for (let i = 0; i < 100 && !line; i += 1) {
+      line =
+        readFileSync(logPath as string, "utf8")
+          .split("\n")
+          .find((l) => l.includes("csp-violation") && l.includes(probe)) ?? "";
+      if (!line) await new Promise((r) => setTimeout(r, 250));
+    }
+    expect(line, "the violation was logged").not.toBe("");
+    const record = JSON.parse(line) as Record<string, string>;
+    expect(record.event).toBe("csp-violation");
+    expect(record.directive).toBe("img-src");
+    expect(record.page).toBe("/login");
+    expect(line).not.toMatch(/SECRET/);
+  });
+
+  test("the endpoint takes POST only, never echoes, and ignores junk", async ({ request }) => {
+    const junk = await request.post("/csp-report", {
+      headers: { "content-type": "application/csp-report" },
+      data: "not json",
+    });
+    expect(junk.status()).toBe(204);
+    expect(await junk.text()).toBe("");
+    expect((await request.get("/csp-report")).status()).toBe(405);
+  });
+
+  test("the endpoint answers without a nonce policy of its own", async ({ request }) => {
+    const res = await request.post("/csp-report", {
+      headers: { "content-type": "application/csp-report" },
+      data: "{}",
+    });
+    expect(res.headers()["content-security-policy-report-only"]).toBeUndefined();
+  });
 });
