@@ -8,8 +8,16 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 import numpy as np
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
-                     UploadFile, status)
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -21,15 +29,20 @@ from backend.core.security import get_current_user, get_verified_user
 from backend.core.validators import require_nonblank_name
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
-from backend.schemas.voice import VoiceProfileOut
-from backend.services.audio_processing import (preprocess_audio,
-                                               preprocess_semaphore,
-                                               save_upload,
-                                               validate_audio_file)
+from backend.schemas.voice import QualityOut, VoiceProfileOut, VoiceProfileUploadOut
+from backend.services.audio_processing import (
+    preprocess_audio,
+    preprocess_semaphore,
+    save_upload,
+    validate_audio_file,
+)
+from backend.services.audio_quality import assess_file
 from backend.services.erasure import erase_voice_profile, remove_files
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           embed_speaker_async)
+from backend.services.tts_pipeline import (
+    InferenceQueueFullError,
+    InferenceTimeoutError,
+    embed_speaker_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +62,21 @@ def _remove_quietly(path: str) -> None:
         os.remove(path)
     except OSError:
         logger.exception("Failed to remove rejected upload: %s", path)
+
+
+async def _assess_quality_quietly(file_path: str) -> Optional[QualityOut]:
+    """Assess the saved upload's recording quality; return ``None`` rather than ever failing.
+
+    The report is advice (SPEECH_QUALITY_PLAN.md S2.2). A problem measuring it must not
+    cost the user a profile that was otherwise created, so any error is logged and swallowed.
+    """
+    try:
+        async with preprocess_semaphore:
+            report = await asyncio.to_thread(assess_file, file_path)
+        return QualityOut.from_report(report)
+    except Exception:
+        logger.warning("Recording-quality assessment failed", exc_info=True)
+        return None
 
 
 def _is_usable_embedding(embedding: np.ndarray) -> bool:
@@ -97,7 +125,9 @@ async def _cleanup_failed_upload(
 
 
 @router.post(
-    "/upload", response_model=VoiceProfileOut, status_code=status.HTTP_201_CREATED
+    "/upload",
+    response_model=VoiceProfileUploadOut,
+    status_code=status.HTTP_201_CREATED,
 )
 @limiter.limit("10/minute")
 async def upload_audio(
@@ -208,6 +238,8 @@ async def upload_audio(
             status_code=500, detail="Failed to extract speaker embedding"
         )
 
+    quality = await _assess_quality_quietly(file_path)
+
     profile = VoiceProfile(
         user_id=user_id,
         name=name,
@@ -235,14 +267,17 @@ async def upload_audio(
         profile.name,
         user_id,
     )
-    return profile
+    return VoiceProfileUploadOut.model_validate(profile).model_copy(
+        update={"quality": quality}
+    )
 
 
 @router.get("/profiles", response_model=List[VoiceProfileOut])
 @limiter.limit(settings.API_RATE_LIMIT)
 def get_profiles(
     request: Request,
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """List all active voice profiles for the current user, newest first."""
     profiles = (

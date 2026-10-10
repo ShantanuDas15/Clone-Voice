@@ -49,6 +49,7 @@ from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import librosa
 import numpy as np
+import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
@@ -559,6 +560,61 @@ def evaluate_enrollment(
     return row
 
 
+def degradation_cases() -> Dict[str, Callable[[np.ndarray], np.ndarray]]:
+    """Recording defects to apply to a clean reference clip, by name."""
+    from backend.evaluate_preprocessing import add_noise, gain, telephone_band
+
+    return {
+        "clean": lambda y: y,
+        "noise_20db": lambda y: add_noise(y, 20.0),
+        "noise_10db": lambda y: add_noise(y, 10.0),
+        "noise_5db": lambda y: add_noise(y, 5.0),
+        "telephone": telephone_band,
+        "clipped_x3": lambda y: gain(y, 3.0),
+        "clipped_x8": lambda y: gain(y, 8.0),
+        "quiet_x0.03": lambda y: gain(y, 0.03),
+    }
+
+
+def evaluate_degradations(
+    encoder,
+    speaker: str,
+    files: Sequence[str],
+    group: str,
+    index: int,
+    seed: int,
+    sentences: Sequence[str],
+    cases: Mapping[str, Callable[[np.ndarray], np.ndarray]],
+    workdir: Path,
+) -> Dict[str, object]:
+    """Clone one speaker from a clean and from each degraded copy of their reference clip.
+
+    The degraded copy is written as a WAV and embedded through the production upload
+    preprocessing. The clone is scored against the speaker's real held-out clips (never
+    degraded); every case uses the same seeds, so each is paired with ``clean``.
+    """
+    reference, held_out = files[0], files[1:]
+    real = [librosa.load(p, sr=SAMPLE_RATE)[0] for p in held_out]
+    target = np.mean(
+        [encoder.embed_utterance(np.asarray(y, np.float32)) for y in real], axis=0
+    )
+    clean_audio, _ = librosa.load(reference, sr=SAMPLE_RATE)
+    row: Dict[str, object] = {"speaker": speaker, "group": group}
+    for name, degrade in cases.items():
+        path = workdir / f"{speaker}_{name}.wav"
+        sf.write(path, degrade(clean_audio), SAMPLE_RATE, subtype="PCM_16")
+        embedding = reference_embedding(encoder, str(path))
+        similarities = []
+        for k, sentence in enumerate(sentences):
+            clone = _synthesize(
+                sentence + ".", embedding, speaker, seed + 1000 * index + k
+            )
+            similarities.append(secs(encoder.embed_utterance(clone), target))
+        row[f"secs_{name}"] = _mean(similarities)
+        row[f"emb_secs_{name}"] = secs(embedding, target)
+    return row
+
+
 def _mean(values: Sequence[float]) -> Optional[float]:
     """Mean of ``values``, or ``None`` when there are none."""
     return float(np.mean(values)) if values else None
@@ -644,6 +700,47 @@ def _run_enrollment_study(args, dataset, groups, stems, encoder) -> int:
     return 0
 
 
+def _run_degradation_study(args, dataset, groups, stems, encoder) -> int:
+    """Run ``evaluate_degradations`` over the chosen speakers and write the report."""
+    import tempfile
+
+    cases = degradation_cases()
+    chosen = select_speakers(dataset, groups, args.speakers)
+    rows = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for n, speaker in enumerate(chosen):
+            rows.append(
+                evaluate_degradations(
+                    encoder,
+                    speaker,
+                    dataset[speaker],
+                    groups.get(speaker, "ungrouped"),
+                    n,
+                    args.seed,
+                    stems[:2],
+                    cases,
+                    Path(tmp),
+                )
+            )
+            logger.info("scored speaker %d/%d (%s)", n + 1, len(chosen), speaker)
+    metrics = [f"{base}_{name}" for base in ("secs", "emb_secs") for name in cases]
+    report = {
+        "judge": "resemblyzer (same encoder as the model: not independent)",
+        "cases": list(cases),
+        "speakers": len(rows),
+        "rows": rows,
+        "per_group": {m: group_report(rows, m) for m in metrics},
+    }
+    args.out.write_text(json.dumps(report, indent=2))
+    print(
+        json.dumps(
+            {m: report["per_group"][m]["groups"] for m in metrics[: len(cases)]},
+            indent=2,
+        )
+    )
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run the study and print a summary; write the full results as JSON."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -674,6 +771,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="compare one reference clip with K aggregated clips (needs K <= 3), then stop",
     )
     parser.add_argument(
+        "--degrade-compare",
+        action="store_true",
+        help="clone from clean and degraded copies of each reference clip, then stop",
+    )
+    parser.add_argument(
         "--skip-single",
         action="store_true",
         help="skip the single-sentence study and run only the multi-sentence stimuli",
@@ -695,6 +797,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     load_models("cpu")
     encoder = VoiceEncoder("cpu")
 
+    if args.degrade_compare:
+        return _run_degradation_study(args, dataset, groups, stems, encoder)
     if args.enroll_compare:
         return _run_enrollment_study(args, dataset, groups, stems, encoder)
     paragraphs = load_stimuli(args.sentences, "paragraphs")[: args.paragraphs]
