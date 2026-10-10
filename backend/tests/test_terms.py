@@ -2,7 +2,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from backend.tests.test_voice import auth_headers  # noqa: F401  (pytest fixture)
+from backend.tests.test_voice import \
+    auth_headers  # noqa: F401  (pytest fixture)
 from backend.tests.test_voice import create_dummy_wav
 
 
@@ -21,13 +22,35 @@ def test_terms_endpoint_is_public_and_returns_version(client: TestClient) -> Non
     with patch("backend.core.config.settings.TERMS_VERSION", "2099-01-01"):
         response = client.get("/api/v1/terms")
     assert response.status_code == 200
-    assert response.json() == {"version": "2099-01-01", "url": None}
+    body = response.json()
+    assert body["version"] == "2099-01-01"
+    assert body["url"] is None
 
 
 def test_terms_endpoint_returns_configured_url(client: TestClient) -> None:
     with patch("backend.core.config.settings.TERMS_URL", "https://example.com/terms"):
         response = client.get("/api/v1/terms")
     assert response.json()["url"] == "https://example.com/terms"
+
+
+def test_terms_reports_the_configured_output_retention(client: TestClient) -> None:
+    """The client shows this instead of a hard-coded figure."""
+    with patch("backend.core.config.settings.OUTPUT_RETENTION_DAYS", 45):
+        assert client.get("/api/v1/terms").json()["output_retention_days"] == 45
+
+
+def test_terms_retention_is_null_when_outputs_are_kept_forever(
+    client: TestClient,
+) -> None:
+    """0 and negative mean 'never pruned' (config.py), which is not a number of days."""
+    for value in (0, -1):
+        with patch("backend.core.config.settings.OUTPUT_RETENTION_DAYS", value):
+            assert client.get("/api/v1/terms").json()["output_retention_days"] is None
+
+
+def test_terms_retention_keeps_a_fractional_value(client: TestClient) -> None:
+    with patch("backend.core.config.settings.OUTPUT_RETENTION_DAYS", 0.5):
+        assert client.get("/api/v1/terms").json()["output_retention_days"] == 0.5
 
 
 def test_upload_with_matching_terms_version_succeeds(

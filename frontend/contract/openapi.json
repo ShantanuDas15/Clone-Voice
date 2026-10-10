@@ -253,6 +253,17 @@
       },
       "TermsOut": {
         "properties": {
+          "output_retention_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Retention Days"
+          },
           "url": {
             "anyOf": [
               {
@@ -1086,7 +1097,7 @@
     },
     "/api/v1/terms": {
       "get": {
-        "description": "Return the acceptable-use terms version an upload must acknowledge.",
+        "description": "Return the terms version an upload must acknowledge, and the output retention.",
         "operationId": "get_terms_api_v1_terms_get",
         "responses": {
           "200": {
