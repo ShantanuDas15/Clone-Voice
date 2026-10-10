@@ -38,6 +38,8 @@ def _unsupported_characters(text: str) -> List[str]:
     for ch in dict.fromkeys(text):  # de-duplicate, preserve first-seen order
         if ch.isdigit():
             continue
+        if ch in "\n\r":
+            continue  # line and paragraph breaks become pauses (SPEECH_QUALITY_PLAN.md S1.2)
         transliterated = unidecode(ch).lower()
         if not transliterated or (set(transliterated) - _ALLOWED_TEXT_CHARS):
             problems.append(ch)
