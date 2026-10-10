@@ -81,3 +81,12 @@ describe("required checks are reliable (FE-UX45, FE-UX46)", () => {
     expect(runner).toContain("judgeAttempts");
   });
 });
+
+describe("perf measurement method (FE-UX48)", () => {
+  it("uses real throttling, because Lighthouse's simulated LCP is a race on this app", () => {
+    const runner = readFileSync(path.resolve(__dirname, "../perf/run.mjs"), "utf8");
+    expect(runner).toMatch(/PERF_THROTTLING \?\? "devtools"/);
+    expect(runner).toContain("throttlingMethod: THROTTLING");
+    expect(runner).not.toMatch(/throttlingMethod:\s*"simulate"/);
+  });
+});

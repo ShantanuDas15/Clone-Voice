@@ -16,7 +16,10 @@ export interface Metrics {
 }
 
 export interface Budget {
-  /** Plan proposal: LCP < 2.5 s on 4G (Lighthouse's default mobile profile is slow 4G + 4x CPU). */
+  /**
+   * Plan proposal: LCP < 2.5 s on 4G (Lighthouse's default mobile profile is slow 4G + 4x CPU),
+   * measured with real throttling (perf/run.mjs), where it is deterministic (about 1.4 s today).
+   */
   lcpMs: number;
   /** Plan proposal: JS < 200 KB gzipped on public routes (transfer size, compressed by the server). */
   scriptKb: number;
