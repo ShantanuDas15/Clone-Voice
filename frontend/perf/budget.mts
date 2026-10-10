@@ -28,7 +28,7 @@ export interface Budget {
 export const BUDGET: Budget = { lcpMs: 2500, scriptKb: 200, cls: 0.1, tbtMs: 300 };
 
 /** Public routes that must meet the budget (no sign-in needed). */
-export const PUBLIC_ROUTES = ["/", "/login", "/signup", "/forgot-password"] as const;
+export const PUBLIC_ROUTES = ["/", "/login", "/signup", "/forgot-password", "/terms"] as const;
 
 function numeric(lhr: LighthouseResult, id: string): number {
   const value = lhr.audits[id]?.numericValue;

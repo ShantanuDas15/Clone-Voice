@@ -39,6 +39,7 @@ for (const scheme of SCHEMES) {
       "/login?error=google_failed",
       "/signup",
       "/forgot-password",
+      "/terms",
       "/verify-email",
       "/reset-password",
     ]) {

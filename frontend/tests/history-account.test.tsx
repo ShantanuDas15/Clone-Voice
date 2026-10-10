@@ -355,3 +355,41 @@ describe("AccountSection: delete", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 });
+
+describe("retention comes from the server (FE-UX39)", () => {
+  const terms = (body: Record<string, unknown>) =>
+    server.use(mswHttp.get(`${API}/terms`, () => HttpResponse.json(body)));
+  const expiredHistory = () =>
+    server.use(
+      mswHttp.get(`${API}/synthesize/history`, () =>
+        HttpResponse.json([gen({ audio_available: false })]),
+      ),
+    );
+
+  it("states the configured period in the note and in the expiry message", async () => {
+    terms({ version: "1", url: null, output_retention_days: 14 });
+    expiredHistory();
+    wrap(<HistoryList />);
+    expect(await screen.findByText(/Audio is kept for 14 days\./)).toBeInTheDocument();
+    expect(screen.getByText(/clips are kept for 14 days/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ["null (kept until deleted)", { version: "1", url: null, output_retention_days: null }],
+    ["a field an older backend does not send", { version: "1", url: null }],
+  ])("states no figure when the server gives %s", async (_n, body) => {
+    terms(body);
+    expiredHistory();
+    wrap(<HistoryList />);
+    expect(await screen.findByText(/audio has expired/i)).toBeInTheDocument();
+    expect(screen.queryByText(/kept for/)).not.toBeInTheDocument();
+  });
+
+  it("states no figure when the terms request fails", async () => {
+    server.use(mswHttp.get(`${API}/terms`, () => HttpResponse.error()));
+    expiredHistory();
+    wrap(<HistoryList />);
+    expect(await screen.findByText(/audio has expired/i)).toBeInTheDocument();
+    expect(screen.queryByText(/kept for/)).not.toBeInTheDocument();
+  });
+});

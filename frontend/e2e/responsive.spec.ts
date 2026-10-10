@@ -43,7 +43,7 @@ for (const vp of VIEWPORTS) {
   test(`no horizontal scroll and 44px targets at ${vp.name}px`, async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: vp.width, height: vp.height });
-    for (const path of ["/", "/login", "/signup", "/forgot-password"]) {
+    for (const path of ["/", "/login", "/signup", "/forgot-password", "/terms"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(await overflow(page), `${path} overflows at ${vp.name}`).toBeLessThanOrEqual(0);

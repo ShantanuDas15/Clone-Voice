@@ -25,7 +25,7 @@ async function collectViolations(page: Page): Promise<string[]> {
 test("no CSP violations across public pages, the app, playback and recording", async ({ page }) => {
   test.setTimeout(420_000);
   const violations = await collectViolations(page);
-  for (const path of ["/", "/login", "/signup", "/forgot-password", "/verify-email"]) {
+  for (const path of ["/", "/login", "/signup", "/forgot-password", "/verify-email", "/terms"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
   }

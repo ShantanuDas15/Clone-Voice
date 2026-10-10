@@ -7,6 +7,7 @@ const ROUTES = [
   { name: "login", path: "/login" },
   { name: "signup", path: "/signup" },
   { name: "forgot-password", path: "/forgot-password" },
+  { name: "terms", path: "/terms" },
 ] as const;
 
 test.beforeEach(async ({ page }) => {
