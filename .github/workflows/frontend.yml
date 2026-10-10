@@ -68,15 +68,15 @@ jobs:
           done
           cat next.log
           exit 1
-      # LCP on a shared runner swings by about half a second on identical code (the same page
-      # measured 1.84 s and 2.56 s in two runs of the same commit), and a spike hits one route at a
-      # time. perf/run.mjs therefore measures a route that misses again (PERF_ATTEMPTS) and fails
-      # it only if every attempt is over; a real regression (the /terms one measured 2.62-2.67 s
-      # every time) misses on all of them. The 2.5 s budget is unchanged.
+      # LCP is measured with real (DevTools) throttling, the same slow-4G + 4x-CPU profile and the
+      # same 2.5 s budget. Lighthouse's simulated LCP of identical code jumped between 1.66 and
+      # 2.75 s (a race in which resources the simulator counts as dependencies), which turned this
+      # required check into a coin flip; real throttling measures every route at about 1.4 s with a
+      # spread of about 15 ms. A route that still misses is measured again before it fails.
       - run: npm run perf
         env:
-          PERF_RUNS: 5
-          PERF_ATTEMPTS: 3
+          PERF_RUNS: 3
+          PERF_ATTEMPTS: 2
           PERF_PAUSE_MS: 15000
 
   # Visual-regression baselines (UX plan U7.2). The API is mocked, so no backend is needed.

@@ -1515,6 +1515,21 @@ Audited every §12 decision against the repo instead of assuming. **Done earlier
 **Open items from FE-UX47**
 1. Owner decisions only; no code is waiting.
 
+### FE-UX48 — The perf gate measured a race; it now measures what users get (2026-10-10, branch `fix/FE-UX48-perf-cold-start`; **corrects FE-UX42**)
+
+After merging FE-UX47 the `main` run failed `perf` again: `/` at 2677, 2673 and 2536 ms on all three attempts, other routes fine, on code that had passed one commit earlier. Instead of adding retries a fourth time, the measurement itself was investigated:
+
+- **Locally, one Lighthouse run per fresh browser:** `/` missed the budget in 4 of 5 trials (2.60-2.77 s); a discarded warm-up run did not fix it (2 of 5), so a cold browser was **not** the cause.
+- **Ten simulated runs of the same build:** first paint (FCP) was **906-916 ms every time**, while LCP took the values 1660, 1812, 2115, 2607 and 2754 ms: **discrete steps**, not noise. Lighthouse's simulator decides which resources count as LCP dependencies from the order they finish in a fast, unthrottled local trace, which is a race. Real Chrome with real throttling showed the `h1` as the LCP at about 600 ms every time, with no font-swap candidate.
+- **Real (DevTools) throttling in Lighthouse, same slow-4G and 4x-CPU profile:** `/` 1430-1438 ms, `/login` 1414-1422, `/signup` 1412-1420, `/forgot-password` 1409-1420, `/terms` 1427-1438 over 7 runs each: a spread of about 15 ms.
+
+**Correction to FE-UX42:** the `/terms` "regression" was mostly this same simulator artifact. Re-adding the mono font to `/terms` moved the *simulated* LCP from about 2.1 s to 2.3-2.75 s but left the **real-throttled LCP unchanged at 1.43 s** (the version number is not the LCP element). Removing the font was harmless and saves a request, but it was not a user-visible regression, and calling it one overstated the evidence. The earlier "runner noise per route" theory was also incomplete: it was a deterministic-looking race in the simulation, which is why neither more runs nor retries stabilised it.
+
+**Change:** `perf/run.mjs` now uses `throttlingMethod: "devtools"` (override with `PERF_THROTTLING`); the budget stays **LCP <= 2.5 s**, JS 200 KB, CLS 0.1, TBT 300 ms; the per-route re-measure (`judgeAttempts`) stays as a cheap safety (`PERF_ATTEMPTS: 2`, `PERF_RUNS: 3`). Local run: LCP 1413-1440 ms on all five routes. `ci-workflows.test.ts` forbids going back to simulation. **Trade-off, stated plainly:** real throttling will not notice a change that only reshuffles simulated dependencies (as the mono font did), and the 2.5 s budget now has about 1.1 s of headroom, so a small slow-down will not trip it; JS size, CLS and TBT remain as deterministic guards. If tighter drift detection is wanted, add a ratchet (for example 1.8 s) after the first CI numbers are known; the CI runner's CPU may shift the 1.43 s baseline, so it was not guessed from local data.
+
+**Open items from FE-UX48**
+1. Read the first CI numbers (`gh run view --log`), then decide on an LCP ratchet. Owner items as before.
+
 ---
 
 ## 9. Definition of Done (release checklist)
