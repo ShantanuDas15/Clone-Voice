@@ -1441,6 +1441,17 @@ UX plan §12 M2 (decisions 13, 14), backend first. **Backend:** `GET /api/v1/ter
 **Open items from FE-UX39**
 1. Owner: counsel reviews `lib/terms-content.ts`, flips `TERMS_STATUS`, bumps `TERMS_VERSION` in both places, and sets `TERMS_URL` to `/terms` (or a hosted page). M3 (CSP reporting then enforcement), M4 (CI-sourced baselines); screen-reader pass, real Safari, name check. Watch LCP on the first CI perf run.
 
+### FE-UX40 — M3 steps 1-2: scrubbed same-origin CSP violation reporting (2026-10-10, branch `feat/FE-UX40-csp-reporting`, commit `6bcfe63`)
+
+UX plan §12 M3. **New:** `POST /csp-report` (`app/csp-report/route.ts`, Node runtime), `lib/csp-report.ts`, and `report-uri /csp-report` in the policy. The endpoint always answers **204 with no body**, reads at most 4 KB (checked on the declared length and while streaming), and logs one JSON line per report **rebuilt from an allow-list**: directive (`[a-z-]` only, else `unknown`), blocked URL as origin plus path (query, fragment and credentials dropped; keywords such as `inline` kept), page path only, disposition. Non-printable characters are replaced, fields capped at 200 characters, at most 10 reports per request. Limits: 20 per client per minute and **120 globally per minute**; the global one is the real defence because the client key (`X-Forwarded-For`) is spoofable; the per-client map is bounded at 1000 keys. The matcher excludes `/csp-report`, so the endpoint carries no nonce policy of its own.
+
+**Finding that changed the design:** measured with a bare listener in Playwright's browsers, Chromium delivers nothing over plain http once `report-to` is in the policy (even with `report-uri` also present), while Firefox and WebKit deliver in every mode, and `report-uri` alone is delivered by all three. The plan's `report-to` + `Reporting-Endpoints` pair was therefore dropped; see UX plan §12.2 M3. **Debugging note:** truncating a log the server has open (`: > file`) leaves NUL bytes, so `grep` silently skips the file as binary; that cost an hour and is now in `e2e/README.md`.
+
+**Tests:** `csp-report.test.ts` (24: both formats, query/fragment/credential stripping, newline and control-character injection, length and count caps, junk/wrong type/oversize, limiter incl. spoofed-key rotation and bounded memory, route 204 and no echo), policy and middleware assertions; `npm test` 538 passed. **Real browsers:** `csp.spec.ts` "a real violation reaches the endpoint" (a blocked image; the server log must hold the scrubbed line and no query secret) passes on Chromium and Firefox (needs `E2E_FRONTEND_LOG`); the full CSP soak and `a11y` pass on both, **report-only and with `CSP_ENFORCE=1`**, with **0 violations other than the test's own probe**. WebKit was only measured with the bare listener (delivers), not run through the app; the stale WebKit console filter in `csp.spec.ts` stays. Typecheck, lint, prettier clean.
+
+**Open items from FE-UX40**
+1. **Release 1 is this change shipped still report-only** (`CSP_ENFORCE` unset). After a full release cycle with no unexplained line in the server log, set `CSP_ENFORCE=1` (rollback: `0`, no rebuild). Reporting is per instance and best effort if the app scales out. M4 (CI-sourced baselines); owner tasks: screen-reader pass, real Safari, name check, terms text.
+
 ---
 
 ## 9. Definition of Done (release checklist)
