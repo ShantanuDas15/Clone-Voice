@@ -1463,6 +1463,20 @@ UX plan §12 M4. **New** `.github/workflows/visual-update.yml` (manual `workflow
 **Open items from FE-UX41**
 1. **Owner:** dispatch **visual-update** once this is on `main`, review the artifact, commit it, then remove `continue-on-error` from the `visual` job so it gates merges. Also: set `CSP_ENFORCE=1` after one clean release (FE-UX40), counsel review of the terms text, screen-reader pass, real Safari, name check. All code milestones M1-M4 of UX plan §12 are done.
 
+### FE-UX42 — CI was red for 40+ runs; now green and gating (2026-10-10, branch `fix/FE-UX42-ci-green`, commit `935778c`)
+
+First time CI results could be read (`gh auth login` done by the owner). **Finding: every `frontend` run for 40+ pushes (back past FE-UX18) failed**, and nobody could see it. Two independent causes:
+
+1. **`check` (`npm test`) failed on every run: 11 tests** (`voice-profiles` x10, `synthesis` "restores the draft"). Reproduced locally by running the suite on **Node 20 (CI) and 22**: a multipart `FormData` with a file part, posted by axios through jsdom's `XMLHttpRequest` and intercepted by MSW, never completes (the form stays on "Creating voice…"); the same request passes on **Node 24**, which is what all local work used, and in a real browser (`e2e/voice.spec.ts`). Minimal repro isolated it to a file/Blob part (text-only FormData, a raw file body and the `fetch` adapter all work). **Fix:** the `check` job runs on Node 24, `frontend/.nvmrc` = 24, README "Node version" section, and `tests/ci-workflows.test.ts` fails if the job drops below 24 or `.nvmrc` disagrees. No app code was wrong. The steps after `npm test` (build, audit) had never run in CI; both pass.
+2. **`perf` failed from FE-UX39 on:** `/terms` measured **2.62-2.67 s on the runner every time** (others 1.7-2.3 s), a regression I introduced. Lighthouse's request list showed `/terms` was the only public page requesting the mono font (the version number used `font-mono`); that face is `preload: false`, so it is fetched late, after the scripts. Removed `font-mono` from `/terms`; `terms-page.test.tsx` forbids it. Local `/terms` LCP 2.11-2.26 s; on CI after the fix 2.12 s.
+
+**`visual` was passing all along** (steps green, so `continue-on-error` was masking nothing): 80/80 on the runner against the baselines made locally. So the font-mismatch worry behind M4 did not materialise; **the job is now a required check** (`continue-on-error` removed; the one on `npm audit` is intentional). `visual-update` stays for deliberate UI changes.
+
+**Verified on GitHub Actions** (run on the branch, twice): `check` 544 passed, `perf` `/` 2.04 s, `/login` 2.12, `/signup` 1.73, `/forgot-password` 1.89, `/terms` 2.12 (JS 171.8-190.4 KB), `visual` 80 passed. Lessons: an unread CI is not a gate; and "passes on my machine" hid a Node-version difference for the whole redesign.
+
+**Open items from FE-UX42**
+1. Make the `frontend` checks required in the GitHub branch protection for `main` (owner; repository settings, not changed here). e2e is still not in CI (needs weights). `CSP_ENFORCE=1`, terms text, screen-reader pass, real Safari, name check as before.
+
 ---
 
 ## 9. Definition of Done (release checklist)
