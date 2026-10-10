@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { BRAND_NAME } from "@/lib/brand";
 
 /**
  * The CloneVoice mark: a voice waveform that rises and then fades out, the fading bars being the
@@ -37,7 +38,7 @@ export function Logo() {
   return (
     <span className="inline-flex items-center gap-2">
       <LogoMark className="text-primary" />
-      <span className="text-lg font-semibold tracking-tight">CloneVoice</span>
+      <span className="text-lg font-semibold tracking-tight">{BRAND_NAME}</span>
     </span>
   );
 }

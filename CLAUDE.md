@@ -82,12 +82,13 @@ Whenever executing a milestone or sub-task, YOU MUST strictly follow this standa
 - Commit the plan update separately: `git commit -am "docs: Update phase plan for Milestone X.X" && git push`.
 
 ### Phase 3.7 — Merge to Main — MANDATORY
-- **After an implementation is complete and verified** (Phase 3.3 tests pass with zero errors, and the plan-sync commit from Phase 3.6 is pushed), merge the feature branch into `main` in the same session — do not leave it as an unmerged, dangling branch waiting on a separate step.
-- `git checkout main && git pull --ff-only`, then `git merge --no-ff <feature-branch>` (or a fast-forward if history allows).
-- Resolve any merge conflicts (e.g. in `HARDENING_PLAN.md`/`PHASE_X_PLAN.md` when multiple milestones touched adjacent rows), preserving every merged branch's resolved findings — never silently drop one side's fix.
-- Re-run the full test suite on `main` post-merge (zero-error tolerance still applies) before pushing.
-- `git push origin main`.
-- Delete the feature branch, both locally (`git branch -d <feature-branch>`) and on the remote (`git push origin --delete <feature-branch>`), once it is fully merged.
+- `main` is protected (**Include administrators** is on): the required checks `check`, `perf` and `visual` must pass and a direct `git push origin main` is rejected. Everything reaches `main` through a pull request. Never bypass the protection, switch it off, or force-push to get around it.
+- **After an implementation is complete and verified** (Phase 3.3 tests pass with zero errors, and the plan-sync commit from Phase 3.6 is pushed to the feature branch), open and merge the pull request in the same session — do not leave the branch unmerged, waiting on a separate step.
+- Open it with `gh pr create --base main --head <feature-branch>` (title in the Conventional Commits format; **no Claude/AI attribution** in the title or body, see Section 0). Wait for the checks (`gh pr checks <n> --watch`).
+- A red check is a finding, not an obstacle: read its log (`gh run view <id> --log-failed`), fix the cause on the branch, push, and wait again. Do not re-run until green without understanding why it failed; do not weaken a check to make it pass.
+- Merge with `gh pr merge <n> --merge --delete-branch` (a merge commit, as before). If other work merged first and there are conflicts (e.g. in `HARDENING_PLAN.md`/`PHASE_X_PLAN.md` when milestones touched adjacent rows), resolve them on the branch, preserving every merged branch's resolved findings — never silently drop one side's fix.
+- Afterwards `git checkout main && git pull --ff-only origin main`, re-run the full test suite on `main` (zero-error tolerance still applies), and confirm the `main` workflow run is green. Delete any leftover local branch (`git branch -d <feature-branch>`).
+- A change that touches only the backend or only docs still gets the frontend checks (the workflow has no path filter, by design).
 - This applies to every implementation going forward — not just when the user explicitly asks for a merge.
 
 ---

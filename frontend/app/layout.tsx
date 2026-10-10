@@ -8,6 +8,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { Providers } from "@/components/providers";
 import { THEME_COOKIE, parseTheme, themeAttribute } from "@/lib/theme";
+import { BRAND_NAME } from "@/lib/brand";
 
 // Self-hosted (no third-party request, so the CSP's `font-src 'self'` holds). Sans carries the UI;
 // mono is for times and counters, where tabular digits keep numbers from jittering. Mono loads only
@@ -32,7 +33,7 @@ const mono = localFont({
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: { default: "CloneVoice", template: "%s · CloneVoice" },
+  title: { default: BRAND_NAME, template: `%s · ${BRAND_NAME}` },
   description: "Clone a voice from a short sample and synthesize speech from text.",
 };
 

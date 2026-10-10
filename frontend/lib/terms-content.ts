@@ -7,6 +7,8 @@
  * UX plan §11.3); none is a legal commitment drafted by the engineering team. Counsel replaces
  * `status` with "published" and reviews the wording before `TERMS_URL` is set.
  */
+import { BRAND_NAME } from "@/lib/brand";
+
 export const TERMS_VERSION = "2026-09-30";
 export const TERMS_STATUS: "draft" | "published" = "draft";
 
@@ -30,6 +32,6 @@ export const TERMS_SECTIONS: TermsSection[] = [
   },
   {
     heading: "AI-generated speech",
-    body: "Speech made with CloneVoice is labelled as AI-generated in the app. Do not present it as a real recording of a person.",
+    body: `Speech made with ${BRAND_NAME} is labelled as AI-generated in the app. Do not present it as a real recording of a person.`,
   },
 ];
