@@ -1484,6 +1484,13 @@ Applied with `gh api` on the owner's instruction: **required status checks `chec
 **Open items from FE-UX43**
 1. To make the gate bind the owner too, turn on *Include administrators* (then use pull requests, or temporarily relax it for a direct push). If a job is renamed in `frontend.yml`, update the required names or every merge will wait for a check that never reports; `tests/ci-workflows.test.ts` does not cover this.
 
+### FE-UX44 — Manual screen-reader and Safari checklist (2026-10-10, branch `docs/FE-UX44-manual-checklist`; docs only)
+
+New `frontend/A11Y_MANUAL_CHECKLIST.md` for UX plan §9.1 item 3 and the real-Safari part of item 6: a four-row required matrix (NVDA with Firefox and Chrome, VoiceOver on macOS and iPhone; TalkBack optional), 11 screen-reader sections (about 45 rows, one per step of every flow, with the expected announcement written out, including the new focus-on-heading behaviour, disabled-button reasons, dialogs, the audio player, offline and session-end messages), 14 real-Safari rows (Secure cookie over HTTPS, no recording option, iOS input zoom, tab bar and home indicator, Reduce Motion, cookie blocking, console CSP errors), a defect template with a severity scale, and a sign-off table with an explicit launch gate (no Blocker or Major open on rows 1 and 2 and on Safari). Labels were checked against the code; two drafting errors were fixed (the password control is a "Show password" checkbox; there is no custom 404, it is Next's default). Not run: it needs a person with the tools, which this host lacks.
+
+**Open items from FE-UX44**
+1. Owner: run it, fill the table, then update §9.1 items 3 and 6. The default 404 page has no custom "go home" content; the checklist row A11.2 will show whether that matters.
+
 ---
 
 ## 9. Definition of Done (release checklist)
