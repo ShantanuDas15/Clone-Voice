@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { PageHeader } from "@/components/ui/page-header";
 import { VerifyEmailAlert } from "@/components/verify-email-alert";
 import { UploadVoiceForm } from "@/components/upload-voice-form";
 import { VoiceProfileList } from "@/components/voice-profile-list";
@@ -9,7 +10,9 @@ export const metadata: Metadata = { title: "Voices" };
 export default function VoicesPage() {
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold">Voices</h1>
+      <PageHeader title="Voices">
+        Create a voice from a sample, then manage the ones you have.
+      </PageHeader>
       <VerifyEmailAlert />
       <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
         <section aria-labelledby="new-voice" className="max-w-xl">
