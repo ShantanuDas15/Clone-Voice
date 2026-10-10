@@ -1475,7 +1475,14 @@ First time CI results could be read (`gh auth login` done by the owner). **Findi
 **Verified on GitHub Actions** (run on the branch, twice): `check` 544 passed, `perf` `/` 2.04 s, `/login` 2.12, `/signup` 1.73, `/forgot-password` 1.89, `/terms` 2.12 (JS 171.8-190.4 KB), `visual` 80 passed. Lessons: an unread CI is not a gate; and "passes on my machine" hid a Node-version difference for the whole redesign.
 
 **Open items from FE-UX42**
-1. Make the `frontend` checks required in the GitHub branch protection for `main` (owner; repository settings, not changed here). e2e is still not in CI (needs weights). `CSP_ENFORCE=1`, terms text, screen-reader pass, real Safari, name check as before.
+1. ~~Make the `frontend` checks required in branch protection~~ done in FE-UX43. e2e is still not in CI (needs weights). `CSP_ENFORCE=1`, terms text, screen-reader pass, real Safari, name check as before.
+
+### FE-UX43 — Branch protection on `main` (2026-10-10, branch `docs/FE-UX43-branch-protection`; repository setting, docs only in git)
+
+Applied with `gh api` on the owner's instruction: **required status checks `check`, `perf`, `visual`** (the job names of `.github/workflows/frontend.yml`, confirmed against the check runs on the current `main` commit, all success), **force pushes and branch deletion blocked**. Deliberately not set: *enforce for administrators* (off, so the repo's merge-to-`main` SOP in `CLAUDE.md` §3.7 keeps working for the owner, and an emergency fix is not locked out), *required reviews* (solo project), *up-to-date branch* (`strict: false`, to avoid a re-run for every unrelated push). **Effect:** a pull request cannot merge while any of the three is red or missing; a direct push by the admin is still allowed, so the protection is a guard against accident and against any other contributor or token, not against the owner. The backend workflows (`backend-audit`, `backend-schema`, `docker-build`) are not required; add them if they should gate too.
+
+**Open items from FE-UX43**
+1. To make the gate bind the owner too, turn on *Include administrators* (then use pull requests, or temporarily relax it for a direct push). If a job is renamed in `frontend.yml`, update the required names or every merge will wait for a check that never reports; `tests/ci-workflows.test.ts` does not cover this.
 
 ---
 
