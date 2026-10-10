@@ -107,3 +107,11 @@ anti-aliasing differ per OS, so **the committed baselines come from CI, not from
    expected. Use it to find real layout changes, and let CI decide. After the first reviewed CI
    baselines are committed, remove `continue-on-error` from the `visual` job in
    `.github/workflows/frontend.yml` so it gates merges.
+
+## Node version
+
+Use **Node 24** (`.nvmrc`; CI runs the unit tests on it). On Node 20 and 22 the multipart upload
+tests (`tests/voice-profiles.test.tsx`) hang: a `FormData` carrying a file, sent by axios through
+jsdom's `XMLHttpRequest` and intercepted by MSW, never resolves, although the same request works
+in a real browser and on Node 24. This is a test-environment limit, not an app bug; the real
+upload is covered by `e2e/voice.spec.ts`.

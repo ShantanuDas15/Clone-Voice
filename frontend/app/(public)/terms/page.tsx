@@ -15,7 +15,7 @@ export default function TermsPage() {
       <header>
         <h1 className="text-2xl font-bold">Terms of use</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Version <span className="font-mono tabular-nums">{TERMS_VERSION}</span>
+          Version <span className="tabular-nums">{TERMS_VERSION}</span>
         </p>
       </header>
       {TERMS_STATUS === "draft" && (

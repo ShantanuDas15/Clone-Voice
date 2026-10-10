@@ -33,6 +33,13 @@ describe("terms page", () => {
     }
   });
 
+  it("does not pull in the mono font, which would add a late font request to a text page", () => {
+    // The mono face is `preload: false`, so its first use is requested after the scripts; on the
+    // CI runner that pushed /terms over the LCP budget (FE-UX42). Mono is for timecodes.
+    const page = readFileSync(path.resolve(__dirname, "../app/(public)/terms/page.tsx"), "utf8");
+    expect(page).not.toMatch(/font-mono/);
+  });
+
   it("makes no promise about a retention figure that the server owns", () => {
     const text = TERMS_SECTIONS.map((s) => s.body).join(" ");
     expect(text).not.toMatch(/\b\d+\s*(day|days|hour|hours)\b/i);

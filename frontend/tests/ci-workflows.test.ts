@@ -51,3 +51,12 @@ describe("visual baselines workflow (UX plan §12 M4)", () => {
     expect(update).toContain("if-no-files-found: error");
   });
 });
+
+describe("unit-test job Node version (FE-UX42)", () => {
+  it("runs the unit tests on Node 24 or newer, where jsdom multipart uploads complete", () => {
+    const check = job(read("frontend.yml"), "check");
+    const major = Number(/node-version:\s*(\d+)/.exec(check)?.[1]);
+    expect(major).toBeGreaterThanOrEqual(24);
+    expect(readFileSync(path.resolve(__dirname, "../.nvmrc"), "utf8").trim()).toBe(String(major));
+  });
+});
