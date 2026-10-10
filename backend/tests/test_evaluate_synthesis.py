@@ -325,3 +325,156 @@ def test_synthesize_removes_its_output_file(tmp_path, monkeypatch):
     wav = es._synthesize("Hello.", np.zeros(256, np.float32), "spk", 1)
     assert len(wav) == int(0.2 * SR)
     assert not out.exists()
+
+
+# --- pause profile -----------------------------------------------------------
+
+
+def _gap(seconds: float) -> np.ndarray:
+    return np.zeros(int(SR * seconds), np.float32)
+
+
+def test_pause_profile_finds_gaps_between_speech_with_their_lengths():
+    y = np.concatenate([tone(200.0, seconds=0.6), _gap(0.5), tone(200.0, seconds=0.6)])
+    gaps = es.pause_profile(y)
+    assert len(gaps) == 1
+    assert gaps[0] == pytest.approx(0.5, abs=0.05)
+
+
+def test_pause_profile_orders_gaps_in_time_and_counts_each():
+    y = np.concatenate(
+        [tone(200.0, seconds=0.5), _gap(0.3), tone(200.0, seconds=0.5), _gap(0.6)]
+        + [tone(200.0, seconds=0.5)]
+    )
+    gaps = es.pause_profile(y)
+    assert len(gaps) == 2
+    assert gaps[0] == pytest.approx(0.3, abs=0.05)
+    assert gaps[1] == pytest.approx(0.6, abs=0.05)
+
+
+def test_pause_profile_ignores_short_gaps_and_leading_trailing_silence():
+    y = np.concatenate(
+        [
+            _gap(1.0),
+            tone(200.0, seconds=0.5),
+            _gap(0.1),
+            tone(200.0, seconds=0.5),
+            _gap(1.0),
+        ]
+    )
+    assert es.pause_profile(y) == []
+    assert es.pause_profile(y, min_gap_s=0.05) != []
+
+
+@pytest.mark.parametrize(
+    "y", [np.zeros(SR, np.float32), np.zeros(0, np.float32), np.ones(10, np.float32)]
+)
+def test_pause_profile_of_silence_empty_or_tiny_audio_is_empty(y):
+    assert es.pause_profile(y) == []
+
+
+# --- balanced speaker choice -------------------------------------------------
+
+
+def test_select_speakers_alternates_groups_and_is_deterministic():
+    dataset = {s: [] for s in ["a", "b", "c", "d", "e", "f"]}
+    groups = {"a": "low", "b": "low", "c": "low", "d": "high", "e": "high", "f": "high"}
+    chosen = es.select_speakers(dataset, groups, 4)
+    assert chosen == ["d", "a", "e", "b"]  # high, low, high, low (groups sorted)
+    assert es.select_speakers(dataset, groups, 4) == chosen
+
+
+def test_select_speakers_without_groups_is_the_first_sorted_and_caps_at_available():
+    dataset = {s: [] for s in ["c", "a", "b"]}
+    assert es.select_speakers(dataset, {}, 2) == ["a", "b"]
+    assert es.select_speakers(dataset, {}, 10) == ["a", "b", "c"]
+    assert es.select_speakers({}, {}, 3) == []
+
+
+def test_select_speakers_with_an_unbalanced_group_uses_what_exists():
+    dataset = {s: [] for s in ["a", "b", "c"]}
+    groups = {"a": "low", "b": "high", "c": "high"}
+    assert es.select_speakers(dataset, groups, 3) == ["b", "a", "c"]
+
+
+# --- stimuli, transcriber and orchestration ---------------------------------
+
+
+def test_load_stimuli_reads_the_fixture_and_rejects_bad_files(tmp_path):
+    paragraphs = es.load_stimuli(es.DEFAULT_SENTENCES, "paragraphs")
+    typed = es.load_stimuli(es.DEFAULT_SENTENCES, "typed")
+    assert len(paragraphs) >= 4 and len(typed) >= 4
+    bad = tmp_path / "s.json"
+    bad.write_text(json.dumps({"paragraphs": [{"id": "x"}]}))
+    with pytest.raises(SystemExit):
+        es.load_stimuli(bad, "paragraphs")
+    with pytest.raises(SystemExit):
+        es.load_stimuli(bad, "typed")
+
+
+def test_whisper_transcriber_explains_a_missing_dependency(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(
+        sys.modules, "faster_whisper", None
+    )  # import raises ImportError
+    with pytest.raises(SystemExit, match="faster-whisper"):
+        es.make_whisper_transcriber()
+
+
+def _fake_synth_with_pause(text, embedding, speaker, seed):
+    """Two voiced bursts with a 0.5 s gap, however long the text is."""
+    return np.concatenate(
+        [
+            tone(200.0, seconds=0.6),
+            np.zeros(int(SR * 0.5), np.float32),
+            tone(200.0, seconds=0.6),
+        ]
+    )
+
+
+def test_evaluate_stimuli_scores_wer_pauses_and_speaking_rate(monkeypatch):
+    monkeypatch.setattr(es, "_synthesize", _fake_synth_with_pause)
+    heard = iter(["the cat sat", "at 10:30 p.m."])  # paragraph first, then typed
+
+    row = es.evaluate_stimuli(
+        np.zeros(256),
+        "spk",
+        1,
+        [{"id": "p0", "text": "The cat sat."}],
+        [{"id": "t0", "text": "At 10:30 PM"}],
+        lambda audio: next(heard),
+    )
+    assert row["para_wer"] == 0.0  # punctuation and case are ignored
+    assert row["typed_wer"] == 0.0  # both sides become "at ten thirty pee em"
+    assert row["para_pause_count"] == 1.0
+    assert row["para_pause_mean_s"] == pytest.approx(0.5, abs=0.05)
+    assert row["para_sec_per_word"] == pytest.approx(1.7 / 3, abs=0.02)
+
+
+def test_evaluate_stimuli_without_a_transcriber_still_reports_pauses(monkeypatch):
+    monkeypatch.setattr(es, "_synthesize", _fake_synth_with_pause)
+    row = es.evaluate_stimuli(
+        np.zeros(256),
+        "spk",
+        1,
+        [{"id": "p", "text": "One. Two."}],
+        [{"id": "t", "text": "x"}],
+        None,
+    )
+    assert row["para_wer"] is None and row["typed_wer"] is None
+    assert row["para_pause_count"] == 1.0
+
+
+def test_evaluate_stimuli_scores_a_wrong_transcript(monkeypatch):
+    monkeypatch.setattr(es, "_synthesize", _fake_synth_with_pause)
+    row = es.evaluate_stimuli(
+        np.zeros(256),
+        "spk",
+        1,
+        [{"id": "p", "text": "the cat sat down"}],
+        [],
+        lambda audio: "the dog sat down",
+    )
+    assert row["para_wer"] == pytest.approx(0.25)
+    assert row["typed_wer"] is None  # no typed stimuli given

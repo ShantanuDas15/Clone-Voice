@@ -191,3 +191,20 @@ def test_load_sentences_rejects_a_malformed_file(tmp_path):
 
 def test_default_sentences_path_exists():
     assert Path(es.DEFAULT_SENTENCES).is_file()
+
+
+def test_paragraph_and_typed_stimuli_are_valid_texts():
+    paragraphs = es.load_stimuli(es.DEFAULT_SENTENCES, "paragraphs")
+    typed = es.load_stimuli(es.DEFAULT_SENTENCES, "typed")
+    assert len({p["id"] for p in paragraphs}) == len(paragraphs)
+    assert len({t["id"] for t in typed}) == len(typed)
+    for item in paragraphs + typed:
+        SynthesizeRequest(voice_profile_id=uuid.uuid4(), text=item["text"])
+    for item in paragraphs:
+        text = item["text"]
+        assert not any(
+            ch.isdigit() for ch in text
+        ), text  # plain words: exact WER reference
+        assert sum(text.count(t) for t in ".?!") >= 3, text  # several sentences
+        assert len(text) <= 500
+    assert any(any(ch.isdigit() for ch in t["text"]) for t in typed)
