@@ -1379,6 +1379,13 @@ Re-ran everything runnable today on `main`: the **full e2e on Chromium and Firef
 **Open items from FE-UX31**
 1. Items 2, 5, 7, 10 of §9.1 (keyboard-only flow specs, 1920 px, a state audit, a style lint), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result, and the manual U6.3 plus a real Safari pass.
 
+### FE-UX32 — Style lint for radii, shadows, gradients, ALL-CAPS (2026-10-10, branch `chore/FE-UX32-style-lint`, commit `0f42bfc`)
+
+Closes the automated half of UX plan §9.1 item 10. One new test in `tests/theme.test.ts` scans `app/`, `components/` and `globals.css` and fails on `shadow*`, `blur`, gradients, `uppercase`/`lowercase`/`capitalize`, `box-shadow`, `text-transform` and any `rounded-*` other than `rounded-lg` and `rounded-full` (plain `rounded` stays). **Negative control:** a file with `rounded-xl shadow-md uppercase` fails it. The repo already passed, so no component changed. `npm test` 460 passed; typecheck, lint, prettier clean.
+
+**Open items from FE-UX32**
+1. Items 2, 5, 7 of §9.1 (keyboard-only flow specs, 1920 px, a state audit), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result, the manual U6.3 and a real Safari pass. Radii are Tailwind defaults (4 and 8 px), not the 6 and 10 px of §4.4; not changed.
+
 ---
 
 ## 9. Definition of Done (release checklist)

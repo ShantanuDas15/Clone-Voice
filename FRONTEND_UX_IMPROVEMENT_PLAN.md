@@ -501,11 +501,11 @@ Finding → Phase → Task → Test type. **U**=unit, **I**=integration (MSW), *
 | 7 | Every component has the §4.7 states, no disabled control without a reason | **Partial** | the reason pattern is tested for Generate and Voices; an exhaustive state-by-component audit was not done |
 | 8 | Every UR10 status code, offline, mic denial, playback failure, expired audio tested | **Met per log** | FE-UX8/9/13 and the `resilience` e2e (re-run, passes); not re-audited code by code |
 | 9 | Reduced motion: no animation | **Met per log** | FE-UX12 e2e; the `a11y`/visual runs use reduced motion |
-| 10 | No hardcoded colour or one-off radius; no gradient, shadow, ALL-CAPS, numbered non-sequence | **Partial** | the token lint covers colours and durations (one stated exemption: the Google mark's brand colours); **nothing automated checks radii, shadows, gradients or ALL-CAPS** |
+| 10 | No hardcoded colour or one-off radius; no gradient, shadow, ALL-CAPS, numbered non-sequence | **Met (automated part)** | FE-UX32 (`0f42bfc`): `tests/theme.test.ts` now fails on shadows, blur, gradients, `uppercase`/`lowercase`/`capitalize` and any radius other than `rounded`, `rounded-lg`, `rounded-full` (negative control run). A numbered non-sequence is still a review item; the radii are Tailwind defaults (4/8 px), not the 6/10 px of §4.4 |
 | 11 | Perf budgets, no soak leak | **Met, margin gone** | Re-run (`npm run perf`): LCP 1.96-2.27 s, CLS 0.001, TBT <= 15 ms, JS 181-200 KB; `/login` is **199.9 KB against the 200 KB budget (0.1 KB headroom)**; `soak` e2e passes |
 | 12 | All suites zero failures; log updated | **Partial** | Re-run: unit 459, e2e 81/0 failed, visual 54, Lighthouse gate. Not run: `npm run smoke` (needs a deployed target). The CI `visual` job has never run |
 
-**Reading it:** nothing is failing. Four items are not yet fully evidenced (2, 5, 7, 10), one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
+**Reading it:** nothing is failing. Three items are not yet fully evidenced (2, 5, 7), one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
 
 ---
 
