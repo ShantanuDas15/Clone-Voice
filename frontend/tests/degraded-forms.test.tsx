@@ -40,11 +40,23 @@ describe("degraded service (R17)", () => {
     expect(screen.getByRole("button", { name: "Generate speech" })).toBeDisabled();
   });
 
+  it("links the stated reason to the disabled button (UR4)", async () => {
+    health(503);
+    wrap(<TextToSpeechForm />);
+    const reason = await screen.findByText(/generating is paused/i);
+    expect(screen.getByRole("button", { name: "Generate speech" })).toHaveAccessibleDescription(
+      reason.textContent ?? "",
+    );
+  });
+
   it("disables Create voice and explains why while /health/ready is 503", async () => {
     health(503);
     wrap(<UploadVoiceForm />);
     expect(await screen.findByText(/uploading is paused/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create voice" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create voice" })).toHaveAccessibleDescription(
+      /uploading is paused/i,
+    );
   });
 
   it("stays enabled when healthy, and when the probe itself fails", async () => {

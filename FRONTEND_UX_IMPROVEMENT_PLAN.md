@@ -498,14 +498,33 @@ Finding → Phase → Task → Test type. **U**=unit, **I**=integration (MSW), *
 | 4 | 44 px targets, 320 px and 400% reflow, forced-colors | **Met** | Re-run: `responsive` e2e (targets, reflow, long email at 320 px); forced-colors per log (FE-UX14) |
 | 5 | Layouts at 320/375/768/1280/1920, baselines committed | **Met** | FE-UX34 (`33e3699`): `responsive` e2e now covers 320/768/1280/1920 (no horizontal scroll, 44 px targets, every public and signed-in route; real backend); 72 baselines at 375/768/1280/1920, light and dark, 104/104 visual tests pass; the 1920 px renders were viewed (content stays in the 5xl column, left-aligned; the footer line is centred, as at other widths). 320 px has no baseline image, only the `responsive` assertions |
 | 6 | Chromium and Firefox e2e green; Safari tested or listed | **Met, Safari partial** | Re-run: full suite, **81 passed, 9 skipped (Chromium-only layout-shift specs on Firefox), 0 failed**. WebKit: mocked smoke 16/16, real e2e over HTTPS passes or skips on purpose (FE-UX27/29). Real Safari on macOS/iOS: not run |
-| 7 | Every component has the §4.7 states, no disabled control without a reason | **Partial** | the reason pattern is tested for Generate and Voices; an exhaustive state-by-component audit was not done |
+| 7 | Every component has the §4.7 states, no disabled control without a reason | **Met, with 4 recorded deviations** | FE-UX35 (`8527e9b`): audit in §9.2; state matrix asserted in `tests/component-states.test.tsx`; the one real gap (reasons shown but not linked) is fixed and tested |
 | 8 | Every UR10 status code, offline, mic denial, playback failure, expired audio tested | **Met per log** | FE-UX8/9/13 and the `resilience` e2e (re-run, passes); not re-audited code by code |
 | 9 | Reduced motion: no animation | **Met per log** | FE-UX12 e2e; the `a11y`/visual runs use reduced motion |
 | 10 | No hardcoded colour or one-off radius; no gradient, shadow, ALL-CAPS, numbered non-sequence | **Met (automated part)** | FE-UX32 (`0f42bfc`): `tests/theme.test.ts` now fails on shadows, blur, gradients, `uppercase`/`lowercase`/`capitalize` and any radius other than `rounded`, `rounded-lg`, `rounded-full` (negative control run). A numbered non-sequence is still a review item; the radii are Tailwind defaults (4/8 px), not the 6/10 px of §4.4 |
 | 11 | Perf budgets, no soak leak | **Met, margin gone** | Re-run (`npm run perf`): LCP 1.96-2.27 s, CLS 0.001, TBT <= 15 ms, JS 181-200 KB; `/login` is **199.9 KB against the 200 KB budget (0.1 KB headroom)**; `soak` e2e passes |
 | 12 | All suites zero failures; log updated | **Partial** | Re-run: unit 459, e2e 81/0 failed, visual 54, Lighthouse gate. Not run: `npm run smoke` (needs a deployed target). The CI `visual` job has never run |
 
-**Reading it:** nothing is failing. One item is not yet fully evidenced (7), one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
+**Reading it:** nothing is failing. Nothing is partial any more, one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
+
+### 9.2 State audit (2026-10-10, FE-UX35)
+
+Each §4.7 component against its required states. "Test" = where it is asserted.
+
+| Component | States required | Where it stands | Test |
+|---|---|---|---|
+| `Button` | default, hover, active, focus-visible, disabled, loading | All present. Hover and active per variant; disabled also freezes the hover colour; loading is `aria-busy` with the label kept | `component-states` (4 variants), `ui-primitives`, `theme` (global focus ring), `keyboard-flows` e2e |
+| Fields (`Input`, `Select`, `Textarea`) | default, hover, focus, filled, disabled, error, hint | Present; error is `aria-invalid` plus text (not colour alone) in `TextField` | `component-states`, `ui-primitives`, `auth-ui` |
+| `Alert` | danger, success, notice, info; icon + text | **Deviation 1:** three tones (danger, success, neutral); the notice and info looks are the neutral tone. **Deviation 2:** no icon; the message text and role carry the meaning, never colour alone | `component-states` |
+| `Badge` | ready, failed, processing | Neutral, success, notice tones, text always shown | `component-states`, `voice-profiles` |
+| `Dialog` | scrim, focus trap, Esc, return focus, destructive variant | Present | `dialog-primitive`, `dialog-keyboard` e2e |
+| `Card` / `Section` | one definition | **Deviation 3:** not built (deferred in FE-UX1 to avoid a card on every block, §4.9); surfaces use hairline rows | none |
+| `Take` | idle through expired | Idle, playing, paused, ended, error ("can't play", download kept), expired (history); recording states live in `Recorder` (permission, recording, stopped) | `take`, `recording`, `input-level`, `history-account` |
+| `Waveform` | static or live, `aria-hidden` | Part of `take.tsx` (no separate file). **Deviation 4:** no separate component | `take` |
+| `NavLink` | hover, focus-visible, current | Present, including sub-routes | `component-states`, `navigation` |
+| `StepList` | pending, current, done | Present; each state is also stated in words | `component-states`, `first-run` |
+
+**UR4 (no control disabled without a visible reason).** Every disabled submit was traced: transient causes (submitting, uploading, busy) are obvious from the busy label; Delete account waits on the field above it; Stop recording shows "at least 5 seconds"; the first-run, offline and unverified causes were already linked. **One gap found and fixed:** Generate, Generate again and Create voice showed the paused-service and cooldown messages but did not link them with `aria-describedby`, so a screen reader heard nothing. They do now. Left as is: "Save name" is disabled while the name is unchanged, with no text (the cause is plain from the form).
 
 ---
 
