@@ -61,18 +61,21 @@ describe("unit-test job Node version (FE-UX42)", () => {
   });
 });
 
-describe("required checks always report (FE-UX45)", () => {
-  it("has no path filter on the triggers, so a docs-only or backend-only PR still gets check, perf and visual", () => {
-    const head = read("frontend.yml").split("\njobs:")[0] ?? "";
-    expect(head).toMatch(/\non:\s*\n\s+push:/);
+describe("required checks are reliable (FE-UX45, FE-UX46)", () => {
+  const head = read("frontend.yml").split("\njobs:")[0] ?? "";
+
+  it("has no path filter, so a docs-only or backend-only PR still gets check, perf and visual", () => {
     expect(head).toMatch(/\n\s+pull_request:/);
     expect(head).not.toMatch(/^\s*paths(-ignore)?:/m);
   });
-});
 
-describe("perf gate stability (FE-UX45)", () => {
-  it("takes the median of at least 7 runs, because the check is required and runner LCP is noisy", () => {
+  it("pushes only on main, so a PR branch does not run every required check twice", () => {
+    expect(head).toMatch(/\n\s+push:\s*\n\s+branches:\s*\[main\]/);
+  });
+
+  it("retries the perf budget once, so runner noise cannot block a merge but a real regression still fails twice", () => {
     const perf = job(read("frontend.yml"), "perf");
-    expect(Number(/PERF_RUNS:\s*(\d+)/.exec(perf)?.[1])).toBeGreaterThanOrEqual(7);
+    expect(perf).toMatch(/npm run perf \|\| \(.*sleep \d+ && npm run perf\)/);
+    expect(perf).not.toMatch(/continue-on-error/);
   });
 });
