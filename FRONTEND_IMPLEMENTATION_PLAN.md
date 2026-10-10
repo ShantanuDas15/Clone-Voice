@@ -1491,6 +1491,17 @@ New `frontend/A11Y_MANUAL_CHECKLIST.md` for UX plan §9.1 item 3 and the real-Sa
 **Open items from FE-UX44**
 1. Owner: run it, fill the table, then update §9.1 items 3 and 6. The default 404 page has no custom "go home" content; the checklist row A11.2 will show whether that matters.
 
+### FE-UX45 — Include administrators; required checks now report on every PR (2026-10-10, branch `ci/FE-UX45-always-report-checks`, commit `e9fa0d6`)
+
+On the owner's instruction **"Include administrators" is on for `main`** (`enforce_admins: true`; verified with `gh api`), so the three required checks (`check`, `perf`, `visual`) bind the owner too: **a direct push to `main` is now rejected, and every change goes through a pull request** that is green. This supersedes the FE-UX43 note that admins could bypass.
+
+**Loophole found and closed in the same step:** `frontend.yml` ran only when `frontend/**` or the workflow itself changed. With required checks, a PR touching only the backend or the docs would never receive them and could never merge. The `paths:` filters are removed from `push` and `pull_request`, so the three checks report on every PR; `tests/ci-workflows.test.ts` fails if a path filter returns. Cost: the frontend jobs also run for backend-only changes (a few minutes). This PR touches the workflow, so it is the first one gated by the new rules.
+
+**Consequences to know:** `CLAUDE.md` §3.7 says to merge locally and `git push origin main`; that no longer works. The new flow is branch, push, open a PR, wait for the three checks, merge the PR (`gh pr merge --merge`), then delete the branch. If an emergency needs a direct push, an admin can switch *Include administrators* off for the push and back on (`gh api -X DELETE`/`POST repos/<owner>/<repo>/branches/main/protection/enforce_admins`); the section is not updated here because it is the owner's rulebook. The backend workflows are still not required.
+
+**Open items from FE-UX45**
+1. Owner: decide whether to update `CLAUDE.md` §3.7 to the pull-request flow, and whether the backend workflows should be required too.
+
 ---
 
 ## 9. Definition of Done (release checklist)
