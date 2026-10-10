@@ -7,6 +7,9 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      // §4.4: control 6 px, card and dialog 10 px; `rounded-full` is the pill. Nothing else is allowed
+      // (tests/theme.test.ts).
+      borderRadius: { DEFAULT: "6px", lg: "10px" },
       colors: {
         background: "hsl(var(--background) / <alpha-value>)",
         surface: "hsl(var(--surface) / <alpha-value>)",

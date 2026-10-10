@@ -43,6 +43,18 @@ test.describe("header does not shift when the session resolves (CLS)", () => {
         expect(await cls(page)).toBeLessThan(0.05);
       });
 
+      test("first-run user stays under the 0.2 ceiling", async ({ page }) => {
+        // Verified, no voice: the checklist arrives after the form (FE-UX30). Measured 0.04-0.17
+        // with a mocked, delayed voice list; this guards against it getting worse.
+        await signUpVerified(page, "clsfirst");
+        await observeShifts(page);
+        await slowRefresh(page);
+        await page.goto("/generate");
+        await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+        await expect(page.getByRole("list", { name: "First steps" })).toBeVisible();
+        expect(await cls(page)).toBeLessThan(0.2);
+      });
+
       test("signed in, after a reload", async ({ page }) => {
         // A returning user: verified with a ready voice, so there is no first-run checklist and no
         // late notice. (A brand-new user's checklist arrives after the voice list and pushes the
