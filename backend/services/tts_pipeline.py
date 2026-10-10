@@ -23,7 +23,7 @@ from backend.services.sv2tts.synthesizer.utils.symbols import symbols as sv2tts_
 from backend.services.sv2tts.synthesizer.utils.text import text_to_sequence
 from backend.services.sv2tts.vocoder import hparams as vocoder_hparams
 from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
-from backend.services.text_chunking import split_into_chunks
+from backend.services.text_chunking import Boundary, split_into_segments
 
 try:
     from resemblyzer import VoiceEncoder
@@ -387,7 +387,9 @@ def _configure_torch_threads() -> None:
         logger.info("Torch CPU threads: %d (default).", torch.get_num_threads())
         return
     torch.set_num_threads(threads)
-    logger.info("Torch CPU threads set to %d (container CPU limit or setting).", threads)
+    logger.info(
+        "Torch CPU threads set to %d (container CPU limit or setting).", threads
+    )
 
 
 def load_models(device: str = "cpu") -> None:
@@ -540,44 +542,60 @@ def _clean_for_chunking(text: str) -> str:
     (HARDENING_PLAN.md finding P2-M3). The cleaners are idempotent, so the
     per-chunk clean inside ``text_to_sequence`` is harmless. Text with
     ARPAbet braces is left raw, since lowercasing would corrupt the phonemes.
+
+    Each line is cleaned on its own: the cleaners collapse all whitespace, which
+    would otherwise erase the line and paragraph breaks the segmenter turns
+    into pauses (SPEECH_QUALITY_PLAN.md S1.2).
     """
     if "{" in text:
         return text
-    for name in synth_hparams.tts_cleaner_names:
-        text = getattr(cleaners, name)(text)
-    return text
+    lines = []
+    for line in text.split("\n"):
+        for name in synth_hparams.tts_cleaner_names:
+            line = getattr(cleaners, name)(line)
+        lines.append(line.strip())
+    return "\n".join(lines)
+
+
+def _pause_frames(boundary: Boundary) -> int:
+    """Mel frames of silence to insert after a segment that ended with ``boundary``."""
+    seconds = settings.TTS_PAUSE_SECONDS[boundary.value]
+    return int(seconds * synth_hparams.sample_rate / synth_hparams.hop_size)
 
 
 def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
     """Generate a mel spectrogram for text of any supported length.
 
-    The text is split into sentence-sized chunks (``TTS_CHUNK_MAX_CHARS``),
-    each decoded separately by ``_synthesize_chunk`` so no single Tacotron
-    decode exceeds the checkpoint's training length, then the mels are joined
-    with ``TTS_CHUNK_PAUSE_SECONDS`` of silence between chunks — the same idea
-    as the reference SV2TTS demo, which synthesizes per line and concatenates
-    (HARDENING_PLAN.md finding P2-M3).
+    The text is split into punctuation-aware segments (``TTS_CHUNK_MAX_CHARS``, see
+    ``text_chunking``), each decoded separately by ``_synthesize_chunk`` so no single
+    Tacotron decode exceeds the checkpoint's training length, then the mels are joined
+    with silence whose length depends on how the preceding segment ended
+    (``TTS_PAUSE_SECONDS``: a question, a full stop and a paragraph break differ). This
+    is the reference SV2TTS demo's per-line synthesis with typed pauses
+    (HARDENING_PLAN.md finding P2-M3, SPEECH_QUALITY_PLAN.md S1.2 and S1.3).
     """
-    chunks = split_into_chunks(_clean_for_chunking(text), settings.TTS_CHUNK_MAX_CHARS)
-    if not chunks:
-        chunks = [text]  # let the single-chunk path handle degenerate input
-    mels = [_synthesize_chunk(chunk, embedding) for chunk in chunks]
+    segments = split_into_segments(
+        _clean_for_chunking(text), settings.TTS_CHUNK_MAX_CHARS
+    )
+    if not segments:
+        # let the single-chunk path handle degenerate input
+        return _synthesize_chunk(text, embedding)
+    mels = [_synthesize_chunk(segment.text, embedding) for segment in segments]
     if len(mels) == 1:
         return mels[0]
 
-    pause_frames = int(
-        settings.TTS_CHUNK_PAUSE_SECONDS
-        * synth_hparams.sample_rate
-        / synth_hparams.hop_size
-    )
-    # Floor of the symmetric mel range = digital silence for the vocoder.
-    pause = np.full(
-        (mels[0].shape[0], pause_frames), -synth_hparams.max_abs_value, np.float32
-    )
     parts: list[np.ndarray] = []
-    for mel in mels:
-        if parts:
-            parts.append(pause)
+    for i, mel in enumerate(mels):
+        if i:
+            # The gap follows the *previous* segment: its ending sets the pause.
+            # Floor of the symmetric mel range = digital silence for the vocoder.
+            parts.append(
+                np.full(
+                    (mel.shape[0], _pause_frames(segments[i - 1].boundary)),
+                    -synth_hparams.max_abs_value,
+                    np.float32,
+                )
+            )
         parts.append(mel)
     return np.concatenate(parts, axis=1)
 

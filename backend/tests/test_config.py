@@ -128,3 +128,47 @@ def test_session_secret_key_rejects_literal_secret(monkeypatch) -> None:
 
     with pytest.raises(ValidationError):
         _settings_with(monkeypatch, SESSION_SECRET_KEY="secret")
+
+
+# ---- TTS_PAUSE_SECONDS (SPEECH_QUALITY_PLAN.md S1.3) --------------------------
+
+
+def test_pause_defaults_are_the_documented_table() -> None:
+    from backend.core.config import DEFAULT_TTS_PAUSE_SECONDS
+
+    assert settings.TTS_PAUSE_SECONDS == DEFAULT_TTS_PAUSE_SECONDS
+    assert DEFAULT_TTS_PAUSE_SECONDS["statement"] == 0.40
+    assert DEFAULT_TTS_PAUSE_SECONDS["question"] == 0.45
+
+
+def test_pause_override_merges_with_the_defaults(monkeypatch) -> None:
+    from backend.core.config import DEFAULT_TTS_PAUSE_SECONDS
+
+    s = _settings_with(monkeypatch, TTS_PAUSE_SECONDS='{"question": 0.6}')
+    assert s.TTS_PAUSE_SECONDS["question"] == 0.6
+    assert s.TTS_PAUSE_SECONDS["statement"] == DEFAULT_TTS_PAUSE_SECONDS["statement"]
+    assert set(s.TTS_PAUSE_SECONDS) == set(DEFAULT_TTS_PAUSE_SECONDS)
+
+
+def test_pause_overrides_do_not_leak_into_the_defaults(monkeypatch) -> None:
+    from backend.core.config import DEFAULT_TTS_PAUSE_SECONDS
+
+    _settings_with(monkeypatch, TTS_PAUSE_SECONDS='{"question": 2.0}')
+    assert DEFAULT_TTS_PAUSE_SECONDS["question"] == 0.45
+    assert Settings.model_fields["TTS_PAUSE_SECONDS"].default_factory() is not (
+        DEFAULT_TTS_PAUSE_SECONDS
+    )
+
+
+def test_bad_pause_settings_fail_at_startup(monkeypatch) -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    for value in (
+        '{"questionn": 0.5}',
+        '{"question": -0.1}',
+        '{"question": 3.5}',
+        '{"paragraph": "x"}',
+    ):
+        with pytest.raises(ValidationError):
+            _settings_with(monkeypatch, TTS_PAUSE_SECONDS=value)

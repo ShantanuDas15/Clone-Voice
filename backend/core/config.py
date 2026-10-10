@@ -5,10 +5,25 @@ from typing import List, Literal
 from urllib.parse import urlparse
 
 from limits import parse as parse_rate_limit
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Seconds of silence inserted after a synthesized segment, by how the segment ended
+# (SPEECH_QUALITY_PLAN.md S1.3). The keys are the values of
+# `services.text_chunking.Boundary` (a test keeps the two in step).
+DEFAULT_TTS_PAUSE_SECONDS = {
+    "statement": 0.40,
+    "question": 0.45,
+    "exclamation": 0.45,
+    "ellipsis": 0.60,
+    "clause": 0.25,
+    "comma": 0.12,
+    "word": 0.05,
+    "paragraph": 0.70,
+}
+MAX_TTS_PAUSE_SECONDS = 3.0
 
 
 class Settings(BaseSettings):
@@ -161,8 +176,14 @@ class Settings(BaseSettings):
     # separately. ~150 chars is about 10 s of speech, inside the checkpoint's
     # 900-frame training length.
     TTS_CHUNK_MAX_CHARS: int = 150
-    # Silence inserted between chunks, in seconds.
-    TTS_CHUNK_PAUSE_SECONDS: float = 0.15
+    # Silence inserted after a chunk, in seconds, keyed by how the chunk ended
+    # (statement, question, exclamation, ellipsis, clause, comma, word, paragraph).
+    # Supply only the keys to change; the rest keep their defaults. As an env var:
+    # TTS_PAUSE_SECONDS='{"question": 0.6}'. Replaces TTS_CHUNK_PAUSE_SECONDS
+    # (SPEECH_QUALITY_PLAN.md S1.3).
+    TTS_PAUSE_SECONDS: dict[str, float] = Field(
+        default_factory=lambda: dict(DEFAULT_TTS_PAUSE_SECONDS)
+    )
     # HARDENING_PLAN.md finding M6: on shutdown, wait up to this long for
     # in-flight forward passes (worker threads) to finish before exiting.
     INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS: float = 30.0
@@ -212,6 +233,25 @@ class Settings(BaseSettings):
     DB_CONNECT_TIMEOUT_SECONDS: float = 10.0
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+
+    @field_validator("TTS_PAUSE_SECONDS")
+    @classmethod
+    def pauses_are_known_and_bounded(cls, v: dict[str, float]) -> dict[str, float]:
+        """Merge overrides onto the defaults; reject unknown keys and out-of-range values."""
+        unknown = set(v) - set(DEFAULT_TTS_PAUSE_SECONDS)
+        if unknown:
+            raise ValueError(
+                f"unknown TTS_PAUSE_SECONDS keys {sorted(unknown)}; "
+                f"valid: {sorted(DEFAULT_TTS_PAUSE_SECONDS)}"
+            )
+        merged = {**DEFAULT_TTS_PAUSE_SECONDS, **v}
+        for key, seconds in merged.items():
+            if not 0.0 <= seconds <= MAX_TTS_PAUSE_SECONDS:
+                raise ValueError(
+                    f"TTS_PAUSE_SECONDS[{key!r}] must be between 0 and "
+                    f"{MAX_TTS_PAUSE_SECONDS:g} seconds"
+                )
+        return merged
 
     @field_validator("TORCH_NUM_THREADS")
     @classmethod

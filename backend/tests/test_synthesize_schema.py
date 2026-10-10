@@ -52,6 +52,12 @@ def test_accepts_hiragana_transliterated_by_unidecode():
     assert req.text == "あいう"
 
 
+def test_accepts_line_and_paragraph_breaks():
+    """Newlines are not lost text: they become sentence and paragraph pauses."""
+    assert _make("One.\n\nTwo?").text == "One.\n\nTwo?"
+    assert _make("One.\r\nTwo.").text == "One.\r\nTwo."
+
+
 def test_rejects_control_characters():
     with pytest.raises(ValidationError, match="unsupported"):
         _make("hello\x00world")
