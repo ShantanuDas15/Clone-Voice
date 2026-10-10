@@ -174,6 +174,11 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           hasReadyVoice: (profiles.data ?? []).some((p) => p.status === "ready"),
         }).blocker
       : null;
+  // UR4: every visible reason the generate buttons are disabled is linked to them.
+  const whyDisabled =
+    [blocker && "tts-blocked", degraded && "tts-paused", cooldown.remaining > 0 && "tts-cooldown"]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   return (
     <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
@@ -238,12 +243,12 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
         )}
         {formError && <Alert tone="danger">{formError}</Alert>}
         {degraded && (
-          <p role="status" className="text-sm">
+          <p id="tts-paused" role="status" className="text-sm">
             Generating is paused while the service recovers. This page will update on its own.
           </p>
         )}
         {cooldown.remaining > 0 && (
-          <p role="status" className="text-sm">
+          <p id="tts-cooldown" role="status" className="text-sm">
             You can try again in {cooldown.remaining} s.
           </p>
         )}
@@ -252,7 +257,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           <Button
             type="submit"
             disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
-            aria-describedby={blocker ? "tts-blocked" : undefined}
+            aria-describedby={whyDisabled}
             loading={pending}
           >
             {pending ? "Generating…" : "Generate speech"}
@@ -302,6 +307,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
               variant="secondary"
               size="sm"
               disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
+              aria-describedby={whyDisabled}
               onClick={() => {
                 setText(result.text);
                 void run(result.text);

@@ -287,7 +287,7 @@ export function UploadVoiceForm() {
         </div>
       )}
       {degraded && (
-        <p role="status" className="text-sm">
+        <p id="upload-paused" role="status" className="text-sm">
           Uploading is paused while the service recovers. This page will update on its own.
         </p>
       )}
@@ -295,7 +295,10 @@ export function UploadVoiceForm() {
         <Button
           type="submit"
           disabled={pending || degraded || blocker !== null}
-          aria-describedby={blocker ? "upload-blocked" : undefined}
+          aria-describedby={
+            [blocker && "upload-blocked", degraded && "upload-paused"].filter(Boolean).join(" ") ||
+            undefined
+          }
           loading={pending}
         >
           {pending ? "Creating voice…" : "Create voice"}
