@@ -74,6 +74,15 @@ test("sign up, sign out and sign in again with the keyboard alone", async ({ pag
     await expectFocusRing(page);
   }
 
+  await focusTop(page);
+  // Following a nav link lands on the new page's heading, and Tab continues from there.
+  await pressOn(page, nav.getByRole("link", { name: "Voices" }).first());
+  await expect(page).toHaveURL(/\/voices/);
+  await expect(page.getByRole("heading", { level: 1, name: "Voices" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => !!document.activeElement?.closest("main"))).toBe(true);
+
+  await focusTop(page);
   await pressOn(page, page.getByRole("button", { name: "Sign out" }), "Space");
   await expect(page).toHaveURL(/\/$/);
 

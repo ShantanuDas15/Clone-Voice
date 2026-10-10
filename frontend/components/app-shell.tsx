@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { RouteFocus } from "@/components/route-focus";
 import { MobileTabs } from "@/components/mobile-tabs";
 import { UserMenu } from "@/components/user-menu";
 import { DegradedBanner } from "@/components/degraded-banner";
@@ -19,6 +20,7 @@ export function AppShell({ children, theme }: { children: ReactNode; theme: Them
       >
         Skip to content
       </a>
+      <RouteFocus />
       <OfflineBanner />
       <DegradedBanner />
       <header className="border-b border-border">

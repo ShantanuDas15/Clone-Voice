@@ -132,6 +132,11 @@ describe("design-token guardrails", () => {
     expect(css.join("\n")).not.toMatch(/box-shadow|text-transform|-gradient\(/);
   });
 
+  it("sets the radius tokens of §4.4 (control 6 px, card and dialog 10 px)", () => {
+    const config = read("tailwind.config.ts");
+    expect(config).toContain('borderRadius: { DEFAULT: "6px", lg: "10px" }');
+  });
+
   it("builds buttons and messages from the ui primitives, not ad-hoc recipes", () => {
     const outside = FILES.filter((f) => !f.includes(path.join("components", "ui")));
     const recipe =
