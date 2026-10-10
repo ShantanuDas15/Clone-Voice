@@ -1,10 +1,10 @@
 # CloneVoice — Speech Quality & Expressiveness Improvement Plan
 
-> **Status**: 🟡 In Progress (0 of 8 Phases complete; S0.1, S0.2 and S1.1 to S1.4 landed in part, see §5.1)
+> **Status**: 🟡 In Progress (0 of 8 Phases complete; S0.1, S0.2, S0.4 and S1.1 to S1.4 landed in part, see §5.1)
 > **Scope**: Backend speech pipeline — make cloned voices closer to the real speaker and make the
 > speech react to the text (punctuation, emotion, emphasis). Frontend work is listed per phase but
 > starts only after the backend gate (CLAUDE.md §2).
-> **Last Reviewed**: 2026-10-10 (S0.1, S0.2, S1.1 to S1.4 landed in part) · **Decisions Q1–Q3 recorded** (§7)
+> **Last Reviewed**: 2026-10-10 (S0.1, S0.2, S0.4, S1.1 to S1.4 landed in part) · **Decisions Q1–Q3 recorded** (§7)
 > **Source of truth for baseline**: `backend/services/tts_pipeline.py`, `text_chunking.py`,
 > `audio_processing.py`, `sv2tts/`, `PREPROCESSING_STUDY.md`, `HARDENING_PLAN.md`.
 
@@ -85,7 +85,7 @@ Automatic metrics guide development; **only the listening test decides release.*
 
 | Phase | Name | Status | Commit | Completed |
 |---|---|:---:|:---:|:---:|
-| **S0** | Evaluation harness & baseline | 🟡 | `cd7ec07` (S0.1), `f4d8cbe` (S0.2) | — |
+| **S0** | Evaluation harness & baseline | 🟡 | `cd7ec07` (S0.1), `f4d8cbe` (S0.2), `12f2f1e` (S0.4) | — |
 | **S1** | Text front-end & punctuation-aware prosody (current model) | 🟡 | `92b71c8` (S1.1, S1.4), `8a43fe0` (S1.2, S1.3) | — |
 | **S2** | Voice-profile quality (embedding & enrollment) | 🔴 | — | — |
 | **S3** | Vocoder & output polish | 🔴 | — | — |
@@ -111,7 +111,7 @@ own vocoder).
 | **S1.4** Wider input charset | 🟡 Partial | `92b71c8` | 2026-10-10 | `*emphasis*` is accepted and the markers removed; the validator change above covers the symbols. Audit correction recorded in §2 | The emphasis **hint is not recorded or used**: ALL-CAPS and `*stress*` are lowercased/stripped, so emphasis has no effect until S5. `[laugh]`-style tags stay rejected until S6.2 |
 | **S0.2** Corpus & expressive sentence set | 🟡 Partial | `f4d8cbe` | 2026-10-10 | `backend/eval_data/expressive_sentences.json`: 40 groups (stem for `.`/`?`/`!` plus a neutral, happy, sad and angry sentence), every text accepted by the API validator. `backend/prepare_eval_corpus.py` builds the scratch corpus from LibriSpeech test-clean (CC BY 4.0; already cached locally): per speaker one 10-30 s reference and five held-out 3-20 s clips, plus `groups.json` and a provenance `manifest.json`. Run for real: **20 speakers, 10 `adult_low_f0` and 10 `adult_high_f0`** (median-F0 bands, split at 165 Hz; not gender labels: LibriSpeech has none in the parquet). The study CLI now reads the fixture (`--stems`, `--sentences`). 21 new tests; 1082 passed, 1 skipped, 11 warnings (baseline) | **No child or elderly speech**: no licensed source is verified yet. Candidates to check (access and licence are *not* confirmed): Mozilla Common Voice (CC0, has age and gender metadata, but its youngest age band is teens, not children), and child-speech corpora, which usually carry restrictive licences and consent duties. Until then every per-group result is adult-only and says nothing about children or the elderly. The emotion sentences are written for the emotion metric (S0.3), which does not exist yet |
 | S0.3 Punctuation + emotion metrics | 🟡 Partial | `cd7ec07` | 2026-10-10 | Punctuation contrast (`?` final-pitch rise, `!` pitch range + energy) is implemented and tested; the CLI uses 5 built-in sentences | Emotion classifier metric; the full 40-sentence set (S0.2) |
-| S0.4 Baseline recorded in `SPEECH_QUALITY_STUDY.md` | 🔴 | — | — | — | Needs real speech |
+| **S0.4** Baseline recorded in `SPEECH_QUALITY_STUDY.md` | 🟡 Partial | `12f2f1e` | 2026-10-10 | Real run, 20 LibriSpeech speakers (10 low-F0, 10 high-F0), 320 syntheses with the real weights, on the pipeline before S1 (`d9070cf`) and after (`f4d8cbe`): **all six metrics identical for all 20 speakers**, so the fixed-seed gate is met. Baseline: speaker similarity 0.760 (low 0.786, high 0.734; gap 0.051, just over the 0.05 limit), median pitch error 3.4 semitones (high voices 4.4; target 1), pitch range 0.68 of real (target 0.8 to 1.2), `!` lifts range and energy in 22% of pairs (target 80%), `?` rises at 52% (about chance) | (1) The stimuli are single sentences, so the study **cannot see S1.2 to S1.4**: whether S1 helped is still unmeasured; next is a multi-sentence/number stimulus set run on both checkouts. (2) WER, predicted MOS, emotion classifier, independent encoder and RTF are not in the baseline. (3) No children or elderly. (4) The `?` metric has no positive control on natural speech. (5) n = 10 per group: wide intervals. The section 4 targets are kept unchanged |
 
 Method note: thresholds for the `?`/`!` contrast are deliberately **not** invented. `punctuation_contrast`
 returns the raw deltas and a strict pass/fail (`?` ends higher; `!` has both a wider pitch range and more
