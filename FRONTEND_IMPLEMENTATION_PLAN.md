@@ -1395,6 +1395,13 @@ Finding (test-side, not an app bug): after a client-side navigation Firefox keep
 **Open items from FE-UX33**
 1. Items 5 and 7 of §9.1 (1920 px, a state audit), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result, the manual U6.3 and a real Safari pass. The keyboard spec was not run on WebKit.
 
+### FE-UX34 — 1920 px layouts and baselines (2026-10-10, branch `chore/FE-UX34-1920px`, commit `33e3699`)
+
+Closes UX plan §9.1 item 5. `e2e/responsive.spec.ts` gains a 1920 x 1080 viewport; the visual specs gain 1920 px (18 new baselines, 72 total). **Results:** `responsive` 6/6 (real backend); visual suite 104/104 (Chromium baselines, Firefox and WebKit structural smoke). Viewed `generate-1920-light` and `home-1920-dark`: content stays in the `max-w-5xl` column, nothing stretches or overflows. No component changed.
+
+**Open items from FE-UX34**
+1. Item 7 of §9.1 (a state-by-component audit), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result (the new baselines are untested in CI), the manual U6.3, and a real Safari pass.
+
 ---
 
 ## 9. Definition of Done (release checklist)
