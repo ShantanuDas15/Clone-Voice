@@ -51,14 +51,9 @@ SILENCE_RMS = 1e-5
 # The plan's gate (section 4): every group within this SECS gap of the best group.
 GROUP_GAP_LIMIT = 0.05
 
-# Each sentence is spoken ending in "." (baseline), "?" and "!" for the punctuation test.
-PUNCTUATION_SENTENCES = (
-    "You are coming to the meeting",
-    "We found the keys in the garden",
-    "She said she would call tonight",
-    "They moved the whole house",
-    "That is the last of the cake",
-)
+# The expressive sentence set (plan S0.2). Each stem is spoken ending in ".", "?" and "!".
+DEFAULT_SENTENCES = Path(__file__).parent / "eval_data" / "expressive_sentences.json"
+EMOTIONS = ("neutral", "happy", "sad", "angry")
 
 # --- Metrics (pure) ----------------------------------------------------------
 
@@ -311,6 +306,16 @@ def load_dataset(data_dir: Path) -> Dict[str, List[str]]:
     return speakers
 
 
+def load_sentences(path: Path = DEFAULT_SENTENCES) -> List[Dict[str, str]]:
+    """Read the expressive sentence set: ``id``, ``stem`` and one sentence per emotion."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    sentences = data.get("sentences") if isinstance(data, dict) else None
+    needed = {"id", "stem", *EMOTIONS}
+    if not sentences or any(needed - set(item) for item in sentences):
+        raise SystemExit(f"{path} must list sentences with keys {sorted(needed)}")
+    return sentences
+
+
 def load_groups(path: Optional[Path]) -> Dict[str, str]:
     """Read a ``{speaker: group}`` JSON map; an empty map when no file is given."""
     if path is None:
@@ -344,7 +349,13 @@ def _synthesize(
 
 
 def evaluate_speaker(
-    encoder, speaker: str, files: Sequence[str], group: str, index: int, seed: int
+    encoder,
+    speaker: str,
+    files: Sequence[str],
+    group: str,
+    index: int,
+    seed: int,
+    stems: Sequence[str],
 ) -> Dict[str, object]:
     """Clone one speaker from their first clip and score it against their other clips."""
     from backend.services.audio_processing import preprocess_audio
@@ -362,7 +373,7 @@ def evaluate_speaker(
 
     row: Dict[str, object] = {"speaker": speaker, "group": group}
     base_seed = seed + 1000 * index
-    clone = _synthesize(PUNCTUATION_SENTENCES[0] + ".", embedding, speaker, base_seed)
+    clone = _synthesize(stems[0] + ".", embedding, speaker, base_seed)
     row["secs"] = secs(encoder.embed_utterance(clone), target)
     clone_f0 = f0_track(clone)
     row["f0_error_semitones"] = f0_error_semitones(real_f0, clone_f0)
@@ -371,7 +382,7 @@ def evaluate_speaker(
 
     # The three renderings of one sentence share a seed, so only the punctuation differs.
     contrast: Dict[str, List[float]] = {"?": [], "!": []}
-    for k, sentence in enumerate(PUNCTUATION_SENTENCES):
+    for k, sentence in enumerate(stems):
         seed_k = base_seed + 1 + k
         base = _synthesize(sentence + ".", embedding, speaker, seed_k)
         for terminal in ("?", "!"):
@@ -392,6 +403,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--groups", type=Path, default=None)
     parser.add_argument("--speakers", type=int, default=20, help="speakers to clone")
+    parser.add_argument(
+        "--stems", type=int, default=5, help="sentence stems for the punctuation test"
+    )
+    parser.add_argument("--sentences", type=Path, default=DEFAULT_SENTENCES)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--out", type=Path, default=Path("synthesis_study.json"))
     args = parser.parse_args(argv)
@@ -399,6 +414,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     dataset = load_dataset(args.data_dir)
     groups = load_groups(args.groups)
+    stems = [item["stem"] for item in load_sentences(args.sentences)][: args.stems]
+    if not stems:
+        raise SystemExit("--stems must be at least 1")
 
     from resemblyzer import VoiceEncoder
 
@@ -411,7 +429,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     for n, (speaker, files) in enumerate(sorted(dataset.items())[: args.speakers]):
         rows.append(
             evaluate_speaker(
-                encoder, speaker, files, groups.get(speaker, "ungrouped"), n, args.seed
+                encoder,
+                speaker,
+                files,
+                groups.get(speaker, "ungrouped"),
+                n,
+                args.seed,
+                stems,
             )
         )
         logger.info("scored speaker %d/%d (%s)", n + 1, args.speakers, speaker)
