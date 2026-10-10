@@ -123,6 +123,15 @@ describe("design-token guardrails", () => {
     expect(config).toContain('base: "200ms"');
   });
 
+  it("keeps to the flat style: two radii plus the pill, no shadow, gradient or ALL-CAPS", () => {
+    const css = ["app/globals.css", "tailwind.config.ts"].map(read);
+    const flat =
+      /\b(?:shadow|drop-shadow|backdrop-blur|blur|bg-gradient)(?:-|\b)|\b(?:uppercase|lowercase|capitalize)\b|\brounded-(?!lg\b|full\b)[a-z0-9[]|box-shadow|text-shadow|text-transform|(?:linear|radial|conic)-gradient/;
+    const offenders = [...FILES, "app/globals.css"].filter((f) => flat.test(read(f)));
+    expect(offenders).toEqual([]);
+    expect(css.join("\n")).not.toMatch(/box-shadow|text-transform|-gradient\(/);
+  });
+
   it("builds buttons and messages from the ui primitives, not ad-hoc recipes", () => {
     const outside = FILES.filter((f) => !f.includes(path.join("components", "ui")));
     const recipe =
