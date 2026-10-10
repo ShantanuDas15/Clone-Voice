@@ -5,7 +5,8 @@ Records the S0.4 baseline of SPEECH_QUALITY_PLAN.md (section 4 metrics). Tools:
 
 ## Decision
 
-The baseline exists and is **reproducible**, but it is only a partial baseline. It measures what the
+The baseline exists and is **reproducible**, but it is only a partial baseline (the Phase S1 comparison
+further down adds multi-sentence stimuli and word error rate). It measures what the
 current model does with a single sentence for adult voices. It does **not** measure intelligibility,
 naturalness, emotion, real-time factor, or any child or elderly voice, and it cannot tell whether the
 Phase S1 changes (typed segments, pauses, text normalisation) helped. The section 4 targets are kept as
@@ -81,11 +82,60 @@ The study was run twice, on two different checkouts of the repository (the pipel
 * Adults, read English speech, clean recordings. No children, no elderly, no noisy or telephone references.
 * Pitch comes from a probabilistic YIN tracker on 16 kHz audio, which can mis-track breathy or creaky speech.
 
+## Phase S1 before and after (multi-sentence stimuli, with Whisper)
+
+Added 2026-10-11 (`backend/evaluate_synthesis.py` with `--skip-single`). The first study's stimuli were
+single sentences and could not see Phase S1; these are multi-sentence, scored by Whisper `small.en`
+(faster-whisper, CPU, int8, greedy). Setup: 10 speakers from the same corpus, **5 per group** (alternating,
+so the groups are balanced), 4 paragraphs (3 to 4 sentences of plain words mixing `.` `?` `!` `,` `;`) and
+4 typed texts (times, dates, currency, percentages, fractions, units, emails, acronyms) per speaker, the same
+seeds and tool on both checkouts: the pipeline before S1 (`d9070cf`) and after S1.1 to S1.4 (`4bc6470`).
+Mean over speakers, 95% bootstrap interval over speakers; the change is paired per speaker.
+
+| Metric | Before S1 | After S1 | Change (paired) | Speakers better |
+|---|---|---|---|---|
+| Typed-text WER (intended words) | 0.384 [0.358, 0.411] | 0.095 [0.070, 0.122] | **-0.289** [-0.335, -0.245] | 10 of 10 |
+| Paragraph WER | 0.116 [0.040, 0.240] | 0.070 [0.031, 0.116] | -0.047 [-0.132, +0.016] | not significant |
+| Audible pauses per paragraph | 1.38 [0.85, 2.05] | 2.60 [2.33, 2.85] | **+1.23** [+0.53, +1.73] | 9 of 10 |
+| Mean pause length (s) | 0.23 [0.21, 0.26] | 0.50 [0.47, 0.53] | **+0.27** [+0.24, +0.30] | 10 of 10 |
+| Speaking time per word (s) | 0.271 [0.258, 0.286] | 0.340 [0.326, 0.357] | +0.069 [+0.054, +0.080] | 10 of 10 (slower) |
+
+By group, paragraph WER fell from 0.048 to 0.041 for the low-pitch group and from 0.184 to 0.098 for the
+high-pitch group (n = 5 each, so only suggestive); typed WER fell from 0.360 to 0.080 and from 0.408 to 0.109.
+
+### What this shows
+
+* **S1.1 (normalisation) works for intelligibility.** On text with numbers, times, symbols and acronyms the
+  listener model recovers the intended words far more often (word error rate 0.38 to 0.10, every speaker
+  better). Before, `10:30` was read as "ten:thirty", `%` and `&` were dropped, and `FBI` was read as a word.
+* **S1.2 and S1.3 (typed segments and pauses) do what they were built to do.** A paragraph now has audible
+  pauses at its sentence ends (2.6 against 1.4 per paragraph; each paragraph has 3 to 4 sentence ends) and
+  they are about twice as long (0.50 s against 0.23 s). The old pipeline merged sentences and left 0.15 s
+  gaps, which often fall under the 0.2 s detection threshold.
+* **Pace moved toward natural reading.** 0.27 s per word is about 220 words per minute; 0.34 s per word is
+  about 176. Read speech is usually put at roughly 150 to 180 words per minute (general knowledge, not
+  measured here), so the new pace is the more natural of the two, but only a listening test can say so.
+* **No intelligibility regression** on plain paragraphs (the plan's S1 gate): WER is lower, though the
+  difference is not statistically significant with 10 speakers.
+
+### What this does not show
+
+* **It is not a listening test.** Fewer ASR errors and longer pauses are consistent with better speech, not
+  proof. The pause lengths are the plan's proposals and are untuned; 0.50 s may be too long for some
+  listeners. The plan's gate still requires a blind listening test.
+* **The typed-text reference is defined by the new normaliser.** Both the reference and the transcript go
+  through the same `clean_text`, so the comparison is of *intended* words as the normaliser defines them
+  ("ten thirty pee em"); a different but valid reading would count as an error. This favours the new
+  pipeline somewhat, though the old one failed on plain cases (dropped symbols, "ten:thirty").
+* **Punctuation contrast is unchanged**: S1 does not touch single-sentence delivery, so the question-rise
+  and exclamation-lift numbers of the first table stand, and remain far from their targets.
+* n = 5 speakers per group, 4 paragraphs and 4 typed texts each, one seed; adults only; Whisper is a
+  proxy for a listener, and it can recover words a person would find odd.
+
 ## Next measurements, in order
 
-1. **Multi-sentence and number-heavy stimuli** (a paragraph mixing `.`, `?`, `!`, digits, times, acronyms),
-   run on both checkouts, so Phase S1 can finally be compared. Use word error rate with it.
-2. Whisper word error rate, a predicted-naturalness model, an emotion classifier, and an
-   **independent** speaker encoder (plan S0.1 and S0.3, still open).
+1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
+2. A predicted-naturalness model, an emotion classifier, and an **independent** speaker encoder
+   (plan S0.1 and S0.3, still open), and a first blind listening test of the S1 pause lengths.
 3. A positive control for the question metric (natural questions).
 4. Child and elderly speech from a source whose licence and consent terms have been verified.
