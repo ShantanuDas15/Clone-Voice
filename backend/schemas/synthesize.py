@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from unidecode import unidecode
 
 from backend.services.sv2tts.synthesizer.utils.symbols import symbols as _sv2tts_symbols
+from backend.services.text_normalization import clean_text
 
 # The real Tacotron2 checkpoint's embedding table only has one row per symbol
 # in this exact set (HARDENING_PLAN.md finding H2). "_" (pad) and "~" (eos)
@@ -15,33 +16,32 @@ _ALLOWED_TEXT_CHARS = set(_sv2tts_symbols) - {"_", "~"}
 
 
 def _unsupported_characters(text: str) -> List[str]:
-    """Return the distinct raw input characters the real cleaner pipeline
-    (`english_cleaners`: unidecode transliteration + digit/abbreviation
-    expansion) cannot turn into anything the SV2TTS symbol table represents.
+    """Return the distinct characters that would be lost or unreadable when ``text`` is spoken.
 
-    The vendored `text_to_sequence()` silently *drops* such characters
-    rather than raising, which would otherwise let a request "succeed"
-    while quietly losing part of the requested text — this function is what
-    turns that into a clean 422 at the API boundary instead.
+    The text goes through the same normalisation and cleaning as synthesis
+    (`text_normalization.clean_text`), so a character the pipeline can say (a `$` amount,
+    `%`, `&`, an email address, `*emphasis*`, an acronym) is accepted, and what remains is
+    judged against the SV2TTS symbol table. The vendored `text_to_sequence()` silently
+    *drops* anything outside it, which would let a request "succeed" while quietly losing
+    part of the text; this function turns that into a clean 422 instead.
 
-    Digits are special-cased: `expand_numbers` (not unidecode) converts them
-    to words before symbol mapping ("5" -> "five"), so per-character
-    unidecode is not representative of what actually happens to a digit.
-    For every other character, per-character unidecode is exactly the
-    transformation `english_cleaners` applies before symbol mapping: a
-    character whose transliteration is empty (dropped — e.g. emoji) or
-    still contains characters outside the symbol set (unidecode leaves
-    control characters and unmapped symbols like "{" unchanged) is
-    unsupported.
+    Two cases are rejected: a character whose transliteration is empty (it vanishes
+    without a trace, e.g. an emoji), and anything still outside the symbol set after
+    cleaning (control characters, `{}` ARPAbet braces, `[` `]`, `~`, `_`).
+    Digits are expanded to words by the cleaners, and newlines become pauses.
     """
-    problems = []
-    for ch in dict.fromkeys(text):  # de-duplicate, preserve first-seen order
-        if ch.isdigit():
-            continue
-        if ch in "\n\r":
-            continue  # line and paragraph breaks become pauses (SPEECH_QUALITY_PLAN.md S1.2)
-        transliterated = unidecode(ch).lower()
-        if not transliterated or (set(transliterated) - _ALLOWED_TEXT_CHARS):
+    problems = [
+        ch
+        for ch in dict.fromkeys(text)
+        if not ch.isspace() and not ch.isdigit() and not unidecode(ch)
+    ]
+    for ch in dict.fromkeys(clean_text(text)):
+        if (
+            ch != "\n"
+            and not ch.isdigit()
+            and ch not in _ALLOWED_TEXT_CHARS
+            and ch not in problems
+        ):
             problems.append(ch)
     return problems
 

@@ -24,6 +24,7 @@ from backend.services.sv2tts.synthesizer.utils.text import text_to_sequence
 from backend.services.sv2tts.vocoder import hparams as vocoder_hparams
 from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
 from backend.services.text_chunking import Boundary, split_into_segments
+from backend.services.text_normalization import clean_text
 
 try:
     from resemblyzer import VoiceEncoder
@@ -535,26 +536,16 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
 
 
 def _clean_for_chunking(text: str) -> str:
-    """Run the synthesizer's cleaners so chunk limits count decoded symbols.
+    """Normalise and clean the text so chunk limits count decoded symbols.
 
     Number expansion turns 120 raw characters into ~250 symbols, which put
     digit-heavy chunks at 857 of the 900-frame cap when measured on raw text
     (HARDENING_PLAN.md finding P2-M3). The cleaners are idempotent, so the
-    per-chunk clean inside ``text_to_sequence`` is harmless. Text with
-    ARPAbet braces is left raw, since lowercasing would corrupt the phonemes.
-
-    Each line is cleaned on its own: the cleaners collapse all whitespace, which
-    would otherwise erase the line and paragraph breaks the segmenter turns
-    into pauses (SPEECH_QUALITY_PLAN.md S1.2).
+    per-chunk clean inside ``text_to_sequence`` is harmless. See
+    ``text_normalization.clean_text`` for what is rewritten and why each line is
+    handled on its own (SPEECH_QUALITY_PLAN.md S1.1, S1.2).
     """
-    if "{" in text:
-        return text
-    lines = []
-    for line in text.split("\n"):
-        for name in synth_hparams.tts_cleaner_names:
-            line = getattr(cleaners, name)(line)
-        lines.append(line.strip())
-    return "\n".join(lines)
+    return clean_text(text)
 
 
 def _pause_frames(boundary: Boundary) -> int:
