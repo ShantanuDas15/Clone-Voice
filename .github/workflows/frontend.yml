@@ -1,10 +1,14 @@
 name: frontend
 
+# No `paths:` filter, on purpose. `check`, `perf` and `visual` are required status checks on `main`
+# (branch protection), so a pull request that only touches the backend or the docs must still get
+# them reported; with a path filter they would never run and the PR could not be merged.
+# `push` only for main: a branch with an open PR would otherwise run every check twice (push and
+# pull_request), and one failing duplicate of a required check blocks the merge.
 on:
   push:
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
+    branches: [main]
   pull_request:
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
 
 jobs:
   check:
@@ -64,7 +68,16 @@ jobs:
           done
           cat next.log
           exit 1
+      # LCP on a shared runner swings by about half a second on identical code (the same page
+      # measured 1.84 s and 2.56 s in two runs of the same commit), and a spike hits one route at a
+      # time. perf/run.mjs therefore measures a route that misses again (PERF_ATTEMPTS) and fails
+      # it only if every attempt is over; a real regression (the /terms one measured 2.62-2.67 s
+      # every time) misses on all of them. The 2.5 s budget is unchanged.
       - run: npm run perf
+        env:
+          PERF_RUNS: 5
+          PERF_ATTEMPTS: 3
+          PERF_PAUSE_MS: 15000
 
   # Visual-regression baselines (UX plan U7.2). The API is mocked, so no backend is needed.
   # A required check: the committed baselines were confirmed to match this runner (80/80 on the

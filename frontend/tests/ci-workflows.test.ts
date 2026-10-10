@@ -60,3 +60,24 @@ describe("unit-test job Node version (FE-UX42)", () => {
     expect(readFileSync(path.resolve(__dirname, "../.nvmrc"), "utf8").trim()).toBe(String(major));
   });
 });
+
+describe("required checks are reliable (FE-UX45, FE-UX46)", () => {
+  const head = read("frontend.yml").split("\njobs:")[0] ?? "";
+
+  it("has no path filter, so a docs-only or backend-only PR still gets check, perf and visual", () => {
+    expect(head).toMatch(/\n\s+pull_request:/);
+    expect(head).not.toMatch(/^\s*paths(-ignore)?:/m);
+  });
+
+  it("pushes only on main, so a PR branch does not run every required check twice", () => {
+    expect(head).toMatch(/\n\s+push:\s*\n\s+branches:\s*\[main\]/);
+  });
+
+  it("re-measures a route that misses before failing it, and never masks the result", () => {
+    const perf = job(read("frontend.yml"), "perf");
+    expect(Number(/PERF_ATTEMPTS:\s*(\d+)/.exec(perf)?.[1])).toBeGreaterThanOrEqual(2);
+    expect(perf).not.toMatch(/continue-on-error|\|\| true/);
+    const runner = readFileSync(path.resolve(__dirname, "../perf/run.mjs"), "utf8");
+    expect(runner).toContain("judgeAttempts");
+  });
+});
