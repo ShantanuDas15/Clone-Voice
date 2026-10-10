@@ -17,8 +17,21 @@ Per clone it reports:
 * ``punctuation``             for the same sentence ending in ``.``, ``?`` and ``!``: does the
                               ``?`` end higher, and does the ``!`` have more F0 range and energy
 
-Not here yet (plan S0.2 to S0.4): an encoder independent of the one that conditions the
-model, Whisper WER, predicted MOS and the emotion classifier. ``secs`` below is therefore
+With ``--whisper-model`` (default ``small.en``; ``none`` skips it) it also synthesizes
+multi-sentence stimuli and reports, per speaker:
+
+* ``para_wer``                Whisper word error rate on plain multi-sentence paragraphs
+* ``para_pause_count``        audible gaps (at least 0.2 s) inside the audio: pause structure
+* ``para_pause_mean_s``       their mean length
+* ``para_sec_per_word``       speaking time per word
+* ``typed_wer``               word error rate on text with numbers, times, currency, symbols and
+                              acronyms, where reference and transcript are both put through
+                              ``clean_text`` so the comparison is of intended words
+
+Whisper needs ``pip install faster-whisper`` (evaluation only, not a runtime dependency).
+
+Not here yet (plan S0.1, S0.3): an encoder independent of the one that conditions the model,
+predicted MOS and the emotion classifier. ``secs`` below is therefore
 judged by the *same* resemblyzer encoder that conditions the synthesizer, which flatters the
 model; read it as a relative number, never as an absolute one.
 
@@ -32,7 +45,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import librosa
 import numpy as np
@@ -54,6 +67,10 @@ GROUP_GAP_LIMIT = 0.05
 # The expressive sentence set (plan S0.2). Each stem is spoken ending in ".", "?" and "!".
 DEFAULT_SENTENCES = Path(__file__).parent / "eval_data" / "expressive_sentences.json"
 EMOTIONS = ("neutral", "happy", "sad", "angry")
+# A gap this long inside the audio is a pause a listener hears.
+PAUSE_MIN_SECONDS = 0.2
+PAUSE_TOP_DB = 35.0
+Transcriber = Callable[[np.ndarray], str]
 
 # --- Metrics (pure) ----------------------------------------------------------
 
@@ -246,6 +263,41 @@ def char_error_rate(reference: str, hypothesis: str) -> float:
     return _edit_distance(ref, _normalize(hypothesis)) / len(ref)
 
 
+def pause_profile(
+    y: np.ndarray,
+    sr: int = SAMPLE_RATE,
+    min_gap_s: float = PAUSE_MIN_SECONDS,
+    top_db: float = PAUSE_TOP_DB,
+) -> List[float]:
+    """Lengths in seconds, in time order, of the silent gaps *inside* the audio.
+
+    Frames of 20 ms (10 ms hop) whose RMS is more than ``top_db`` below the loudest frame are
+    silent; a run of silent frames between two voiced ones, at least ``min_gap_s`` long, is a
+    pause. Leading and trailing silence are not pauses. The window is short so a gap is read
+    within about 20 ms of its true length.
+    """
+    y = np.asarray(y, dtype=np.float32)
+    if len(y) < 1024 or float(np.max(np.abs(y))) < SILENCE_RMS:
+        return []
+    rms = librosa.feature.rms(y=y, frame_length=320, hop_length=F0_HOP, center=True)[0]
+    level_db = 20.0 * np.log10(np.maximum(rms, 1e-10) / max(float(rms.max()), 1e-10))
+    silent = level_db < -top_db
+    voiced_idx = np.flatnonzero(~silent)
+    if len(voiced_idx) < 2:
+        return []
+    hop_s = F0_HOP / sr
+    gaps: List[float] = []
+    run = 0
+    for frame_is_silent in silent[voiced_idx[0] : voiced_idx[-1] + 1]:
+        if frame_is_silent:
+            run += 1
+        else:
+            if run * hop_s >= min_gap_s:
+                gaps.append(run * hop_s)
+            run = 0
+    return gaps
+
+
 def bootstrap_ci(
     values: Sequence[float], n_boot: int = 2000, seed: int = 0, alpha: float = 0.05
 ) -> Tuple[float, float, float]:
@@ -316,6 +368,59 @@ def load_sentences(path: Path = DEFAULT_SENTENCES) -> List[Dict[str, str]]:
     return sentences
 
 
+def select_speakers(
+    dataset: Mapping[str, Sequence[str]], groups: Mapping[str, str], count: int
+) -> List[str]:
+    """Choose ``count`` speakers, alternating between groups so a small run stays balanced.
+
+    Within a group speakers are taken in sorted order; with a single group (or none given)
+    this is just the first ``count`` in sorted order.
+    """
+    by_group: Dict[str, List[str]] = {}
+    for speaker in sorted(dataset):
+        by_group.setdefault(groups.get(speaker, "ungrouped"), []).append(speaker)
+    queues = [by_group[g] for g in sorted(by_group)]
+    chosen: List[str] = []
+    while len(chosen) < count and any(queues):
+        for queue in queues:
+            if queue and len(chosen) < count:
+                chosen.append(queue.pop(0))
+    return chosen
+
+
+def load_stimuli(path: Path, key: str) -> List[Dict[str, str]]:
+    """Read the ``paragraphs`` or ``typed`` stimulus list (``id`` and ``text``) from the fixture."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    items = data.get(key) if isinstance(data, dict) else None
+    if not items or any({"id", "text"} - set(item) for item in items):
+        raise SystemExit(f"{path} must list {key!r} items with keys 'id' and 'text'")
+    return items
+
+
+def make_whisper_transcriber(model_name: str = "small.en") -> Transcriber:
+    """Return a function that transcribes 16 kHz mono audio with faster-whisper (CPU, int8)."""
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        raise SystemExit(
+            "faster-whisper is required for word error rate: pip install faster-whisper "
+            "(evaluation only), or pass --whisper-model none"
+        )
+    model = WhisperModel(model_name, device="cpu", compute_type="int8")
+
+    def transcribe(audio: np.ndarray) -> str:
+        segments, _ = model.transcribe(
+            np.asarray(audio, dtype=np.float32),
+            language="en",
+            beam_size=1,
+            temperature=0.0,
+            condition_on_previous_text=False,
+        )
+        return " ".join(segment.text.strip() for segment in segments).strip()
+
+    return transcribe
+
+
 def load_groups(path: Optional[Path]) -> Dict[str, str]:
     """Read a ``{speaker: group}`` JSON map; an empty map when no file is given."""
     if path is None:
@@ -348,6 +453,13 @@ def _synthesize(
     return np.asarray(wav, dtype=np.float32)
 
 
+def reference_embedding(encoder, reference: str) -> np.ndarray:
+    """Embed the reference clip the way an upload does (production preprocessing)."""
+    from backend.services.audio_processing import preprocess_audio
+
+    return encoder.embed_utterance(np.asarray(preprocess_audio(reference), np.float32))
+
+
 def evaluate_speaker(
     encoder,
     speaker: str,
@@ -358,12 +470,8 @@ def evaluate_speaker(
     stems: Sequence[str],
 ) -> Dict[str, object]:
     """Clone one speaker from their first clip and score it against their other clips."""
-    from backend.services.audio_processing import preprocess_audio
-
     reference, held_out = files[0], files[1:]
-    embedding = encoder.embed_utterance(
-        np.asarray(preprocess_audio(reference), np.float32)
-    )
+    embedding = reference_embedding(encoder, reference)
     real = [librosa.load(p, sr=SAMPLE_RATE)[0] for p in held_out]
     target = np.mean(
         [encoder.embed_utterance(np.asarray(y, np.float32)) for y in real], axis=0
@@ -397,6 +505,56 @@ def evaluate_speaker(
     return row
 
 
+def _mean(values: Sequence[float]) -> Optional[float]:
+    """Mean of ``values``, or ``None`` when there are none."""
+    return float(np.mean(values)) if values else None
+
+
+def evaluate_stimuli(
+    embedding: np.ndarray,
+    speaker: str,
+    seed: int,
+    paragraphs: Sequence[Mapping[str, str]],
+    typed: Sequence[Mapping[str, str]],
+    transcribe: Optional[Transcriber],
+) -> Dict[str, Optional[float]]:
+    """Synthesize the multi-sentence and typed stimuli for one speaker and score them.
+
+    Paragraph word error rate compares the transcript with the text itself. Typed text is
+    scored on intended words: both the text and the transcript go through ``clean_text``,
+    so ``10:30 PM`` and a transcript of ``10:30 p.m.`` both become ``ten thirty pee em``.
+    Pause metrics need no transcriber.
+    """
+    from backend.services.text_normalization import clean_text
+
+    wers: List[float] = []
+    sec_per_word: List[float] = []
+    pause_counts: List[float] = []
+    pause_lengths: List[float] = []
+    for k, item in enumerate(paragraphs):
+        audio = _synthesize(item["text"], embedding, speaker, seed + 500 + k)
+        sec_per_word.append(len(audio) / SAMPLE_RATE / len(item["text"].split()))
+        gaps = pause_profile(audio)
+        pause_counts.append(float(len(gaps)))
+        pause_lengths.extend(gaps)
+        if transcribe is not None:
+            wers.append(word_error_rate(item["text"], transcribe(audio)))
+    typed_wers: List[float] = []
+    if transcribe is not None:
+        for k, item in enumerate(typed):
+            audio = _synthesize(item["text"], embedding, speaker, seed + 700 + k)
+            typed_wers.append(
+                word_error_rate(clean_text(item["text"]), clean_text(transcribe(audio)))
+            )
+    return {
+        "para_wer": _mean(wers),
+        "para_sec_per_word": _mean(sec_per_word),
+        "para_pause_count": _mean(pause_counts),
+        "para_pause_mean_s": _mean(pause_lengths),
+        "typed_wer": _mean(typed_wers),
+    }
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run the study and print a summary; write the full results as JSON."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -408,6 +566,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument("--sentences", type=Path, default=DEFAULT_SENTENCES)
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument(
+        "--paragraphs", type=int, default=4, help="paragraph stimuli per speaker"
+    )
+    parser.add_argument(
+        "--typed", type=int, default=4, help="typed-text stimuli per speaker"
+    )
+    parser.add_argument(
+        "--whisper-model",
+        default="small.en",
+        help="faster-whisper model for word error rate, or 'none' to skip it",
+    )
+    parser.add_argument(
+        "--skip-single",
+        action="store_true",
+        help="skip the single-sentence study and run only the multi-sentence stimuli",
+    )
     parser.add_argument("--out", type=Path, default=Path("synthesis_study.json"))
     args = parser.parse_args(argv)
 
@@ -425,36 +599,51 @@ def main(argv: Optional[List[str]] = None) -> int:
     load_models("cpu")
     encoder = VoiceEncoder("cpu")
 
+    paragraphs = load_stimuli(args.sentences, "paragraphs")[: args.paragraphs]
+    typed = load_stimuli(args.sentences, "typed")[: args.typed]
+    transcribe = (
+        None
+        if args.whisper_model.lower() == "none"
+        else make_whisper_transcriber(args.whisper_model)
+    )
+    chosen = select_speakers(dataset, groups, args.speakers)
+
     rows = []
-    for n, (speaker, files) in enumerate(sorted(dataset.items())[: args.speakers]):
-        rows.append(
-            evaluate_speaker(
-                encoder,
-                speaker,
-                files,
-                groups.get(speaker, "ungrouped"),
-                n,
-                args.seed,
-                stems,
+    for n, speaker in enumerate(chosen):
+        files, group = dataset[speaker], groups.get(speaker, "ungrouped")
+        if args.skip_single:
+            row: Dict[str, object] = {"speaker": speaker, "group": group}
+            embedding = reference_embedding(encoder, files[0])
+        else:
+            row = evaluate_speaker(encoder, speaker, files, group, n, args.seed, stems)
+            embedding = reference_embedding(encoder, files[0])
+        row.update(
+            evaluate_stimuli(
+                embedding, speaker, args.seed + 1000 * n, paragraphs, typed, transcribe
             )
         )
-        logger.info("scored speaker %d/%d (%s)", n + 1, args.speakers, speaker)
+        rows.append(row)
+        logger.info("scored speaker %d/%d (%s)", n + 1, len(chosen), speaker)
 
+    metrics = (
+        "secs",
+        "f0_error_semitones",
+        "f0_range_ratio",
+        "spectral_distance_db",
+        "question_rise_rate",
+        "exclamation_lift_rate",
+        "para_wer",
+        "para_sec_per_word",
+        "para_pause_count",
+        "para_pause_mean_s",
+        "typed_wer",
+    )
     report = {
         "judge": "resemblyzer (same encoder as the model: not independent)",
+        "asr": None if transcribe is None else f"faster-whisper {args.whisper_model}",
         "speakers": len(rows),
         "rows": rows,
-        "per_group": {
-            metric: group_report(rows, metric)
-            for metric in (
-                "secs",
-                "f0_error_semitones",
-                "f0_range_ratio",
-                "spectral_distance_db",
-                "question_rise_rate",
-                "exclamation_lift_rate",
-            )
-        },
+        "per_group": {metric: group_report(rows, metric) for metric in metrics},
     }
     args.out.write_text(json.dumps(report, indent=2))
     print(json.dumps(report["per_group"], indent=2))

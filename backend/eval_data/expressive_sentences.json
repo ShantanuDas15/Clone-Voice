@@ -1,5 +1,5 @@
 {
- "_comment": "Expressive evaluation sentences (SPEECH_QUALITY_PLAN.md S0.2). `stem` is spoken ending in '.', '?' and '!' for the punctuation test; neutral/happy/sad/angry are whole sentences whose wording carries the intended emotion, for the emotion-accuracy test. Written for this project; plain ASCII; every text must pass the API's text validator.",
+ "_comment": "Expressive evaluation sentences (SPEECH_QUALITY_PLAN.md S0.2). `stem` is spoken ending in '.', '?' and '!' for the punctuation test; neutral/happy/sad/angry are whole sentences whose wording carries the intended emotion, for the emotion-accuracy test. Written for this project; plain ASCII; every text must pass the API's text validator. `paragraphs` are multi-sentence texts of plain words (no digits) mixing . ? ! , ; for the pause and word-error-rate tests; `typed` are texts with numbers, times, currency, symbols and acronyms for the normalisation test.",
  "sentences": [
   {
    "id": "s01",
@@ -320,6 +320,74 @@
    "happy": "He fixed the roof! Now we can finally sleep without a single drip!",
    "sad": "He fixed the roof the day before the storm took everything away.",
    "angry": "He fixed the roof badly! Water is pouring into my living room!"
+  }
+ ],
+ "paragraphs": [
+  {
+   "id": "p1",
+   "text": "The train leaves at noon. Are you ready to go? Grab your coat and hurry! We cannot miss it."
+  },
+  {
+   "id": "p2",
+   "text": "She opened the old box slowly. Inside was a letter, yellow with age. Who could have written it? Read it aloud!"
+  },
+  {
+   "id": "p3",
+   "text": "The river was calm this morning. Birds sang along the bank, and the air smelled of rain. What a perfect day for a walk!"
+  },
+  {
+   "id": "p4",
+   "text": "He counted the coins twice. Not one was missing, thank goodness! Where had the thief gone? Nobody could say."
+  },
+  {
+   "id": "p5",
+   "text": "Please close the window behind you. It is getting cold in here. Did you bring the blue folder? I need it today."
+  },
+  {
+   "id": "p6",
+   "text": "The match was close until the very end. Then she scored! The whole crowd jumped to their feet. Can you believe it?"
+  },
+  {
+   "id": "p7",
+   "text": "We walked along the quiet street; every house was dark. A dog barked once and then stopped. Something felt wrong."
+  },
+  {
+   "id": "p8",
+   "text": "Wait here a moment. I will check the back door. Stay quiet, and do not move! Is anyone there?"
+  }
+ ],
+ "typed": [
+  {
+   "id": "t1",
+   "text": "The meeting is at 10:30 PM on 2024-10-10."
+  },
+  {
+   "id": "t2",
+   "text": "Pay $4.50 for 2 tickets, 50% off today."
+  },
+  {
+   "id": "t3",
+   "text": "The FBI and the CIA met at 9 a.m. in Washington."
+  },
+  {
+   "id": "t4",
+   "text": "Mix 1/2 cup of sugar with 3/4 cup of flour."
+  },
+  {
+   "id": "t5",
+   "text": "Mail me@example.com or visit www.example.com for details."
+  },
+  {
+   "id": "t6",
+   "text": "It was 20°C outside, and the box weighed 5kg."
+  },
+  {
+   "id": "t7",
+   "text": "Tom & Jerry won 3 games, e.g. the first two."
+  },
+  {
+   "id": "t8",
+   "text": "Call at 6:05 AM about the TV and the PC in room 12."
   }
  ]
 }
