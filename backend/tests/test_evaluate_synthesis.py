@@ -478,3 +478,77 @@ def test_evaluate_stimuli_scores_a_wrong_transcript(monkeypatch):
     )
     assert row["para_wer"] == pytest.approx(0.25)
     assert row["typed_wer"] is None  # no typed stimuli given
+
+
+# --- enrolment comparison ----------------------------------------------------
+
+
+def _speaker_files(tmp_path, n_files=6):
+    files = []
+    for i in range(n_files):
+        path = tmp_path / f"{i}.wav"
+        sf.write(path, tone(180.0 + 3 * i, 190.0, seconds=4.0, amp=0.3), SR)
+        files.append(str(path))
+    return files
+
+
+class _LevelEncoder:
+    """Embeds audio as [1, mean level, i-th feature], so different clips differ slightly."""
+
+    def embed_utterance(self, y):
+        y = np.asarray(y)
+        return np.array(
+            [1.0, float(np.mean(np.abs(y))) + 1e-3, float(np.std(y)) + 1e-3]
+        )
+
+
+def test_evaluate_enrollment_compares_single_and_multi_with_a_paired_seed(
+    tmp_path, monkeypatch
+):
+    seeds = []
+
+    def fake_synth(text, embedding, speaker, seed):
+        seeds.append(seed)
+        return tone(180.0, 185.0, 1.0, amp=0.1)
+
+    monkeypatch.setattr(es, "_synthesize", fake_synth)
+    row = es.evaluate_enrollment(
+        _LevelEncoder(),
+        "spk",
+        _speaker_files(tmp_path),
+        "grp",
+        2,
+        1234,
+        3,
+        ["One", "Two"],
+    )
+    assert row["speaker"] == "spk" and row["group"] == "grp"
+    for key in ("emb_secs_single", "emb_secs_multi", "secs_single", "secs_multi"):
+        assert -1.0 <= row[key] <= 1.0
+    assert row["f0_error_single"] is not None and row["spectral_multi"] is not None
+    # both profiles are synthesized with the same seeds: the comparison is paired
+    assert seeds[: len(seeds) // 2] == seeds[len(seeds) // 2 :]
+    assert len(seeds) == 4  # 2 sentences x {single, multi}
+
+
+def test_evaluate_enrollment_with_one_clip_makes_the_profiles_identical(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        es,
+        "_synthesize",
+        lambda text, embedding, speaker, seed: tone(180.0, 185.0, 1.0, amp=0.1),
+    )
+    row = es.evaluate_enrollment(
+        _LevelEncoder(), "spk", _speaker_files(tmp_path), "g", 0, 1, 1, ["One"]
+    )
+    assert row["secs_single"] == pytest.approx(row["secs_multi"])
+    assert row["emb_secs_single"] == pytest.approx(row["emb_secs_multi"], abs=1e-6)
+
+
+def test_evaluate_enrollment_needs_three_clips_left_for_scoring(tmp_path):
+    files = _speaker_files(tmp_path, n_files=5)  # reference + 4 held out
+    with pytest.raises(ValueError):
+        es.evaluate_enrollment(_LevelEncoder(), "spk", files, "g", 0, 1, 3, ["One"])
+    with pytest.raises(ValueError):
+        es.evaluate_enrollment(_LevelEncoder(), "spk", files, "g", 0, 1, 0, ["One"])
