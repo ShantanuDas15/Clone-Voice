@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+import { notify } from "@/lib/toast";
 
 import { useAuth } from "@/components/auth-provider";
 import { TextField } from "@/components/form-fields";
@@ -40,7 +40,7 @@ function NameForm() {
       const saved = await authApi.updateName(values.name);
       applyUser(saved);
       reset({ name: saved.name });
-      toast.success("Name updated.");
+      notify.success("Name updated.");
     } catch (e) {
       applyUser(previous); // rollback
       const message = e instanceof ApiError ? e.message : "Couldn't update your name.";
@@ -90,7 +90,7 @@ function DeleteAccount() {
 
   function finish() {
     discardSession();
-    toast.success("Your account and all its data have been deleted.");
+    notify.success("Your account and all its data have been deleted.");
     router.replace("/");
   }
 

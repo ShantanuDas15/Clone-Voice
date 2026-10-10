@@ -10,6 +10,8 @@ test("rename, then delete the account: signed out and login no longer works", as
   await page.getByLabel("Display name").fill("Renamed User");
   await page.getByRole("button", { name: "Save name" }).click();
   await expect(page.getByText("Renamed User").first()).toBeVisible();
+  // The toast library is fetched on the first toast (FE-UX36); it must still appear.
+  await expect(page.getByText("Name updated.")).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("Display name")).toHaveValue("Renamed User");
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/toast";
 
 import { useDeleteProfile, useProfiles } from "@/hooks/use-voice-profiles";
 import type { VoiceProfile } from "@/lib/api/voice";
@@ -128,8 +128,8 @@ export function VoiceProfileList() {
             setConfirming(null);
             remove.mutate(target.id, {
               onError: (e) =>
-                toast.error(e instanceof ApiError ? e.message : "Couldn't delete that voice."),
-              onSuccess: () => toast.success(`Deleted “${target.name}”.`),
+                notify.error(e instanceof ApiError ? e.message : "Couldn't delete that voice."),
+              onSuccess: () => notify.success(`Deleted “${target.name}”.`),
             });
           }}
         />
