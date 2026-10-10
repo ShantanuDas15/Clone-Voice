@@ -32,6 +32,12 @@ Set `CSP_ENFORCE=1` to run the whole suite under an **enforcing** Content-Securi
 
 ## Notes
 
+- **CSP reporting spec (FE-UX40).** `csp.spec.ts` "a real violation reaches the endpoint" reads the web
+  server's log, so start the web app with its output in a file and pass it in:
+  `npx next start -p 3000 > /tmp/fe.log 2>&1 &` then `E2E_FRONTEND_LOG=/tmp/fe.log npm run test:e2e`.
+  Without the variable that one test skips. Write a fresh file (do not truncate a log the server has
+  open: the NUL bytes make `grep` treat it as binary).
+
 - **WebKit needs HTTPS.** The API sets the refresh cookie with `Secure` (`backend/api/auth.py`);
   Chromium and Firefox accept it on `http://localhost`, WebKit stores nothing, so over plain HTTP
   every signed-in spec fails at sign-in (27 of 45, 2026-10-09). Run it behind local TLS instead:

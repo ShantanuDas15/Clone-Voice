@@ -19,6 +19,8 @@ export const STYLE_HASHES = [
   "'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='", // sonner stylesheet
 ] as const;
 
+export const REPORT_PATH = "/csp-report";
+
 export interface CspOptions {
   nonce: string;
   /** API origin (scheme + host) the browser may call; `NEXT_PUBLIC_API_BASE_URL`'s origin. */
@@ -51,6 +53,12 @@ export function buildCsp({
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
     "frame-ancestors": ["'none'"],
+    // Same-origin endpoint (app/csp-report). `report-uri` only, deliberately: measured with
+    // Playwright's browsers (FE-UX40), Chromium, Firefox and WebKit all deliver it, while
+    // Chromium delivers nothing over plain http once `report-to` is present (it then ignores
+    // `report-uri`). If a browser drops `report-uri`, e2e/csp.spec.ts "a real violation reaches
+    // the endpoint" fails; add `report-to` plus a `Reporting-Endpoints` header then.
+    "report-uri": [REPORT_PATH],
   };
   return Object.entries(directives)
     .map(([name, values]) => `${name} ${values.join(" ")}`)

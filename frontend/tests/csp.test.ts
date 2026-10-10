@@ -73,6 +73,20 @@ describe("style hashes", () => {
   });
 });
 
+describe("violation reporting", () => {
+  it("reports to the same-origin endpoint with report-uri, which every engine delivers", () => {
+    const csp = buildCsp({ nonce: "n", apiOrigin: "https://api.example" });
+    expect(csp).toContain("report-uri /csp-report");
+    // report-to would make Chromium ignore report-uri and drop reports over plain http (FE-UX40).
+    expect(csp).not.toContain("report-to");
+  });
+
+  it("needs no extra connect-src: the endpoint is same-origin", () => {
+    const csp = buildCsp({ nonce: "n", apiOrigin: "https://api.example" });
+    expect(csp).toContain("connect-src 'self' https://api.example;");
+  });
+});
+
 describe("reporting origin", () => {
   it("is allowed in connect-src only when reporting is configured", () => {
     const without = buildCsp(opts);
