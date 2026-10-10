@@ -255,6 +255,9 @@ export function UploadVoiceForm() {
         {terms.data && !terms.data.url && (
           <p className="mt-1 text-xs text-muted-foreground">Terms are being finalised.</p>
         )}
+        <p className="mt-1 text-xs text-muted-foreground">
+          Your sample is kept until you delete this voice.
+        </p>
         {consentError && (
           <Alert tone="danger" className="mt-1">
             {consentError}

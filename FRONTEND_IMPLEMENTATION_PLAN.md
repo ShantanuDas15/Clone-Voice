@@ -1432,6 +1432,15 @@ UX plan §12 M1 (decisions 2-8). **Focus:** `components/route-focus.tsx`, mounte
 **Open items from FE-UX38**
 1. M2 (terms page and retention), M3 (CSP reporting then enforcement), M4 (CI-sourced baselines); owner tasks: screen-reader pass, real Safari, name check, legal text. The new baselines were made locally and will differ in CI until M4.
 
+### FE-UX39 — M2: server-driven retention and a draft terms page (2026-10-10, branch `feat/FE-UX39-terms-retention`, backend `beb19fe`, frontend `be0ab35`)
+
+UX plan §12 M2 (decisions 13, 14), backend first. **Backend:** `GET /api/v1/terms` gains `output_retention_days` (`OUTPUT_RETENTION_DAYS` when positive, else `null` for "kept until deleted"); OpenAPI snapshot refreshed; 3 new tests (45, 0 and -1, 0.5) and one updated exact-match assertion. **Backend suite 905 passed, 1 skipped.** **Frontend:** the hard-coded "kept for 30 days" is gone; `lib/retention.ts` formats the server value (days, or hours under a day) and returns nothing for null, absent, zero, negative, NaN or a non-number, so the UI never states a figure the server did not (older backend or failed request included); History shows a note and the expiry message from it; Voices says the sample is kept until the voice is deleted; new public `/terms` page rendered from `lib/terms-content.ts`, marked **draft**, `noindex`, and linked from nowhere (the consent line links `TERMS_URL` once it is set). The content only restates behaviour that is true by construction (§11.3) and quotes no figure; it is not legal text. **Guards:** `terms-page.test.tsx` fails if the page version differs from `TERMS_VERSION` in `backend/core/config.py`, if a draft is indexable, or if the text states a number of days. `/terms` joined the axe, CSP, responsive, perf and visual route lists.
+
+**Verified:** `npm test` 514 passed; real backend, Chromium and Firefox: `a11y`, `csp`, `responsive`, `synthesis`, `voice` 19/19 each; visual 112/112 (Voices baselines regenerated for the new line, 8 `terms` baselines added). **Perf:** JS 171.8-190.4 KB; `/terms` LCP 2.33-2.76 s across runs. **LCP is noisy on this host:** over repeated runs `/signup` ranged 2.11-2.63 s and `/` 2.41-2.63 s with no code change (a backend and a browser were running), so single failures were re-measured rather than the budget changed; the margin to 2.5 s is thin everywhere and will need a quiet CI runner.
+
+**Open items from FE-UX39**
+1. Owner: counsel reviews `lib/terms-content.ts`, flips `TERMS_STATUS`, bumps `TERMS_VERSION` in both places, and sets `TERMS_URL` to `/terms` (or a hosted page). M3 (CSP reporting then enforcement), M4 (CI-sourced baselines); screen-reader pass, real Safari, name check. Watch LCP on the first CI perf run.
+
 ---
 
 ## 9. Definition of Done (release checklist)

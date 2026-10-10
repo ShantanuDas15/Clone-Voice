@@ -6,9 +6,11 @@ import { useState } from "react";
 import { Take } from "@/components/take";
 import { flattenHistory, useHistory } from "@/hooks/use-history";
 import { useObjectUrl } from "@/hooks/use-object-url";
+import { useTerms } from "@/hooks/use-terms";
 import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
+import { describeRetention } from "@/lib/retention";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 const PREVIEW_CHARS = 140;
@@ -31,6 +33,7 @@ function playError(error: unknown): PlayState {
 }
 
 function Playback({ gen }: { gen: Generation }) {
+  const retention = describeRetention(useTerms().data?.output_retention_days);
   const [state, setState] = useState<PlayState>(
     gen.audio_available ? { phase: "idle" } : { phase: "expired" },
   );
@@ -48,7 +51,8 @@ function Playback({ gen }: { gen: Generation }) {
   if (state.phase === "expired") {
     return (
       <p className="text-sm text-muted-foreground">
-        The audio has expired and is no longer available (clips are kept for 30 days).
+        The audio has expired and is no longer available
+        {retention ? ` (clips are kept for ${retention})` : ""}.
       </p>
     );
   }
@@ -118,6 +122,7 @@ function HistoryItem({ gen }: { gen: Generation }) {
 export function HistoryList() {
   const { data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useHistory();
+  const retention = describeRetention(useTerms().data?.output_retention_days);
 
   if (isPending) {
     return (
@@ -155,6 +160,11 @@ export function HistoryList() {
 
   return (
     <div className="space-y-3">
+      {retention && (
+        <p className="text-sm text-muted-foreground">
+          Audio is kept for {retention}. The text and date stay here after the audio expires.
+        </p>
+      )}
       <ul className="space-y-2">
         {items.map((gen) => (
           <HistoryItem key={gen.id} gen={gen} />
