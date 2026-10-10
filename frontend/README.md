@@ -103,7 +103,15 @@ anti-aliasing differ per OS, so **the committed baselines come from CI, not from
    commits.
 2. Download the artifact, **look at the images**, and replace `visual/__screenshots__` with them in
    a commit. A diff you did not expect is a regression, not something to accept.
-3. Locally, `npm run test:visual` may report small font differences against CI baselines; that is
-   expected. Use it to find real layout changes, and let CI decide. After the first reviewed CI
-   baselines are committed, remove `continue-on-error` from the `visual` job in
-   `.github/workflows/frontend.yml` so it gates merges.
+3. The `visual` job is a **required check**. The baselines made on a laptop were confirmed to match
+   the CI runner (80 of 80, FE-UX42), so use `visual-update` only after a deliberate UI change, or
+   if a new runner image makes them drift. Locally, `npm run test:visual` may show small font
+   differences on another OS; let CI decide.
+
+## Node version
+
+Use **Node 24** (`.nvmrc`; CI runs the unit tests on it). On Node 20 and 22 the multipart upload
+tests (`tests/voice-profiles.test.tsx`) hang: a `FormData` carrying a file, sent by axios through
+jsdom's `XMLHttpRequest` and intercepted by MSW, never resolves, although the same request works
+in a real browser and on Node 24. This is a test-environment limit, not an app bug; the real
+upload is covered by `e2e/voice.spec.ts`.

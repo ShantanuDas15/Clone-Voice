@@ -18,7 +18,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 24, not 20/22: on Node 20 and 22 a multipart upload (FormData with a file) through
+          # jsdom's XMLHttpRequest and MSW never completes, which hung 11 unit tests and kept
+          # this job red for every run until FE-UX42. Node 24 is what the suite is developed on
+          # (frontend/.nvmrc); tests/ci-workflows.test.ts keeps it from going back.
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -63,15 +67,13 @@ jobs:
       - run: npm run perf
 
   # Visual-regression baselines (UX plan U7.2). The API is mocked, so no backend is needed.
-  # Advisory (continue-on-error) until a first CI run shows the committed baselines, which were
-  # generated on a local Ubuntu host, match this runner; then remove continue-on-error.
-  # Baselines come from CI, not from a laptop: run the manual `visual-update` workflow, download
-  # its artifact, review the images by eye and commit them. Then remove continue-on-error.
+  # A required check: the committed baselines were confirmed to match this runner (80/80 on the
+  # first CI run that could read them, FE-UX42). After a deliberate UI change, run the manual
+  # `visual-update` workflow, download its artifact, review the images by eye and commit them.
   visual:
     # Pinned (not `latest`) so the screenshots do not change under us; the `visual-update` workflow
     # uses the identical image and Node version to regenerate them (tests/ci-workflows.test.ts).
     runs-on: ubuntu-24.04
-    continue-on-error: true
     defaults:
       run:
         working-directory: frontend
