@@ -69,3 +69,10 @@ describe("required checks always report (FE-UX45)", () => {
     expect(head).not.toMatch(/^\s*paths(-ignore)?:/m);
   });
 });
+
+describe("perf gate stability (FE-UX45)", () => {
+  it("takes the median of at least 7 runs, because the check is required and runner LCP is noisy", () => {
+    const perf = job(read("frontend.yml"), "perf");
+    expect(Number(/PERF_RUNS:\s*(\d+)/.exec(perf)?.[1])).toBeGreaterThanOrEqual(7);
+  });
+});

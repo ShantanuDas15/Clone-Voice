@@ -65,7 +65,12 @@ jobs:
           done
           cat next.log
           exit 1
+      # Median of 7, not the default 3: on a shared runner single LCP readings swing by +-0.5 s
+      # (the same page measured 1.69 s and 2.58 s on unchanged code), and this is a required
+      # check, so a noisy median would block merges. The 2.5 s budget itself is unchanged.
       - run: npm run perf
+        env:
+          PERF_RUNS: 7
 
   # Visual-regression baselines (UX plan U7.2). The API is mocked, so no backend is needed.
   # A required check: the committed baselines were confirmed to match this runner (80/80 on the

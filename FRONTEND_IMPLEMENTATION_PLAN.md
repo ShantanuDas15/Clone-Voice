@@ -1499,6 +1499,8 @@ On the owner's instruction **"Include administrators" is on for `main`** (`enfor
 
 **Consequences to know:** `CLAUDE.md` §3.7 says to merge locally and `git push origin main`; that no longer works. The new flow is branch, push, open a PR, wait for the three checks, merge the PR (`gh pr merge --merge`), then delete the branch. If an emergency needs a direct push, an admin can switch *Include administrators* off for the push and back on (`gh api -X DELETE`/`POST repos/<owner>/<repo>/branches/main/protection/enforce_admins`); the section is not updated here because it is the owner's rulebook. The backend workflows are still not required.
 
+**Second finding, same PR:** `perf` then failed on this PR with no app change (`/` at 2.53 s and 2.58 s, `/signup` 2.65 s, other routes 1.87-2.27 s): LCP on the shared runner swings by about half a second on identical code (`/` has measured 1.69 to 2.58 s across runs). A required check that flips randomly blocks merges, so the CI step now takes the **median of 7** runs (`PERF_RUNS: 7`, was 3); the 2.5 s budget is unchanged and `ci-workflows.test.ts` pins the run count. If it still flaps, raise the runs again or move the LCP gate to a retry, rather than raising the budget.
+
 **Open items from FE-UX45**
 1. Owner: decide whether to update `CLAUDE.md` §3.7 to the pull-request flow, and whether the backend workflows should be required too.
 
