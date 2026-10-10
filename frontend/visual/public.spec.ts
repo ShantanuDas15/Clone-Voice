@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const WIDTHS = [375, 768, 1280] as const;
+const WIDTHS = [375, 768, 1280, 1920] as const;
 const THEMES = ["light", "dark"] as const;
 const ROUTES = [
   { name: "home", path: "/" },

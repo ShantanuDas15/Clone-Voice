@@ -6,6 +6,7 @@ const VIEWPORTS = [
   { name: "320", width: 320, height: 640 },
   { name: "768", width: 768, height: 1024 },
   { name: "1280", width: 1280, height: 800 },
+  { name: "1920", width: 1920, height: 1080 },
 ] as const;
 
 async function overflow(page: Page): Promise<number> {
