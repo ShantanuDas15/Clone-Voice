@@ -3,8 +3,8 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import dynamic from "next/dynamic";
-import { Toaster } from "sonner";
 
+import { ToastHost } from "@/components/toast-host";
 import { AuthProvider } from "@/components/auth-provider";
 import { env } from "@/lib/env";
 import { createQueryClient } from "@/lib/query";
@@ -14,14 +14,14 @@ const WebVitals = dynamic(() => import("@/components/web-vitals").then((m) => m.
   ssr: false,
 });
 
-/** Client-side providers: TanStack Query and the accessible toast region. */
+/** Client-side providers: TanStack Query, the session and the (lazy) accessible toast region. */
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(createQueryClient);
   return (
     <QueryClientProvider client={client}>
       {env.NEXT_PUBLIC_SENTRY_DSN ? <WebVitals /> : null}
       <AuthProvider>{children}</AuthProvider>
-      <Toaster richColors closeButton />
+      <ToastHost />
     </QueryClientProvider>
   );
 }

@@ -1409,6 +1409,15 @@ Closes UX plan §9.1 item 7; the audit is the new §9.2. **Fix:** the paused-ser
 **Open items from FE-UX35**
 1. Four recorded deviations from §4.7 (no Alert icon, no Card, no separate Waveform, three Alert tones): decide whether to build or accept. The `/login` JS headroom, the CSP reporting decision, the CI `visual` result, the manual U6.3 and a real Safari pass.
 
+### FE-UX36 — Restore the `/login` JS headroom: lazy toasts (2026-10-10, branch `chore/FE-UX36-login-headroom`, commit `a3d4c78`)
+
+The `<Toaster>` from `sonner` sat in the root providers, so every public page downloaded it though only signed-in screens raise toasts. New `lib/toast.ts` (`notify.success/error`, no `sonner` import) and `components/toast-host.tsx` (fetches `sonner` on the first toast, mounts the region, then shows the queued message; a toast raised before the host mounts is replayed). `account-section` and `voice-profile-list` use `notify`. The account-deleted toast still shows after the redirect to `/` because the host lives in the root providers.
+
+**Measured** (`npm run perf`, median of 5): `/login` **199.9 -> 190.3 KB** of the 200 KB budget; `/signup` 189.9, `/forgot-password` 187.3, `/` 171.7. **Tests:** `tests/toast.test.tsx` (4: toast shown, several toasts, early replay, and a guard that only the host imports `sonner`); `npm test` 484 passed; real-backend e2e `account` (now asserts "Name updated." appears), `voice`, `a11y`, `dialog-keyboard`, `csp` (enforcing CSP is separate) all pass on Chromium and Firefox. Typecheck, lint, prettier clean.
+
+**Open items from FE-UX36**
+1. The CSP reporting decision, the CI `visual` result, the manual U6.3, a real Safari pass, and the four §4.7 deviations in UX plan §9.2. The Next build table still lists `/login` at 161 kB first-load; Lighthouse transfer size is the gate and is what dropped.
+
 ---
 
 ## 9. Definition of Done (release checklist)

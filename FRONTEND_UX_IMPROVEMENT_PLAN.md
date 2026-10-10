@@ -502,10 +502,10 @@ Finding → Phase → Task → Test type. **U**=unit, **I**=integration (MSW), *
 | 8 | Every UR10 status code, offline, mic denial, playback failure, expired audio tested | **Met per log** | FE-UX8/9/13 and the `resilience` e2e (re-run, passes); not re-audited code by code |
 | 9 | Reduced motion: no animation | **Met per log** | FE-UX12 e2e; the `a11y`/visual runs use reduced motion |
 | 10 | No hardcoded colour or one-off radius; no gradient, shadow, ALL-CAPS, numbered non-sequence | **Met (automated part)** | FE-UX32 (`0f42bfc`): `tests/theme.test.ts` now fails on shadows, blur, gradients, `uppercase`/`lowercase`/`capitalize` and any radius other than `rounded`, `rounded-lg`, `rounded-full` (negative control run). A numbered non-sequence is still a review item; the radii are Tailwind defaults (4/8 px), not the 6/10 px of §4.4 |
-| 11 | Perf budgets, no soak leak | **Met, margin gone** | Re-run (`npm run perf`): LCP 1.96-2.27 s, CLS 0.001, TBT <= 15 ms, JS 181-200 KB; `/login` is **199.9 KB against the 200 KB budget (0.1 KB headroom)**; `soak` e2e passes |
+| 11 | Perf budgets, no soak leak | **Met** | FE-UX36 (`a3d4c78`): `sonner` (about 9 KB gz) now loads on the first toast instead of on every page. Re-run `npm run perf` (median of 5): `/` 171.7 KB, `/login` **190.3 KB (was 199.9; 9.7 KB headroom)**, `/signup` 189.9 KB, `/forgot-password` 187.3 KB; LCP 2.11-2.41 s, CLS 0.001, TBT <= 16 ms. Soak per FE-UX31 (not re-run) |
 | 12 | All suites zero failures; log updated | **Partial** | Re-run: unit 459, e2e 81/0 failed, visual 54, Lighthouse gate. Not run: `npm run smoke` (needs a deployed target). The CI `visual` job has never run |
 
-**Reading it:** nothing is failing. Nothing is partial any more, one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
+**Reading it:** nothing is failing. Nothing is partial any more, one needs a person (3), and one carries a risk to watch: real Safari. (The `/login` JS margin was restored in FE-UX36.)
 
 ### 9.2 State audit (2026-10-10, FE-UX35)
 
