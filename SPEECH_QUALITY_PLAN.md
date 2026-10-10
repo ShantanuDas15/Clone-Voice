@@ -1,10 +1,10 @@
 # CloneVoice — Speech Quality & Expressiveness Improvement Plan
 
-> **Status**: 🟡 In Progress (0 of 8 Phases complete; S0.1 partial, see §5.1)
+> **Status**: 🟡 In Progress (0 of 8 Phases complete; S0.1, S1.2 and S1.3 landed, see §5.1)
 > **Scope**: Backend speech pipeline — make cloned voices closer to the real speaker and make the
 > speech react to the text (punctuation, emotion, emphasis). Frontend work is listed per phase but
 > starts only after the backend gate (CLAUDE.md §2).
-> **Last Reviewed**: 2026-10-10 (S0.1 landed) · **Decisions Q1–Q3 recorded** (§7)
+> **Last Reviewed**: 2026-10-10 (S0.1, S1.2 and S1.3 landed) · **Decisions Q1–Q3 recorded** (§7)
 > **Source of truth for baseline**: `backend/services/tts_pipeline.py`, `text_chunking.py`,
 > `audio_processing.py`, `sv2tts/`, `PREPROCESSING_STUDY.md`, `HARDENING_PLAN.md`.
 
@@ -86,7 +86,7 @@ Automatic metrics guide development; **only the listening test decides release.*
 | Phase | Name | Status | Commit | Completed |
 |---|---|:---:|:---:|:---:|
 | **S0** | Evaluation harness & baseline | 🟡 | `cd7ec07` (S0.1) | — |
-| **S1** | Text front-end & punctuation-aware prosody (current model) | 🔴 | — | — |
+| **S1** | Text front-end & punctuation-aware prosody (current model) | 🟡 | `8a43fe0` (S1.2, S1.3) | — |
 | **S2** | Voice-profile quality (embedding & enrollment) | 🔴 | — | — |
 | **S3** | Vocoder & output polish | 🔴 | — | — |
 | **S4** | Engine abstraction & expressive acoustic model | 🔴 | — | — |
@@ -105,6 +105,8 @@ own vocoder).
 | Milestone | Status | Commit | Date | What was verified | What is still open |
 |---|:---:|:---:|:---:|---|---|
 | **S0.1** Metric library + study CLI (`backend/evaluate_synthesis.py`) | 🟡 Partial | `cd7ec07` | 2026-10-10 | 34 new unit/integration tests pass on synthetic signals with known answers (SECS, F0 error, F0 range ratio, spectrum distance, final-pitch slope, `?`/`!` contrast, WER/CER, bootstrap CI, per-group gap, dataset loading, orchestration with the model mocked). Full backend suite: **939 passed, 1 skipped, 11 warnings** (the 11 third-party warnings of the baseline; no new ones). CLI smoke-run against the **real** synthesizer/vocoder weights on a scratch tone reference: loads, runs 16 syntheses, writes the JSON report, leaves no files in `outputs/` (numbers from that run are meaningless: the reference was a tone, not speech) | (1) Independent speaker encoder (plan §4: SECS is currently judged by the same resemblyzer encoder that conditions the model, so it flatters the model); (2) Whisper WER, predicted MOS and emotion classifier (WER/CER functions exist, the transcriber does not); (3) **a real-speech baseline**: no speech data exists in the repo. Closed by S0.2 + S0.4: `python -m backend.evaluate_synthesis --data-dir <speakers/> --groups groups.json` on LibriSpeech plus child/elderly sets |
+| **S1.2** Punctuation-aware segmentation | 🟢 Fixed | `8a43fe0` | 2026-10-10 | `text_chunking.split_into_segments` returns typed `Segment(text, boundary)`; `.`/`?`/`!`/`…`/`;:`/paragraph are told apart and only plain statements merge, so a `!` or `?` keeps its own decode. Found and fixed on the way: `english_cleaners` collapsed every newline before segmentation, so line/paragraph breaks never reached the segmenter (the old newline split only worked in its unit test); `_clean_for_chunking` now cleans line by line. The API now accepts `\n`/`\r` (it returned 422) so breaks are reachable | Whether it sounds better: needs the real-speech S0 run (punctuation-contrast on the same texts before/after) |
+| **S1.3** Punctuation-aware pauses | 🟡 Partial | `8a43fe0` | 2026-10-10 | `TTS_PAUSE_SECONDS` (validated table, partial overrides, env-JSON) replaces `TTS_CHUNK_PAUSE_SECONDS`; pause follows the previous segment's ending: statement 0.40, question/exclamation 0.45, ellipsis 0.60, clause 0.25, paragraph 0.70, comma-cut 0.12, word-cut 0.05. 32 new tests (971 passed, 1 skipped, 11 warnings; baseline warnings only). Real weights: typed segments and gaps 0.40/0.45/0.45/0.70 s confirmed, audio finite, no 900-frame truncation | (1) The plan's **comma pause inside a chunk** is not done: it needs token-to-frame alignment inside Tacotron, and Tacotron already renders commas itself. Decide from S0 data. (2) The default values are the plan's proposals, **not tuned**: tune against listening tests. (3) Audio is now longer than before for multi-sentence text (0.15 s gaps became 0.40+ s); the 500-char limit and timeouts were checked by the suite only, not under real load. (4) Operators: `TTS_CHUNK_PAUSE_SECONDS` is silently ignored now |
 | S0.2 Corpus & expressive sentence set | 🔴 | — | — | — | — |
 | S0.3 Punctuation + emotion metrics | 🟡 Partial | `cd7ec07` | 2026-10-10 | Punctuation contrast (`?` final-pitch rise, `!` pitch range + energy) is implemented and tested; the CLI uses 5 built-in sentences | Emotion classifier metric; the full 40-sentence set (S0.2) |
 | S0.4 Baseline recorded in `SPEECH_QUALITY_STUDY.md` | 🔴 | — | — | — | Needs real speech |
@@ -141,8 +143,8 @@ energy), and S0.4 sets minimum effect sizes from the measured baseline.
 | Milestone | Work | Notes |
 |---|---|---|
 | **S1.1** Normalisation | Replace/extend `english_cleaners`: currency, percentages, dates, times, ordinals, acronyms (`NASA` vs `FBI`), URLs, emails, units. Keep `inflect` for numbers. | Pure functions → very testable. Keep the output inside the existing symbol set so the checkpoint still works |
-| **S1.2** Punctuation-aware segmentation | Rewrite `text_chunking.py` to return `Segment(text, terminal, strength)` instead of bare strings; stop merging sentences with different terminals (`!`, `?`, `.`, `…`). | Merging is what flattens a `!` into the sentence before it |
-| **S1.3** Punctuation-aware pauses | Pause duration by boundary type: comma ≈ 0.12 s, semicolon/colon ≈ 0.25 s, full stop ≈ 0.4 s, `?`/`!` ≈ 0.45 s, paragraph ≈ 0.7 s, ellipsis ≈ 0.6 s. Insert **inside** a chunk too (comma → short silence in mel space) rather than only between chunks. Settings, not constants. | Replaces the single `TTS_CHUNK_PAUSE_SECONDS` |
+| **S1.2** 🟢 Punctuation-aware segmentation | Rewrite `text_chunking.py` to return `Segment(text, terminal, strength)` instead of bare strings; stop merging sentences with different terminals (`!`, `?`, `.`, `…`). | Merging is what flattens a `!` into the sentence before it |
+| **S1.3** 🟡 Punctuation-aware pauses | Pause duration by boundary type: comma ≈ 0.12 s, semicolon/colon ≈ 0.25 s, full stop ≈ 0.4 s, `?`/`!` ≈ 0.45 s, paragraph ≈ 0.7 s, ellipsis ≈ 0.6 s. Insert **inside** a chunk too (comma → short silence in mel space) rather than only between chunks. Settings, not constants. | Replaces the single `TTS_CHUNK_PAUSE_SECONDS` |
 | **S1.4** Wider input charset | Accept `…`, `—`, `–`, curly quotes, `*emphasis*`, ALL-CAPS runs. Map to supported symbols **before** the symbol check, and record the mapping as prosody hints (emphasis → S5). | Today these are rejected with a 422 |
 | **S1.5** Terminal-aware post-processing (fallback only) | For `?`: gentle pitch-rise on the last segment; for `!`: small gain/tempo lift — applied in the vocoder-output domain (e.g. WORLD/`pyworld` or phase-vocoder), **flagged experimental**. | Honest expectation: modest and sometimes artefacted. Keep only if the S0 punctuation-contrast metric improves *and* the listening test does not penalise it. Drop it once S4 ships |
 | **S1.6** Cross-chunk continuity | Carry the last N mel frames (or the decoder state) as context into the next chunk; crossfade the join. Removes the pitch/energy "reset" at chunk edges. | Reference SV2TTS does not do this; requires care with the Tacotron decoder API |
