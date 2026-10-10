@@ -1452,6 +1452,17 @@ UX plan §12 M3. **New:** `POST /csp-report` (`app/csp-report/route.ts`, Node ru
 **Open items from FE-UX40**
 1. **Release 1 is this change shipped still report-only** (`CSP_ENFORCE` unset). After a full release cycle with no unexplained line in the server log, set `CSP_ENFORCE=1` (rollback: `0`, no rebuild). Reporting is per instance and best effort if the app scales out. M4 (CI-sourced baselines); owner tasks: screen-reader pass, real Safari, name check, terms text.
 
+### FE-UX41 — M4: CI-sourced visual baselines (2026-10-10, branch `chore/FE-UX41-ci-baselines`, commit `060f6c7`)
+
+UX plan §12 M4. **New** `.github/workflows/visual-update.yml` (manual `workflow_dispatch`, `contents: read`): on `ubuntu-24.04` and Node 20 it installs Chromium, deletes the old images (so a removed route or width cannot leave a stale one), regenerates them, runs the suite a second time to prove they are stable, and uploads `visual-baselines` (fails if empty). **It never commits**; a person reviews the images and commits them. The `visual` job in `frontend.yml` is pinned from `ubuntu-latest` to the same `ubuntu-24.04`. `frontend/README.md` gains a "Visual regression" section with the procedure.
+
+**Guard:** `tests/ci-workflows.test.ts` (4) fails if the two workflows drift apart (runner, Node version, browser install, command), if the update workflow gains a trigger other than `workflow_dispatch`, any write permission or a commit/push step, or loses the clean-start, stability-pass or artifact steps. **Negative control:** setting the visual job back to `ubuntu-latest` fails it. `npm test` 542 passed; both YAML files parse; typecheck, lint, prettier clean.
+
+**Not verified (cannot be from here):** the workflow has not run on GitHub (`gh` is not logged in on this host, and a workflow only exists to dispatch once it is on the default branch). The commands it runs are the ones used locally for the 112/112 visual runs.
+
+**Open items from FE-UX41**
+1. **Owner:** dispatch **visual-update** once this is on `main`, review the artifact, commit it, then remove `continue-on-error` from the `visual` job so it gates merges. Also: set `CSP_ENFORCE=1` after one clean release (FE-UX40), counsel review of the terms text, screen-reader pass, real Safari, name check. All code milestones M1-M4 of UX plan §12 are done.
+
 ---
 
 ## 9. Definition of Done (release checklist)
