@@ -6,6 +6,7 @@ import {
   type Metrics,
   PUBLIC_ROUTES,
   extractMetrics,
+  judgeAttempts,
   medianMetrics,
   violations,
 } from "@/perf/budget.mts";
@@ -95,5 +96,38 @@ describe("budget definition", () => {
     expect(BUDGET.lcpMs).toBe(2500);
     expect(BUDGET.scriptKb).toBe(200);
     expect(PUBLIC_ROUTES).toEqual(expect.arrayContaining(["/", "/login"]));
+  });
+});
+
+describe("judgeAttempts (a noisy runner must not fail a route, a regression must)", () => {
+  const m = (lcpMs: number): Metrics => ({ lcpMs, scriptKb: 170, cls: 0.001, tbtMs: 5 });
+
+  it("passes on the first attempt when it is within budget", () => {
+    const r = judgeAttempts([m(2100)]);
+    expect(r.violations).toEqual([]);
+    expect(r.attemptsUsed).toBe(1);
+  });
+
+  it("passes when a later attempt is within budget after a noisy first one", () => {
+    const r = judgeAttempts([m(2667), m(2142)]);
+    expect(r.violations).toEqual([]);
+    expect(r.attemptsUsed).toBe(2);
+    expect(r.metrics.lcpMs).toBe(2142);
+  });
+
+  it("fails when every attempt is over budget, as a real regression is", () => {
+    const r = judgeAttempts([m(2658), m(2621), m(2640)]);
+    expect(r.violations.length).toBeGreaterThan(0);
+    expect(r.attemptsUsed).toBe(3);
+    expect(r.metrics.lcpMs).toBe(2640);
+  });
+
+  it("never lets a budget miss on another metric through", () => {
+    const heavy: Metrics = { lcpMs: 1500, scriptKb: 260, cls: 0.001, tbtMs: 5 };
+    expect(judgeAttempts([heavy, heavy]).violations.join()).toMatch(/JS/);
+  });
+
+  it("rejects an empty list instead of passing it", () => {
+    expect(() => judgeAttempts([])).toThrow();
   });
 });

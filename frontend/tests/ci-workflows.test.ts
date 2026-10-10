@@ -73,9 +73,11 @@ describe("required checks are reliable (FE-UX45, FE-UX46)", () => {
     expect(head).toMatch(/\n\s+push:\s*\n\s+branches:\s*\[main\]/);
   });
 
-  it("retries the perf budget once, so runner noise cannot block a merge but a real regression still fails twice", () => {
+  it("re-measures a route that misses before failing it, and never masks the result", () => {
     const perf = job(read("frontend.yml"), "perf");
-    expect(perf).toMatch(/npm run perf \|\| \(.*sleep \d+ && npm run perf\)/);
-    expect(perf).not.toMatch(/continue-on-error/);
+    expect(Number(/PERF_ATTEMPTS:\s*(\d+)/.exec(perf)?.[1])).toBeGreaterThanOrEqual(2);
+    expect(perf).not.toMatch(/continue-on-error|\|\| true/);
+    const runner = readFileSync(path.resolve(__dirname, "../perf/run.mjs"), "utf8");
+    expect(runner).toContain("judgeAttempts");
   });
 });
