@@ -1528,7 +1528,14 @@ After merging FE-UX47 the `main` run failed `perf` again: `/` at 2677, 2673 and 
 **Change:** `perf/run.mjs` now uses `throttlingMethod: "devtools"` (override with `PERF_THROTTLING`); the budget stays **LCP <= 2.5 s**, JS 200 KB, CLS 0.1, TBT 300 ms; the per-route re-measure (`judgeAttempts`) stays as a cheap safety (`PERF_ATTEMPTS: 2`, `PERF_RUNS: 3`). Local run: LCP 1413-1440 ms on all five routes. `ci-workflows.test.ts` forbids going back to simulation. **Trade-off, stated plainly:** real throttling will not notice a change that only reshuffles simulated dependencies (as the mono font did), and the 2.5 s budget now has about 1.1 s of headroom, so a small slow-down will not trip it; JS size, CLS and TBT remain as deterministic guards. If tighter drift detection is wanted, add a ratchet (for example 1.8 s) after the first CI numbers are known; the CI runner's CPU may shift the 1.43 s baseline, so it was not guessed from local data.
 
 **Open items from FE-UX48**
-1. Read the first CI numbers (`gh run view --log`), then decide on an LCP ratchet. Owner items as before.
+1. ~~Read the first CI numbers and decide on an LCP ratchet~~ done in FE-UX49. Owner items as before.
+
+### FE-UX49 — LCP drift guard at 1.8 s (2026-10-10, branch `ci/FE-UX49-lcp-drift-guard`)
+
+The first CI numbers under real throttling (FE-UX48 PR run): `/` 1462 ms, `/login` 1437, `/signup` 1449, `/forgot-password` 1441, `/terms` 1458, with the `main` run green; locally 1413-1440. The CI runner is only about 25 ms slower, so the baseline is about **1.45 s** and the 2.5 s contract leaves 1.05 s of headroom, enough to hide a real slow-down. `perf/budget.mts` gains `lcpDriftMs: 1800` (a failure named "drift guard", reported only while the value is still under the 2.5 s contract so the contract miss is not reported twice): something that adds about a third of a second to the critical path now fails the required check long before 2.5 s, deterministically, because the measurement spread is about 25 ms. The comment says to raise it only deliberately and with a reason. Existing fixtures that used simulated-era values (2.0-2.7 s) as "within budget" were corrected to realistic ones rather than loosening the guard; 4 new tests (baseline passes, 1.9 s fails by name, past 2.5 s reports the contract once, a consistent drift is not excused by `judgeAttempts`). `npm test` passed; typecheck, lint, prettier clean.
+
+**Open items from FE-UX49**
+1. None in code. If the runner image changes and CI baselines move, adjust `lcpDriftMs` with a note, do not widen it to pass.
 
 ---
 

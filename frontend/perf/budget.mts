@@ -21,6 +21,13 @@ export interface Budget {
    * measured with real throttling (perf/run.mjs), where it is deterministic (about 1.4 s today).
    */
   lcpMs: number;
+  /**
+   * Drift guard, stricter than the contract above. With real throttling LCP is deterministic:
+   * 1.41-1.44 s locally and 1.44-1.46 s on the CI runner (FE-UX48), so 1.8 s means something added
+   * about a third of a second to the critical path, long before 2.5 s. Raise it deliberately, with
+   * a reason, never to make a run pass.
+   */
+  lcpDriftMs: number;
   /** Plan proposal: JS < 200 KB gzipped on public routes (transfer size, compressed by the server). */
   scriptKb: number;
   /** Core Web Vitals "good" thresholds, added to the plan's two. */
@@ -28,7 +35,13 @@ export interface Budget {
   tbtMs: number;
 }
 
-export const BUDGET: Budget = { lcpMs: 2500, scriptKb: 200, cls: 0.1, tbtMs: 300 };
+export const BUDGET: Budget = {
+  lcpMs: 2500,
+  lcpDriftMs: 1800,
+  scriptKb: 200,
+  cls: 0.1,
+  tbtMs: 300,
+};
 
 /** Public routes that must meet the budget (no sign-in needed). */
 export const PUBLIC_ROUTES = ["/", "/login", "/signup", "/forgot-password", "/terms"] as const;
@@ -78,6 +91,11 @@ export function violations(metrics: Metrics, budget: Budget = BUDGET): string[] 
   const out: string[] = [];
   if (metrics.lcpMs > budget.lcpMs) {
     out.push(`LCP ${Math.round(metrics.lcpMs)} ms > ${budget.lcpMs} ms`);
+  }
+  if (metrics.lcpMs > budget.lcpDriftMs && metrics.lcpMs <= budget.lcpMs) {
+    out.push(
+      `LCP ${Math.round(metrics.lcpMs)} ms > ${budget.lcpDriftMs} ms drift guard (baseline about 1450 ms)`,
+    );
   }
   if (metrics.scriptKb > budget.scriptKb) {
     out.push(`JS ${metrics.scriptKb.toFixed(1)} KB > ${budget.scriptKb} KB`);

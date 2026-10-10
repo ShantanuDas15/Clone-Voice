@@ -29,7 +29,8 @@ const lhr = (over: Partial<Record<string, unknown>> = {}): LighthouseResult =>
     },
   }) as LighthouseResult;
 
-const ok: Metrics = { lcpMs: 2000, scriptKb: 150, cls: 0.01, tbtMs: 50 };
+// Realistic real-throttled values (about 1.45 s on CI), not the simulated-era 2.0 s.
+const ok: Metrics = { lcpMs: 1450, scriptKb: 150, cls: 0.01, tbtMs: 50 };
 
 describe("extractMetrics", () => {
   it("reads LCP, CLS, TBT and script transfer (bytes to KB)", () => {
@@ -50,11 +51,11 @@ describe("extractMetrics", () => {
 describe("medianMetrics", () => {
   it("takes the per-metric median, ignoring one outlier run", () => {
     const runs = [
-      { ...ok, lcpMs: 2000 },
+      { ...ok, lcpMs: 1400 },
       { ...ok, lcpMs: 9000 },
-      { ...ok, lcpMs: 2200 },
+      { ...ok, lcpMs: 1500 },
     ];
-    expect(medianMetrics(runs).lcpMs).toBe(2200);
+    expect(medianMetrics(runs).lcpMs).toBe(1500);
   });
 
   it("averages the middle pair for an even count and handles a single run", () => {
@@ -72,7 +73,7 @@ describe("violations", () => {
     expect(violations(ok)).toEqual([]);
     expect(
       violations({
-        lcpMs: BUDGET.lcpMs,
+        lcpMs: BUDGET.lcpDriftMs,
         scriptKb: BUDGET.scriptKb,
         cls: BUDGET.cls,
         tbtMs: BUDGET.tbtMs,
@@ -103,16 +104,16 @@ describe("judgeAttempts (a noisy runner must not fail a route, a regression must
   const m = (lcpMs: number): Metrics => ({ lcpMs, scriptKb: 170, cls: 0.001, tbtMs: 5 });
 
   it("passes on the first attempt when it is within budget", () => {
-    const r = judgeAttempts([m(2100)]);
+    const r = judgeAttempts([m(1450)]);
     expect(r.violations).toEqual([]);
     expect(r.attemptsUsed).toBe(1);
   });
 
   it("passes when a later attempt is within budget after a noisy first one", () => {
-    const r = judgeAttempts([m(2667), m(2142)]);
+    const r = judgeAttempts([m(2667), m(1442)]);
     expect(r.violations).toEqual([]);
     expect(r.attemptsUsed).toBe(2);
-    expect(r.metrics.lcpMs).toBe(2142);
+    expect(r.metrics.lcpMs).toBe(1442);
   });
 
   it("fails when every attempt is over budget, as a real regression is", () => {
@@ -129,5 +130,32 @@ describe("judgeAttempts (a noisy runner must not fail a route, a regression must
 
   it("rejects an empty list instead of passing it", () => {
     expect(() => judgeAttempts([])).toThrow();
+  });
+});
+
+describe("LCP drift guard (FE-UX49)", () => {
+  const base: Metrics = { lcpMs: 1450, scriptKb: 170, cls: 0.001, tbtMs: 5 };
+
+  it("passes the measured baseline with room to spare", () => {
+    expect(BUDGET.lcpDriftMs).toBeLessThan(BUDGET.lcpMs);
+    expect(violations(base)).toEqual([]);
+    expect(violations({ ...base, lcpMs: 1800 })).toEqual([]);
+  });
+
+  it("fails a slow-down well before the 2.5 s contract, and names the guard", () => {
+    const out = violations({ ...base, lcpMs: 1900 });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatch(/drift guard/);
+  });
+
+  it("past the contract it reports the contract, once", () => {
+    const out = violations({ ...base, lcpMs: 2600 });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatch(/> 2500 ms/);
+  });
+
+  it("is not excused by re-measuring: judgeAttempts keeps failing a consistent drift", () => {
+    const slow = { ...base, lcpMs: 1900 };
+    expect(judgeAttempts([slow, slow]).violations.length).toBeGreaterThan(0);
   });
 });
