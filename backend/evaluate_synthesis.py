@@ -505,6 +505,60 @@ def evaluate_speaker(
     return row
 
 
+def evaluate_enrollment(
+    encoder,
+    speaker: str,
+    files: Sequence[str],
+    group: str,
+    index: int,
+    seed: int,
+    clips: int,
+    sentences: Sequence[str],
+) -> Dict[str, object]:
+    """Compare cloning from one reference clip with cloning from ``clips`` aggregated clips.
+
+    Enrolment clips are the reference plus the first ``clips - 1`` held-out clips; the speech
+    the clone is scored against is always the *last three* held-out clips, which are never
+    used for enrolment, so the two profiles face the same target. Every sentence is
+    synthesized with both embeddings and the same seed, so the comparison is paired.
+    """
+    from backend.services.voice_embedding import aggregate_embeddings
+
+    held_out = files[1:]
+    if clips < 1 or clips - 1 + 3 > len(held_out):
+        raise ValueError("not enough clips to enrol and keep three held out")
+    enrol = [reference_embedding(encoder, f) for f in files[:clips]]
+    single, multi = enrol[0], aggregate_embeddings(enrol)
+
+    real = [librosa.load(p, sr=SAMPLE_RATE)[0] for p in held_out[-3:]]
+    target = np.mean(
+        [encoder.embed_utterance(np.asarray(y, np.float32)) for y in real], axis=0
+    )
+    real_f0 = np.concatenate([f0_track(y) for y in real])
+    real_audio = np.concatenate(real)
+
+    row: Dict[str, object] = {"speaker": speaker, "group": group}
+    row["emb_secs_single"] = secs(single, target)
+    row["emb_secs_multi"] = secs(multi, target)
+    for name, embedding in (("single", single), ("multi", multi)):
+        scores: Dict[str, List[float]] = {"secs": [], "f0": [], "spec": []}
+        for k, sentence in enumerate(sentences):
+            clone = _synthesize(
+                sentence + ".", embedding, speaker, seed + 1000 * index + k
+            )
+            scores["secs"].append(secs(encoder.embed_utterance(clone), target))
+            error = f0_error_semitones(real_f0, f0_track(clone))
+            if error is not None:
+                scores["f0"].append(error)
+            distance = long_term_spectrum_distance(real_audio, clone)
+            if distance is not None:
+                scores["spec"].append(distance)
+        row[f"secs_{name}"] = _mean(scores["secs"])
+        row[f"f0_error_{name}"] = _mean(scores["f0"])
+        row[f"spectral_{name}"] = _mean(scores["spec"])
+    return row
+
+
 def _mean(values: Sequence[float]) -> Optional[float]:
     """Mean of ``values``, or ``None`` when there are none."""
     return float(np.mean(values)) if values else None
@@ -555,6 +609,41 @@ def evaluate_stimuli(
     }
 
 
+def _run_enrollment_study(args, dataset, groups, stems, encoder) -> int:
+    """Run ``evaluate_enrollment`` over the chosen speakers and write the report."""
+    chosen = select_speakers(dataset, groups, args.speakers)
+    rows = []
+    for n, speaker in enumerate(chosen):
+        rows.append(
+            evaluate_enrollment(
+                encoder,
+                speaker,
+                dataset[speaker],
+                groups.get(speaker, "ungrouped"),
+                n,
+                args.seed,
+                args.enroll_compare,
+                stems[:3],
+            )
+        )
+        logger.info("scored speaker %d/%d (%s)", n + 1, len(chosen), speaker)
+    metrics = [
+        f"{base}_{name}"
+        for base in ("emb_secs", "secs", "f0_error", "spectral")
+        for name in ("single", "multi")
+    ]
+    report = {
+        "judge": "resemblyzer (same encoder as the model: not independent)",
+        "enrol_clips": args.enroll_compare,
+        "speakers": len(rows),
+        "rows": rows,
+        "per_group": {m: group_report(rows, m) for m in metrics},
+    }
+    args.out.write_text(json.dumps(report, indent=2))
+    print(json.dumps(report["per_group"], indent=2))
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run the study and print a summary; write the full results as JSON."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -578,6 +667,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="faster-whisper model for word error rate, or 'none' to skip it",
     )
     parser.add_argument(
+        "--enroll-compare",
+        type=int,
+        default=0,
+        metavar="K",
+        help="compare one reference clip with K aggregated clips (needs K <= 3), then stop",
+    )
+    parser.add_argument(
         "--skip-single",
         action="store_true",
         help="skip the single-sentence study and run only the multi-sentence stimuli",
@@ -599,6 +695,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     load_models("cpu")
     encoder = VoiceEncoder("cpu")
 
+    if args.enroll_compare:
+        return _run_enrollment_study(args, dataset, groups, stems, encoder)
     paragraphs = load_stimuli(args.sentences, "paragraphs")[: args.paragraphs]
     typed = load_stimuli(args.sentences, "typed")[: args.typed]
     transcribe = (
