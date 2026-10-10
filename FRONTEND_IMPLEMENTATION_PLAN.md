@@ -1402,6 +1402,13 @@ Closes UX plan §9.1 item 5. `e2e/responsive.spec.ts` gains a 1920 x 1080 viewpo
 **Open items from FE-UX34**
 1. Item 7 of §9.1 (a state-by-component audit), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result (the new baselines are untested in CI), the manual U6.3, and a real Safari pass.
 
+### FE-UX35 — State-by-component audit and UR4 fix (2026-10-10, branch `chore/FE-UX35-state-audit`, commit `8527e9b`)
+
+Closes UX plan §9.1 item 7; the audit is the new §9.2. **Fix:** the paused-service and cooldown reasons beside Generate, Generate again and Create voice are now linked with `aria-describedby` (`text-to-speech-form.tsx`, `upload-voice-form.tsx`). **Tests:** new `tests/component-states.test.tsx` (19: Button, fields, Alert, Badge, NavLink, StepList state matrix) and two assertions in `degraded-forms.test.tsx`; **negative control:** reverting the components fails both new assertions. `npm test` 480 passed (was 460); typecheck, lint, prettier clean. No visual change, no baseline touched.
+
+**Open items from FE-UX35**
+1. Four recorded deviations from §4.7 (no Alert icon, no Card, no separate Waveform, three Alert tones): decide whether to build or accept. The `/login` JS headroom, the CSP reporting decision, the CI `visual` result, the manual U6.3 and a real Safari pass.
+
 ---
 
 ## 9. Definition of Done (release checklist)
