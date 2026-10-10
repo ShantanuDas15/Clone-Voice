@@ -190,6 +190,59 @@ voice from a mix). `clip_agreement` scores each clip against the mean of the oth
 60 true clips is a small sample: flag for review, do not treat it as proof. It must not be the only consent
 control (the consent gate stays). With fewer than three clips nothing can be flagged.
 
+## Recording quality and the upload report (S2.2a, 2026-10-11)
+
+Which defects in a *reference recording* actually hurt the clone? 10 balanced speakers, each cloned from a
+clean copy and from seven degraded copies of the same reference clip (the clone is always scored against
+the speaker's real, undegraded held-out speech; paired seeds). Tool:
+`python -m backend.evaluate_synthesis ... --degrade-compare --stems 2`. Mean over speakers, 95% bootstrap
+interval over speakers.
+
+| Reference recording | Clone similarity | Change vs clean (paired) | Speakers worse |
+|---|---|---|---|
+| Clean | 0.772 | | |
+| Noise, 20 dB SNR | 0.707 | **-0.064** [-0.079, -0.049] | 10 of 10 |
+| Noise, 10 dB SNR | 0.671 | **-0.100** [-0.129, -0.070] | 10 of 10 |
+| Noise, 5 dB SNR | 0.642 | **-0.129** [-0.165, -0.086] | 9 of 10 |
+| Telephone band (4 kHz) | 0.734 | -0.038 [-0.064, -0.013] | 7 of 10 |
+| Clipped (gain x3, about 0.3% of samples) | 0.733 | -0.038 [-0.058, -0.016] | 8 of 10 |
+| Clipped (gain x8, about 6% of samples) | 0.647 | **-0.124** [-0.154, -0.098] | 10 of 10 |
+| Very quiet (x0.03, about -52 dBFS) | 0.771 | -0.001 [-0.012, +0.010] | 5 of 10 |
+
+**Noise and clipping do real damage, and even moderate noise hurts every speaker.** A quiet recording does
+not, because the upload path already raises it to the encoder's level (this agrees with
+PREPROCESSING_STUDY.md), so the scorer deliberately gives **no volume hint**. These are simulated defects
+(white noise, an 8 kHz resample, digital gain): real rooms, codecs and microphones differ.
+
+### Measures and thresholds
+
+`services/audio_quality.py` measures four things on the whole decoded recording and turns them into hints.
+Thresholds come from this study, checked on all 120 real clips and their degraded copies:
+
+| Hint | Rule | Clean clips flagged | Defective clips caught |
+|---|---|---|---|
+| `noisy` / `very_noisy` | estimated SNR below 25 dB / 15 dB | 5.8% (of 120) | 98% of 20 dB-noise clips; 100% at 10 dB and below |
+| `distorted` / `very_distorted` | flat full-scale runs above 0.1% / 2% of samples | 0.8% | 100% of x8; 52% of x3 |
+| `band_limited` | energy above 4 kHz more than 45 dB below the band under it, or an original recorded at 8 kHz or less | 0.0% (clean never below -33.5 dB) | 100% (simulated phone band at -83 dB or lower) |
+| `short` | under 10 s of speech | n/a | advice from the product's 10 to 30 s guidance, **not a measured effect** |
+
+On the 20 reference clips through the real `assess_file`: 19 of 20 clean clips rated good (the one flagged
+`noisy` is a genuinely noisy recording, about 24 dB); noise at 20 dB rated fair for 20 of 20; at 10 dB and
+5 dB poor for 20 of 20; telephone band flagged for 19 of 20; x8 clipping flagged for 20 of 20 (16 poor);
+x3 clipping for 10 of 20; very quiet audio raised no hint.
+
+### Limits
+
+* Simulated defects on read English speech from adults. Real phone audio, MP3 artefacts, room echo and
+  other noise types (music, speech babble) are untested; **reverb is not measured at all** (the plan
+  lists it; there is no tested measure yet).
+* The SNR is a frame-energy estimate that assumes the clip has both speech and pauses; a recording
+  with no pauses reads as noisier than it is.
+* n = 10 speakers for the harm study; thresholds are tuned on the same corpus they are checked on.
+  Treat them as a calibrated first version, to be re-checked on real uploads.
+* The report is advice. It never rejects an upload: no measured level is bad enough to justify refusing
+  someone their own voice, and the existing duration and silence floors still apply.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

@@ -552,3 +552,49 @@ def test_evaluate_enrollment_needs_three_clips_left_for_scoring(tmp_path):
         es.evaluate_enrollment(_LevelEncoder(), "spk", files, "g", 0, 1, 3, ["One"])
     with pytest.raises(ValueError):
         es.evaluate_enrollment(_LevelEncoder(), "spk", files, "g", 0, 1, 0, ["One"])
+
+
+# --- degradation comparison --------------------------------------------------
+
+
+def test_degradation_cases_include_an_untouched_clean_copy_and_each_defect():
+    cases = es.degradation_cases()
+    assert {"clean", "noise_10db", "telephone", "clipped_x8", "quiet_x0.03"} <= set(
+        cases
+    )
+    y = tone(200.0, seconds=1.0)
+    assert np.array_equal(cases["clean"](y), y)
+    assert np.max(np.abs(cases["clipped_x8"](y))) == pytest.approx(1.0)
+    assert np.max(np.abs(cases["quiet_x0.03"](y))) < 0.02
+
+
+def test_evaluate_degradations_scores_every_case_and_pairs_the_seeds(
+    tmp_path, monkeypatch
+):
+    seeds = []
+
+    def fake_synth(text, embedding, speaker, seed):
+        seeds.append(seed)
+        return tone(180.0, 185.0, 1.0, amp=0.1)
+
+    monkeypatch.setattr(es, "_synthesize", fake_synth)
+    cases = {"clean": lambda y: y, "quiet": lambda y: y * 0.1}
+    work = tmp_path / "work"
+    work.mkdir()
+    row = es.evaluate_degradations(
+        _LevelEncoder(),
+        "spk",
+        _speaker_files(tmp_path),
+        "grp",
+        1,
+        7,
+        ["One", "Two"],
+        cases,
+        work,
+    )
+    assert row["speaker"] == "spk" and row["group"] == "grp"
+    for name in cases:
+        assert -1.0 <= row[f"secs_{name}"] <= 1.0
+        assert -1.0 <= row[f"emb_secs_{name}"] <= 1.0
+    assert seeds[:2] == seeds[2:]  # each case synthesizes with the same seeds as clean
+    assert sorted(p.name for p in work.iterdir()) == ["spk_clean.wav", "spk_quiet.wav"]

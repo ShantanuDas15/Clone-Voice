@@ -180,6 +180,90 @@
         "title": "MessageResponse",
         "type": "object"
       },
+      "QualityHintOut": {
+        "description": "One thing the user can fix in their recording.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "title": "QualityHintOut",
+        "type": "object"
+      },
+      "QualityMeasuresOut": {
+        "description": "Physical measures of the uploaded recording.",
+        "properties": {
+          "clipping_ratio": {
+            "title": "Clipping Ratio",
+            "type": "number"
+          },
+          "high_band_db": {
+            "title": "High Band Db",
+            "type": "number"
+          },
+          "level_dbfs": {
+            "title": "Level Dbfs",
+            "type": "number"
+          },
+          "snr_db": {
+            "title": "Snr Db",
+            "type": "number"
+          },
+          "voiced_seconds": {
+            "title": "Voiced Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "voiced_seconds",
+          "snr_db",
+          "clipping_ratio",
+          "high_band_db",
+          "level_dbfs"
+        ],
+        "title": "QualityMeasuresOut",
+        "type": "object"
+      },
+      "QualityOut": {
+        "description": "How well the recording suits cloning, with advice (SPEECH_QUALITY_PLAN.md S2.2).",
+        "properties": {
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/QualityHintOut"
+            },
+            "title": "Hints",
+            "type": "array"
+          },
+          "measures": {
+            "$ref": "#/components/schemas/QualityMeasuresOut"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating",
+          "hints",
+          "measures"
+        ],
+        "title": "QualityOut",
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "new_password": {
@@ -481,6 +565,58 @@
           "created_at"
         ],
         "title": "VoiceProfileOut",
+        "type": "object"
+      },
+      "VoiceProfileUploadOut": {
+        "description": "The upload response: the profile, plus a recording-quality report when one could be made.",
+        "properties": {
+          "consent_confirmed_at": {
+            "format": "date-time",
+            "title": "Consent Confirmed At",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "terms_version": {
+            "title": "Terms Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "consent_confirmed_at",
+          "terms_version",
+          "created_at"
+        ],
+        "title": "VoiceProfileUploadOut",
         "type": "object"
       }
     },
@@ -1213,7 +1349,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VoiceProfileOut"
+                  "$ref": "#/components/schemas/VoiceProfileUploadOut"
                 }
               }
             },
