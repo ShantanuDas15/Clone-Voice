@@ -493,7 +493,7 @@ Finding → Phase → Task → Test type. **U**=unit, **I**=integration (MSW), *
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | 1 | axe clean, token contrast asserted | **Met** | Re-run: e2e `a11y` passes on Chromium and Firefox (and WebKit over HTTPS, FE-UX29); `tests/theme.test.ts` in the 459 unit tests |
-| 2 | Every flow by keyboard alone, `aria-current` | **Partial** | `dialog-keyboard` e2e and the radio keyboard model are tested; no spec drives each of the 8 flows with the keyboard only |
+| 2 | Every flow by keyboard alone, `aria-current` | **Met** | FE-UX33 (`bf84a53`): `e2e/keyboard-flows.spec.ts` drives sign up, sign in/out, create voice by file (real file chooser opened with Space), create by recording (start, stop, preview), generate, history replay, delete voice and delete account using Tab and key presses only, asserting a visible outline on every control it reaches and `aria-current` on the nav. 3/3 on Chromium and Firefox against the real backend; negative control: requiring a `dotted` outline fails it. Not run on WebKit |
 | 3 | Manual NVDA and VoiceOver pass | **Not done** | needs a person |
 | 4 | 44 px targets, 320 px and 400% reflow, forced-colors | **Met** | Re-run: `responsive` e2e (targets, reflow, long email at 320 px); forced-colors per log (FE-UX14) |
 | 5 | Layouts at 320/375/768/1280/1920, baselines committed | **Partial** | 54 baselines at 375/768/1280, light and dark; 320 px is covered by `responsive` only; **1920 px was never checked** |
@@ -505,7 +505,7 @@ Finding → Phase → Task → Test type. **U**=unit, **I**=integration (MSW), *
 | 11 | Perf budgets, no soak leak | **Met, margin gone** | Re-run (`npm run perf`): LCP 1.96-2.27 s, CLS 0.001, TBT <= 15 ms, JS 181-200 KB; `/login` is **199.9 KB against the 200 KB budget (0.1 KB headroom)**; `soak` e2e passes |
 | 12 | All suites zero failures; log updated | **Partial** | Re-run: unit 459, e2e 81/0 failed, visual 54, Lighthouse gate. Not run: `npm run smoke` (needs a deployed target). The CI `visual` job has never run |
 
-**Reading it:** nothing is failing. Three items are not yet fully evidenced (2, 5, 7), one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
+**Reading it:** nothing is failing. Two items are not yet fully evidenced (5, 7), one needs a person (3), and two carry a risk to watch: the `/login` JS budget (any new code on a public route will break the gate) and real Safari.
 
 ---
 

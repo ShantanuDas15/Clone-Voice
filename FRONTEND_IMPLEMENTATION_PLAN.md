@@ -1386,6 +1386,15 @@ Closes the automated half of UX plan §9.1 item 10. One new test in `tests/theme
 **Open items from FE-UX32**
 1. Items 2, 5, 7 of §9.1 (keyboard-only flow specs, 1920 px, a state audit), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result, the manual U6.3 and a real Safari pass. Radii are Tailwind defaults (4 and 8 px), not the 6 and 10 px of §4.4; not changed.
 
+### FE-UX33 — Keyboard-only e2e for every flow (2026-10-10, branch `chore/FE-UX33-keyboard-flows`, commit `bf84a53`)
+
+Closes UX plan §9.1 item 2. New `e2e/keyboard-flows.spec.ts` (3 tests) uses only `keyboard.press`/`type`: sign up, sign out, sign in; create a voice by file (the native file chooser is opened from the focused input with Space), consent, generate (select by type-ahead), history replay, delete voice, delete account; and recording with the arrow-key mode group. Every control it reaches must show a non-`none` outline. **Real backend, 3/3 on Chromium and Firefox.** Negative control: demanding a `dotted` outline fails the test.
+
+Finding (test-side, not an app bug): after a client-side navigation Firefox keeps the sequential-focus start point where the removed button was, so Tab starts mid-page; the spec resets it with `focusTop()`. Moving focus to the page heading on route change would be a real improvement for users but is not in the plan.
+
+**Open items from FE-UX33**
+1. Items 5 and 7 of §9.1 (1920 px, a state audit), the `/login` JS headroom, the CSP reporting decision, the CI `visual` result, the manual U6.3 and a real Safari pass. The keyboard spec was not run on WebKit.
+
 ---
 
 ## 9. Definition of Done (release checklist)
