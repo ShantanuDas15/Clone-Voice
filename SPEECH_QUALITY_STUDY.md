@@ -132,6 +132,64 @@ high-pitch group (n = 5 each, so only suggestive); typed WER fell from 0.360 to 
 * n = 5 speakers per group, 4 paragraphs and 4 typed texts each, one seed; adults only; Whisper is a
   proxy for a listener, and it can recover words a person would find odd.
 
+## Multi-clip enrolment (S2.1a, 2026-10-11)
+
+Does a profile built from several clips clone better than one built from a single clip? 20 speakers
+(10 per group), reference clip alone against the unit-length mean of the reference plus two more of the
+speaker's own clips (`aggregate_embeddings`). Both profiles are scored on the **same three held-out real
+clips, never used for enrolment**, and every sentence (3 per speaker) is synthesized with both profiles
+and the same seed, so the comparison is paired. Mean over speakers, 95% bootstrap interval over speakers.
+Tool: `python -m backend.evaluate_synthesis ... --enroll-compare 3 --stems 3`.
+
+| Metric | One clip | Three clips | Change (paired) | Speakers better |
+|---|---|---|---|---|
+| Embedding vs real speech (no synthesis) | 0.908 [0.874, 0.935] | 0.960 [0.948, 0.969] | **+0.052** [+0.031, +0.080] | 20 of 20 |
+| Clone vs real speech (speaker similarity) | 0.761 [0.732, 0.787] | 0.786 [0.773, 0.801] | **+0.025** [+0.008, +0.046] | 14 of 20 |
+| ... low-pitch group | 0.784 | 0.803 | +0.019 [+0.004, +0.033] | 7 of 10 |
+| ... high-pitch group | 0.738 | 0.770 | +0.032 [-0.001, +0.067] | 7 of 10 |
+| Median pitch error (semitones) | 2.68 [1.82, 3.59] | 2.44 [1.74, 3.22] | -0.24 [-1.01, +0.34] | 10 of 20 |
+| Long-term spectrum distance (dB) | 5.03 [4.53, 5.62] | 4.79 [4.53, 5.06] | -0.25 [-0.81, +0.25] | 10 of 20 |
+
+### What this shows
+
+* **The speaker embedding itself gets clearly better** with more clips: closer to the speaker's real speech
+  for all 20 speakers, and most for the higher-pitched group (+0.074), whose single-clip embeddings were
+  the noisiest.
+* **The clone gets modestly closer** (+0.025, interval above zero), and the gap between the pitch groups
+  narrows from 0.046 to 0.033 (the plan's fairness limit is 0.05). The gain is smaller than the embedding's
+  because the synthesizer is the other half of the chain.
+* **The pitch error does not move** (-0.24 semitones, interval spans zero), and neither does the spectrum
+  distance. **The 2.4 to 3.4 semitone pitch error found in the baseline is therefore not mainly caused by
+  a noisy single-clip embedding**: aggregating clips will not fix it. It points at the model itself
+  (regression toward an average voice) and so at the acoustic model and vocoder (S3, S4) and at
+  per-user adaptation (S6.4), not at enrolment.
+
+### Limits
+
+* The judge is the same encoder that conditions the model, so the similarity gain is flattered (it is the
+  same encoder that made the profile better). An independent encoder is still open (plan S0.1).
+* n = 20 speakers, adults, one seed per sentence, three sentences; the pitch result is "no detectable
+  change", not "no change".
+* Three clips from the same recording session: clips recorded on different devices or in different rooms
+  are untested.
+
+### Same-speaker check for multi-clip uploads
+
+With several clips, one may belong to a different person (a mistake, or a deliberate attempt to build a
+voice from a mix). `clip_agreement` scores each clip against the mean of the others. On this corpus
+(60 true-speaker clips from 20 speakers; 380 trials of one other person's clip among two true clips):
+
+| Threshold | True clips wrongly flagged | Other-speaker clips caught |
+|---|---|---|
+| 0.65 | 0.0% | 73.2% |
+| 0.70 | 1.7% | 87.1% |
+| **0.75** | **1.7%** | **95.8%** |
+| 0.80 | 3.3% | 99.5% |
+
+0.75 is a reasonable **warning** threshold, but the encoder is a verification model of limited accuracy and
+60 true clips is a small sample: flag for review, do not treat it as proof. It must not be the only consent
+control (the consent gate stays). With fewer than three clips nothing can be flagged.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
