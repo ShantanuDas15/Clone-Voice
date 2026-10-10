@@ -1,6 +1,7 @@
 "use client";
 
 import { HEALTH_POLL_MS, useDegraded } from "@/hooks/use-health";
+import { BRAND_NAME } from "@/lib/brand";
 
 export { HEALTH_POLL_MS };
 
@@ -12,7 +13,7 @@ export function DegradedBanner() {
       role="status"
       className="border-b border-border bg-warning px-4 py-2 text-center text-sm text-warning-foreground"
     >
-      CloneVoice is experiencing problems. Uploading and generating may be unavailable for now.
+      {BRAND_NAME} is experiencing problems. Uploading and generating may be unavailable for now.
     </div>
   );
 }
