@@ -298,7 +298,9 @@ def test_evaluate_speaker_reports_every_metric_and_leaves_no_files(
         return tone(180.0, 185.0, 1.0, amp=0.1)
 
     monkeypatch.setattr(es, "_synthesize", fake_synth)
-    row = es.evaluate_speaker(_FakeEncoder(), "spk", files, "child", 0, 1234)
+    row = es.evaluate_speaker(
+        _FakeEncoder(), "spk", files, "child", 0, 1234, ["It is late", "We go now"]
+    )
 
     assert row["speaker"] == "spk" and row["group"] == "child"
     assert -1.0 <= row["secs"] <= 1.0

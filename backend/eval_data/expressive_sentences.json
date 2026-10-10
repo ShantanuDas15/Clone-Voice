@@ -1,0 +1,325 @@
+{
+ "_comment": "Expressive evaluation sentences (SPEECH_QUALITY_PLAN.md S0.2). `stem` is spoken ending in '.', '?' and '!' for the punctuation test; neutral/happy/sad/angry are whole sentences whose wording carries the intended emotion, for the emotion-accuracy test. Written for this project; plain ASCII; every text must pass the API's text validator.",
+ "sentences": [
+  {
+   "id": "s01",
+   "stem": "You are coming to the meeting",
+   "neutral": "The meeting starts at nine and ends at ten.",
+   "happy": "We won the contract! I cannot believe how well it went!",
+   "sad": "Nobody came to the meeting. I think it is all over for us now.",
+   "angry": "You never read the report! I am sick of explaining everything twice!"
+  },
+  {
+   "id": "s02",
+   "stem": "We found the keys in the garden",
+   "neutral": "The keys are on the shelf next to the door.",
+   "happy": "I found my keys and my wallet! What a lucky morning this is!",
+   "sad": "I have searched everywhere for those keys. I just feel so tired and lost.",
+   "angry": "You lost the keys again! How many times do I have to say it?"
+  },
+  {
+   "id": "s03",
+   "stem": "She said she would call tonight",
+   "neutral": "The call is scheduled for seven in the evening.",
+   "happy": "She is calling tonight! I have waited so long for this news!",
+   "sad": "She said she would call. She never did, and I stopped hoping.",
+   "angry": "She promised to call and then ignored me! That is completely unacceptable!"
+  },
+  {
+   "id": "s04",
+   "stem": "They moved the whole house",
+   "neutral": "The house is two stories tall with a small garden.",
+   "happy": "We have a new house at last! The garden is absolutely beautiful!",
+   "sad": "We had to leave the house behind. It held every memory I had.",
+   "angry": "They took our house without a word! This is an outrage!"
+  },
+  {
+   "id": "s05",
+   "stem": "That is the last of the cake",
+   "neutral": "The cake is made with flour, eggs, and sugar.",
+   "happy": "This cake is amazing! Thank you so much, it is perfect!",
+   "sad": "The cake was for her birthday. Nobody is left to eat it now.",
+   "angry": "Who ate the whole cake? I told everyone to leave some!"
+  },
+  {
+   "id": "s06",
+   "stem": "He is waiting at the station",
+   "neutral": "The train to the city leaves every twenty minutes.",
+   "happy": "He is here at last! I am so happy to see him again!",
+   "sad": "He waited at the station for hours. Nobody ever came for him.",
+   "angry": "He is late again! I will not wait for him any longer!"
+  },
+  {
+   "id": "s07",
+   "stem": "You finished the whole report",
+   "neutral": "The report covers the sales figures for the last quarter.",
+   "happy": "You finished the report early! This is wonderful news for the team!",
+   "sad": "The report took everything out of me. I do not think it was good enough.",
+   "angry": "The report is full of mistakes! Do it again, and do it properly!"
+  },
+  {
+   "id": "s08",
+   "stem": "It is raining outside",
+   "neutral": "The weather today is cloudy with light rain in the afternoon.",
+   "happy": "It is raining and I love it! Let us go and dance in the puddles!",
+   "sad": "Rain again today. The grey sky matches how I feel inside.",
+   "angry": "This rain ruined my plans! I am furious about the whole trip!"
+  },
+  {
+   "id": "s09",
+   "stem": "They are opening a new shop",
+   "neutral": "The shop opens at eight and closes at six.",
+   "happy": "The new shop is open! Everything inside is half price today!",
+   "sad": "The old shop on our street has closed. It feels so empty without it.",
+   "angry": "They tore down my shop for this! I will never forgive that decision!"
+  },
+  {
+   "id": "s10",
+   "stem": "She won the race",
+   "neutral": "The race begins at noon on the main road.",
+   "happy": "She won the race! I am jumping up and down with joy!",
+   "sad": "She trained for years and still lost. I could see it break her heart.",
+   "angry": "She cheated to win that race! Everyone knows it was not fair!"
+  },
+  {
+   "id": "s11",
+   "stem": "The dog ate the sandwich",
+   "neutral": "The dog sleeps in the kitchen near the back door.",
+   "happy": "My dog is home safe! I am so relieved and happy right now!",
+   "sad": "My dog is gone. The house is far too quiet without him.",
+   "angry": "The dog ruined my sandwich again! I am so angry I could scream!"
+  },
+  {
+   "id": "s12",
+   "stem": "He passed the exam",
+   "neutral": "The exam has forty questions and lasts two hours.",
+   "happy": "He passed the exam! We are all so proud of him!",
+   "sad": "He failed the exam by one point. He could not even speak about it.",
+   "angry": "He copied his answers on the exam! That is cheating and I will report it!"
+  },
+  {
+   "id": "s13",
+   "stem": "You remembered my birthday",
+   "neutral": "My birthday is on the fourteenth of March.",
+   "happy": "You remembered my birthday! This is the nicest surprise ever!",
+   "sad": "Nobody remembered my birthday this year. I spent it alone.",
+   "angry": "You forgot my birthday again! I cannot believe how careless you are!"
+  },
+  {
+   "id": "s14",
+   "stem": "The bus is late",
+   "neutral": "The bus arrives at the corner every fifteen minutes.",
+   "happy": "The bus is here, and just in time! What perfect timing today!",
+   "sad": "I missed the last bus home. I just sat and cried at the stop.",
+   "angry": "The bus is late every single day! This service is a disgrace!"
+  },
+  {
+   "id": "s15",
+   "stem": "We are going to the beach",
+   "neutral": "The beach is about an hour away by car.",
+   "happy": "We are going to the beach! I cannot wait to feel the sun!",
+   "sad": "We will never go back to our beach. It is not the same without her.",
+   "angry": "You cancelled the beach trip again! I am done making plans with you!"
+  },
+  {
+   "id": "s16",
+   "stem": "She plays the piano beautifully",
+   "neutral": "The piano in the hall was made in nineteen sixty.",
+   "happy": "She plays so beautifully! I could listen to her all night long!",
+   "sad": "She stopped playing the piano after he died. The room fell silent.",
+   "angry": "Stop banging on that piano! I have asked you a hundred times already!"
+  },
+  {
+   "id": "s17",
+   "stem": "He gave me a ring",
+   "neutral": "The ring is made of silver and has a small stone.",
+   "happy": "He gave me a ring! I said yes, and I am the happiest person alive!",
+   "sad": "He gave me a ring and then he left. I still wear it every day.",
+   "angry": "He took back the ring! How dare he treat me like that!"
+  },
+  {
+   "id": "s18",
+   "stem": "The baby is asleep",
+   "neutral": "The baby sleeps for about three hours each afternoon.",
+   "happy": "The baby smiled at me today! My heart is overflowing with joy!",
+   "sad": "The baby is gone. I wake up every night listening for her cry.",
+   "angry": "Do not wake the baby! I told you to be quiet, and you did not listen!"
+  },
+  {
+   "id": "s19",
+   "stem": "We lost the game",
+   "neutral": "The game ended with a score of two to one.",
+   "happy": "We won the game! The whole crowd is cheering our names!",
+   "sad": "We lost the final game. Everything we worked for slipped away.",
+   "angry": "We lost because of your stupid mistake! You threw the whole season away!"
+  },
+  {
+   "id": "s20",
+   "stem": "You are late again",
+   "neutral": "The office opens at eight thirty every weekday morning.",
+   "happy": "You made it just in time! I am so glad you are here!",
+   "sad": "You were late, and I waited alone. I stopped expecting you long ago.",
+   "angry": "You are late again! Do you have any respect for my time at all?"
+  },
+  {
+   "id": "s21",
+   "stem": "The letter arrived this morning",
+   "neutral": "The letter was sent from the city office on Monday.",
+   "happy": "The letter came, and it is good news! I got into the program!",
+   "sad": "The letter said she was gone. I read it again and again in disbelief.",
+   "angry": "The letter is full of lies! I will not accept a single word of it!"
+  },
+  {
+   "id": "s22",
+   "stem": "He is coming home tomorrow",
+   "neutral": "The flight from Boston lands at four in the afternoon.",
+   "happy": "He is coming home tomorrow! I have missed him so very much!",
+   "sad": "He is not coming home tomorrow. He will not be coming home at all.",
+   "angry": "He is coming home after all this time? He has some nerve!"
+  },
+  {
+   "id": "s23",
+   "stem": "They painted the whole fence",
+   "neutral": "The fence runs along the north side of the property.",
+   "happy": "They painted the fence bright yellow! It looks wonderful and cheerful!",
+   "sad": "They painted over the old fence where we wrote our names. It is gone.",
+   "angry": "They painted my fence without asking! That is my property, not theirs!"
+  },
+  {
+   "id": "s24",
+   "stem": "You can see the mountains from here",
+   "neutral": "The mountains are about forty miles to the north.",
+   "happy": "Look at the mountains! This view is the most beautiful thing I have seen!",
+   "sad": "I used to climb those mountains with him. Now I just watch them alone.",
+   "angry": "Those mountains are blocked by your ugly building! Take it down at once!"
+  },
+  {
+   "id": "s25",
+   "stem": "She sold the old car",
+   "neutral": "The car was built in nineteen ninety and runs well.",
+   "happy": "She sold the old car for a great price! We can finally take a holiday!",
+   "sad": "She sold the old car, the last thing her father left her.",
+   "angry": "She sold my car behind my back! I will never trust her again!"
+  },
+  {
+   "id": "s26",
+   "stem": "We are almost there",
+   "neutral": "The next exit is in three miles on the right.",
+   "happy": "We are almost there! I can see the lights of the town!",
+   "sad": "We are almost there, but I wish we were not. I dread what we will find.",
+   "angry": "We are almost there because you took the wrong road! Look at the time!"
+  },
+  {
+   "id": "s27",
+   "stem": "He wrote a long letter",
+   "neutral": "The letter is four pages long and typed on blue paper.",
+   "happy": "He wrote me a long letter! It made me laugh and cry with happiness!",
+   "sad": "He wrote a long letter before he left. I keep it under my pillow.",
+   "angry": "He wrote a long letter full of excuses! I am not interested in any of them!"
+  },
+  {
+   "id": "s28",
+   "stem": "The garden looks different",
+   "neutral": "The garden has roses, tulips, and a small pond.",
+   "happy": "The garden looks wonderful! All the flowers are blooming at once!",
+   "sad": "The garden looks empty now. Nothing grows where she used to kneel.",
+   "angry": "Who trampled my garden? Every single flower is ruined!"
+  },
+  {
+   "id": "s29",
+   "stem": "You promised to help me",
+   "neutral": "The volunteers will meet at the school at ten.",
+   "happy": "You helped me, and it worked! I cannot thank you enough!",
+   "sad": "You promised to help me. I waited, but I was truly on my own.",
+   "angry": "You promised to help me and then vanished! You are completely unreliable!"
+  },
+  {
+   "id": "s30",
+   "stem": "They closed the old library",
+   "neutral": "The library holds about forty thousand books.",
+   "happy": "They reopened the library! It is bigger and brighter than ever!",
+   "sad": "They closed the old library. I spent my whole childhood in those rooms.",
+   "angry": "They closed the library to build a parking lot! What a stupid decision!"
+  },
+  {
+   "id": "s31",
+   "stem": "She told him the truth",
+   "neutral": "The report states the facts of the case clearly.",
+   "happy": "She told him the truth, and he forgave her! I am so relieved and glad!",
+   "sad": "She told him the truth, and he never spoke to her again.",
+   "angry": "She told him my secret! I trusted her, and she betrayed me!"
+  },
+  {
+   "id": "s32",
+   "stem": "The coffee is cold",
+   "neutral": "The coffee machine is located on the second floor.",
+   "happy": "The coffee is perfect! This is exactly what I needed this morning!",
+   "sad": "The coffee went cold while I stared at the empty chair.",
+   "angry": "The coffee is cold again! Does anyone in this place do their job?"
+  },
+  {
+   "id": "s33",
+   "stem": "He sings in the shower",
+   "neutral": "The shower is on the first floor beside the bedroom.",
+   "happy": "He sings in the shower, and it is hilarious! Everyone is laughing!",
+   "sad": "He no longer sings in the shower. The whole house has gone quiet.",
+   "angry": "Stop singing in the shower! It is six in the morning, for goodness sake!"
+  },
+  {
+   "id": "s34",
+   "stem": "You are in my seat",
+   "neutral": "Seat twelve is near the window on the left side.",
+   "happy": "You are in my seat, but that is fine! Sit down, and enjoy the ride!",
+   "sad": "You are in my seat. Honestly, I have no strength left to argue.",
+   "angry": "You are in my seat! Get up right now, or I will call someone!"
+  },
+  {
+   "id": "s35",
+   "stem": "The store closes at nine",
+   "neutral": "The store sells groceries, clothing, and household goods.",
+   "happy": "The store is open late tonight! We can still get everything we need!",
+   "sad": "The store closes at nine. After that, the whole street goes dark and still.",
+   "angry": "The store closed in my face! I drove all the way here for nothing!"
+  },
+  {
+   "id": "s36",
+   "stem": "They built a bridge",
+   "neutral": "The bridge is nearly a mile long and made of steel.",
+   "happy": "They built a bridge, and now our town is connected! What a great day!",
+   "sad": "They built a bridge over the village that was lost. Nobody remembers it.",
+   "angry": "They built the bridge right through my land! This is absolute robbery!"
+  },
+  {
+   "id": "s37",
+   "stem": "The phone rang twice",
+   "neutral": "The phone is on the desk beside the lamp.",
+   "happy": "The phone is ringing! I bet it is the good news we waited for!",
+   "sad": "The phone rang twice, and then it fell silent. Nobody was there.",
+   "angry": "The phone rang all night long! Whoever it was, I will find out!"
+  },
+  {
+   "id": "s38",
+   "stem": "She left the door open",
+   "neutral": "The door leads out to the courtyard behind the house.",
+   "happy": "The door is open, and the sun is pouring in! What a glorious day!",
+   "sad": "She left the door open, hoping he would return. He never came back.",
+   "angry": "You left the door open again! The whole house is freezing cold now!"
+  },
+  {
+   "id": "s39",
+   "stem": "We watched the sunrise",
+   "neutral": "The sun rises at six fifteen in the middle of summer.",
+   "happy": "We watched the sunrise together! It was the most magical morning of my life!",
+   "sad": "We watched the sunrise, and I knew it was our last one together.",
+   "angry": "We watched the sunrise for nothing! The tour guide never even showed up!"
+  },
+  {
+   "id": "s40",
+   "stem": "He fixed the roof",
+   "neutral": "The roof was replaced in the spring of last year.",
+   "happy": "He fixed the roof! Now we can finally sleep without a single drip!",
+   "sad": "He fixed the roof the day before the storm took everything away.",
+   "angry": "He fixed the roof badly! Water is pouring into my living room!"
+  }
+ ]
+}

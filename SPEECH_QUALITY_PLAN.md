@@ -1,10 +1,10 @@
 # CloneVoice — Speech Quality & Expressiveness Improvement Plan
 
-> **Status**: 🟡 In Progress (0 of 8 Phases complete; S0.1 and S1.1 to S1.4 landed in part, see §5.1)
+> **Status**: 🟡 In Progress (0 of 8 Phases complete; S0.1, S0.2 and S1.1 to S1.4 landed in part, see §5.1)
 > **Scope**: Backend speech pipeline — make cloned voices closer to the real speaker and make the
 > speech react to the text (punctuation, emotion, emphasis). Frontend work is listed per phase but
 > starts only after the backend gate (CLAUDE.md §2).
-> **Last Reviewed**: 2026-10-10 (S0.1, S1.1 to S1.4 landed in part) · **Decisions Q1–Q3 recorded** (§7)
+> **Last Reviewed**: 2026-10-10 (S0.1, S0.2, S1.1 to S1.4 landed in part) · **Decisions Q1–Q3 recorded** (§7)
 > **Source of truth for baseline**: `backend/services/tts_pipeline.py`, `text_chunking.py`,
 > `audio_processing.py`, `sv2tts/`, `PREPROCESSING_STUDY.md`, `HARDENING_PLAN.md`.
 
@@ -85,7 +85,7 @@ Automatic metrics guide development; **only the listening test decides release.*
 
 | Phase | Name | Status | Commit | Completed |
 |---|---|:---:|:---:|:---:|
-| **S0** | Evaluation harness & baseline | 🟡 | `cd7ec07` (S0.1) | — |
+| **S0** | Evaluation harness & baseline | 🟡 | `cd7ec07` (S0.1), `f4d8cbe` (S0.2) | — |
 | **S1** | Text front-end & punctuation-aware prosody (current model) | 🟡 | `92b71c8` (S1.1, S1.4), `8a43fe0` (S1.2, S1.3) | — |
 | **S2** | Voice-profile quality (embedding & enrollment) | 🔴 | — | — |
 | **S3** | Vocoder & output polish | 🔴 | — | — |
@@ -109,7 +109,7 @@ own vocoder).
 | **S1.3** Punctuation-aware pauses | 🟡 Partial | `8a43fe0` | 2026-10-10 | `TTS_PAUSE_SECONDS` (validated table, partial overrides, env-JSON) replaces `TTS_CHUNK_PAUSE_SECONDS`; pause follows the previous segment's ending: statement 0.40, question/exclamation 0.45, ellipsis 0.60, clause 0.25, paragraph 0.70, comma-cut 0.12, word-cut 0.05. 32 new tests (971 passed, 1 skipped, 11 warnings; baseline warnings only). Real weights: typed segments and gaps 0.40/0.45/0.45/0.70 s confirmed, audio finite, no 900-frame truncation | (1) The plan's **comma pause inside a chunk** is not done: it needs token-to-frame alignment inside Tacotron, and Tacotron already renders commas itself. Decide from S0 data. (2) The default values are the plan's proposals, **not tuned**: tune against listening tests. (3) Audio is now longer than before for multi-sentence text (0.15 s gaps became 0.40+ s); the 500-char limit and timeouts were checked by the suite only, not under real load. (4) Operators: `TTS_CHUNK_PAUSE_SECONDS` is silently ignored now |
 | **S1.1** Text normalisation | 🟡 Partial | `92b71c8` | 2026-10-10 | New `services/text_normalization.py` (pure, English, table-driven, runs before the cleaners so it can use case): times (`10:30 PM`), `a.m.`/`p.m.`, ISO dates, fractions, units and `°C`, `% & @ # + = /`, emails and URLs read aloud, `e.g.`/`i.e.`/`etc.`/`vs.`, acronyms spelled by letter name (FBI, TV, HTML, CPUs) while words (NASA) and shouted words (NO, STOP, WHY) are left alone, dotted initials (`U.S.A.`). One `clean_text` is now used by both the pipeline and the request validator, so the API accepts exactly what the pipeline can say (`$4.50`, `50%`, `Tom & Jerry`, `me@x.com` were 422 before; emoji, `[ ]`, `{ }`, control chars still are). 90 new tests; 1061 passed, 1 skipped, 11 warnings (baseline). Real weights: the model receives `at ten thirty pee em the eff bee eye paid four dollars, fifty cents and said no!` for the test sentence | **Whether it sounds right is unverified**: no listening test or WER (needs S0.2/S0.4). The spelled-letter names ("eff bee eye") are my choice and may need tuning. The acronym rule is a heuristic (listed acronyms + all-consonant caps; ambiguous words such as IT, WHO, US are never spelled). Not done: roman numerals, `10/10/2024` dates (ambiguous, deliberately not guessed), currency other than `$` and `£` (the existing number code), currency words after the amount |
 | **S1.4** Wider input charset | 🟡 Partial | `92b71c8` | 2026-10-10 | `*emphasis*` is accepted and the markers removed; the validator change above covers the symbols. Audit correction recorded in §2 | The emphasis **hint is not recorded or used**: ALL-CAPS and `*stress*` are lowercased/stripped, so emphasis has no effect until S5. `[laugh]`-style tags stay rejected until S6.2 |
-| S0.2 Corpus & expressive sentence set | 🔴 | — | — | — | — |
+| **S0.2** Corpus & expressive sentence set | 🟡 Partial | `f4d8cbe` | 2026-10-10 | `backend/eval_data/expressive_sentences.json`: 40 groups (stem for `.`/`?`/`!` plus a neutral, happy, sad and angry sentence), every text accepted by the API validator. `backend/prepare_eval_corpus.py` builds the scratch corpus from LibriSpeech test-clean (CC BY 4.0; already cached locally): per speaker one 10-30 s reference and five held-out 3-20 s clips, plus `groups.json` and a provenance `manifest.json`. Run for real: **20 speakers, 10 `adult_low_f0` and 10 `adult_high_f0`** (median-F0 bands, split at 165 Hz; not gender labels: LibriSpeech has none in the parquet). The study CLI now reads the fixture (`--stems`, `--sentences`). 21 new tests; 1082 passed, 1 skipped, 11 warnings (baseline) | **No child or elderly speech**: no licensed source is verified yet. Candidates to check (access and licence are *not* confirmed): Mozilla Common Voice (CC0, has age and gender metadata, but its youngest age band is teens, not children), and child-speech corpora, which usually carry restrictive licences and consent duties. Until then every per-group result is adult-only and says nothing about children or the elderly. The emotion sentences are written for the emotion metric (S0.3), which does not exist yet |
 | S0.3 Punctuation + emotion metrics | 🟡 Partial | `cd7ec07` | 2026-10-10 | Punctuation contrast (`?` final-pitch rise, `!` pitch range + energy) is implemented and tested; the CLI uses 5 built-in sentences | Emotion classifier metric; the full 40-sentence set (S0.2) |
 | S0.4 Baseline recorded in `SPEECH_QUALITY_STUDY.md` | 🔴 | — | — | — | Needs real speech |
 
@@ -128,7 +128,7 @@ energy), and S0.4 sets minimum effect sizes from the measured baseline.
 | Milestone | Work | Files |
 |---|---|---|
 | **S0.1** 🟡 | `evaluate_synthesis.py`: seeded test set, runs the pipeline, computes SECS (independent encoder), WER (Whisper), predicted MOS. Same pattern as `evaluate_preprocessing.py` (scratch data, never committed). | `backend/evaluate_synthesis.py` |
-| **S0.2** | Test corpus: ~20 adult speakers (LibriSpeech, as in the preprocessing study) **plus child and elderly speakers from sources whose licence permits evaluation use (verify each)**, plus an **expressive sentence set** — 40 sentences, each written in neutral/happy/sad/angry/question/exclamation variants, with the intended label. | scratch dir; sentence list committed as a small text fixture |
+| **S0.2** 🟡 | Test corpus: ~20 adult speakers (LibriSpeech, as in the preprocessing study) **plus child and elderly speakers from sources whose licence permits evaluation use (verify each)**, plus an **expressive sentence set** — 40 sentences, each written in neutral/happy/sad/angry/question/exclamation variants, with the intended label. | scratch dir; sentence list committed as a small text fixture |
 | **S0.3** 🟡 | Punctuation-contrast and emotion-classifier metrics (§4). | same tool |
 | **S0.4** | Record baseline numbers in a new `SPEECH_QUALITY_STUDY.md` (decision-record style, like `PREPROCESSING_STUDY.md`). Confirm §4 targets. | doc |
 
