@@ -1418,6 +1418,13 @@ The `<Toaster>` from `sonner` sat in the root providers, so every public page do
 **Open items from FE-UX36**
 1. The CSP reporting decision, the CI `visual` result, the manual U6.3, a real Safari pass, and the four §4.7 deviations in UX plan §9.2. The Next build table still lists `/login` at 161 kB first-load; Lighthouse transfer size is the gate and is what dropped.
 
+### FE-UX37 — Decisions of record and implementation plan (2026-10-10, branch `docs/FE-UX37-decision-plan`, commit `58eb1e2`; docs only)
+
+New UX plan §12 settles the 15 open questions (reason, loopholes, guard) and orders four milestones: M1 focus on route change, radii, CLS ceiling; M2 terms page and server-driven retention; M3 CSP report endpoint then enforcement; M4 CI-sourced visual baselines. **Proposed, awaiting owner approval; no code changed.** Owner tasks: screen-reader pass, real Safari, name check, legal text.
+
+**Open items from FE-UX37**
+1. Owner approval of §12, then M1-M4 in order.
+
 ---
 
 ## 9. Definition of Done (release checklist)

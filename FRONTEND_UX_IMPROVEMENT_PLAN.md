@@ -643,3 +643,63 @@ The owner has no brand colour or logo and asked for decisions on six points. Eac
 
 **Implemented** (`frontend/app/layout.tsx`, `frontend/app/fonts/`): Plex Sans 400/500/600 and Plex Mono 400, Latin subset, self-hosted with `next/font/local` (`display: swap`, automatic size-adjusted fallback so swapping does not shift layout), licence file included. Mono loads only on pages that use it (`preload: false`) and is applied to the character counter and the recording clock with `tabular-nums`. Styling follows §4.4-§4.8: flat surfaces, hairline dividers, one accent, a single visible `focus-visible` ring, no shadows or gradients.
 **Measured cost** (Lighthouse, median of 5, public routes, local): LCP 2.1-2.3 s (it was 1.8-2.0 s before the fonts, `FRONTEND_IMPLEMENTATION_PLAN.md` FE-P7l), JS 178-194 KB (within 200 KB; about +1 KB), CLS 0.000. All within budget; the LCP margin to the 2.5 s limit is now about 0.2-0.4 s, so watch the first CI run. If it flaps, first drop the 500 weight (use 400/600), then raise `PERF_RUNS`.
+
+---
+
+## 12. Decisions of record and implementation plan (2026-10-10, FE-UX37)
+
+Every checklist item in §9.1 is met except the two that need a person (3, and real Safari in 6). This section settles the 15 open questions with the reason, the loopholes considered and the guard that keeps each decision from breaking later. **Status: proposed, awaiting owner approval; nothing in it is implemented yet.** Facts used: the backend already has `TERMS_URL` and the upload form already links it (`backend/api/terms.py:14`, `components/upload-voice-form.tsx:236`); `CSP_ENFORCE` is read per request (`middleware.ts`), so enforcement can be switched without a rebuild; the CSP allows two `sonner` style hashes that a test recomputes (`lib/csp.ts`); the CI `visual` job runs on an unpinned `ubuntu-latest` runner while the baselines were made locally (`.github/workflows/frontend.yml:69`).
+
+### 12.1 Decisions
+
+| # | Question | Decision | Why this and not the alternative | Loopholes closed |
+|---|---|---|---|---|
+| 1 | CSP reporting and enforcement | **Staged:** add a same-origin report endpoint, run report-only one release, then enforce | Enforcing blind can blank the app on one wrong origin; a third-party reporter adds a vendor and a `connect-src` hole; "no reporting" leaves Safari ignoring the policy (FE-UX27) | See 12.2 M3 |
+| 2 | Alert icon | **Accept: no icon** | Messages already state the outcome in words with `alert`/`status` roles, so colour is never the only signal (WCAG 1.4.1); an icon redoes about 20 baselines and adds decoration §4.9 warns about | Rule recorded: Alert copy must always say the outcome; a test fails on an empty Alert |
+| 3 | Fourth Alert tone | **Accept three tones**; amend §4.7 | notice and info look identical today | A new tone needs a real use and a contrast row in `theme.test.ts` |
+| 4 | Card | **Accept: none**; amend §4.7 | §4.9: a Card primitive invites wrapping every block | Build only when a second use appears |
+| 5 | Waveform file | **Accept**; amend §4.7 | splitting moves code, adds a chunk, fixes nothing | none needed |
+| 6 | Radii | **Change:** `borderRadius` in `tailwind.config.ts` so `rounded` = 6 px and `rounded-lg` = 10 px (§4.4) | one config line makes code match the spec and gives one swap point; the 2 px change is small and gets dearer with every new baseline | the style lint already allows only `rounded`, `rounded-lg`, `rounded-full`; add an assertion on the config values |
+| 7 | Focus on route change | **Yes:** focus the page `h1` after a path change | FE-UX33 showed focus stays where the old control was, so keyboard and screen-reader users start mid-page | See 12.2 M1 |
+| 8 | First-run layout shift | **Skip the fix; add a ceiling** | only brand-new users, only while the footer is on screen; a reserved area costs everyone | e2e fails if first-run CLS exceeds 0.2 (now 0.17), so it cannot silently get worse |
+| 9 | Screen-reader pass | **Checklist written; a person runs it before public launch** (private beta may proceed) | cannot be automated or run on this host | `frontend/A11Y_MANUAL_CHECKLIST.md` with a dated sign-off table; §9.1 item 3 stays "Not done" until signed |
+| 10 | Real Safari | **Manual script on a real Mac and iPhone**, plus the existing WebKit HTTPS smoke | real Safari records a format the server rejects (offers upload instead) and needs HTTPS for the `Secure` cookie | same checklist file; the WebKit smoke stays in CI |
+| 11 | CI visual job | **Yes; CI is the source of truth for baselines** | local fonts differ from the runner, so local baselines would fail there | See 12.2 M4 |
+| 12 | Name and trademark | **Owner task before public launch** | legal, cannot be settled by code | the product name sits in 3 source files; move it to one constant so a rename is a one-line change |
+| 13 | Terms page | **Build a versioned `/terms` page; owner or counsel supplies the text** | the backend side already exists (`TERMS_URL`); invented legal text can create commitments | See 12.2 M2 |
+| 14 | Retention shown in the app | **Yes:** expose `output_retention_days` on `GET /terms` | the hard-coded "30 days" in `history-list.tsx:49` is wrong the day the setting changes | See 12.2 M2 |
+| 15 | Old routes | **Keep the 308 redirects permanently** | zero cost, protects emailed and bookmarked links | a unit test pins both redirects with their query strings |
+
+### 12.2 Milestones, in order
+
+Each follows the repo SOP (branch, tests with zero failures, plan sync, merge to `main`). Items 9, 10, 12 and the legal text of 13 are owner tasks and are not milestones.
+
+**M1 — Small UX corrections (decisions 6, 7, 8, 2-5)**
+- Focus management: a client component in the app shell watches `usePathname()`; on a change after the first render it focuses the page `h1` (`tabIndex={-1}`, `preventScroll`). It must not run for query-only changes, must not take focus while a dialog is open, and must not run on the initial load. `h1:focus` gets no outline (it is not interactive).
+- Radii in `tailwind.config.ts`; regenerate and review the baselines.
+- First-run CLS ceiling in `e2e/layout-shift.spec.ts`; amend §4.7 and §4.4 text.
+- **Tests:** unit (focus moves on path change, not on a query change, not while a dialog is open); the keyboard e2e must pass with the `focusTop()` workaround deleted, which proves the fix; axe e2e; baseline review by eye.
+- **Rollback:** revert one commit; no data or contract involved.
+
+**M2 — Terms and retention (decisions 13, 14)**
+- Backend (first, per the repo rule): `TermsOut.output_retention_days: float | None` (null when the setting is 0 or negative, meaning kept until deleted); refresh `frontend/contract/openapi.json`; backend tests for 30, 0 and a fractional value.
+- Frontend: `/terms` public page rendering a versioned constant; footer link; History reads `output_retention_days` from the existing `["terms"]` query and **shows no number when it is missing** (older backend, failed request); Voices states that samples stay until the voice is deleted (§11.3).
+- **Guards:** a test fails if the page's version differs from `TERMS_VERSION` in `backend/core/config.py`; `/terms` joins the perf and axe route lists; `TERMS_URL` is set only after sign-off, so until then the consent line keeps "terms are being finalised".
+- **Rollback:** the new field is optional for the frontend, so either side can be reverted alone.
+
+**M3 — CSP reporting, then enforcement (decision 1)**
+1. Same-origin route handler `POST /csp-report`, outside the nonce matcher: accepts `application/csp-report` and `application/reports+json`; rejects anything else with 204 (no signal to a probe); caps the body at 4 KB; per-IP in-memory rate limit (best effort, per instance); logs only `effective-directive`, blocked origin plus path (query and fragment stripped), document path, and truncated, control-character-stripped strings, so a hostile payload cannot inject log lines or leak tokens; never stores or echoes anything.
+2. Add `report-uri /csp-report` and a `Reporting-Endpoints` / `report-to` pair to the policy builder; `connect-src` is unchanged because the endpoint is same-origin.
+3. **Release 1:** deploy still report-only; review the logs. **Exit to enforce:** a full release cycle with no unexplained violation.
+4. **Release 2:** set `CSP_ENFORCE=1` in the host environment; reporting stays on. **Rollback:** set `CSP_ENFORCE=0`; no rebuild.
+- **Tests:** unit for the scrubber (newline injection, a URL with a token in its fragment, oversize, wrong type, malformed JSON); `csp.test.ts` extended for the new directives; the existing enforcing-CSP e2e must stay clean in Chromium and Firefox; WebKit's "no report-to" console note disappears and the spec's filter for it is removed.
+
+**M4 — CI baselines (decision 11)**
+- Pin the runner (`ubuntu-24.04`, not `latest`) and the Playwright version in `frontend.yml`.
+- New manual workflow `visual-update.yml` (`workflow_dispatch`): regenerates snapshots on that runner and uploads them as an artifact. **It never commits.** The owner downloads, reviews by eye and commits, so a regression cannot be blessed automatically.
+- Prerequisite: `gh auth login` on this host so results can be read; until then CI outcomes are not verified from here.
+
+### 12.3 Residual risks that remain after all of this
+1. Real assistive-technology behaviour and real Safari stay unverified until a person signs the checklist.
+2. The report endpoint's rate limit is per instance, so it is best effort if the app scales out; the 4 KB cap and fixed-field logging are what bound the damage.
+3. Legal text, the name check and the retention promise are owner and counsel decisions; the code only ensures the page cannot silently disagree with the backend.
