@@ -65,9 +65,12 @@ jobs:
   # Visual-regression baselines (UX plan U7.2). The API is mocked, so no backend is needed.
   # Advisory (continue-on-error) until a first CI run shows the committed baselines, which were
   # generated on a local Ubuntu host, match this runner; then remove continue-on-error.
-  # Intentional UI changes: `npm run test:visual -- --update-snapshots`, review the diff by eye.
+  # Baselines come from CI, not from a laptop: run the manual `visual-update` workflow, download
+  # its artifact, review the images by eye and commit them. Then remove continue-on-error.
   visual:
-    runs-on: ubuntu-latest
+    # Pinned (not `latest`) so the screenshots do not change under us; the `visual-update` workflow
+    # uses the identical image and Node version to regenerate them (tests/ci-workflows.test.ts).
+    runs-on: ubuntu-24.04
     continue-on-error: true
     defaults:
       run:

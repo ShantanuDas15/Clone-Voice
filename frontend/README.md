@@ -89,3 +89,21 @@ errors and non-"good" web vitals are sent.
 - `lib/api/http.ts` — Axios instance (`withCredentials`, timeouts, errors → `ApiError`).
 - `lib/query.ts` — TanStack Query client; retries only idempotent GETs (R5).
 - `mocks/` — MSW handlers for every endpoint; tests never hit a real API.
+
+## Visual regression
+
+`npm run test:visual` compares screenshots of every public and signed-in route (375, 768, 1280 and
+1920 px, light and dark; the API is mocked, so no backend is needed) with the images in
+`visual/__screenshots__`. Screenshots only match on the machine that made them, because fonts and
+anti-aliasing differ per OS, so **the committed baselines come from CI, not from a laptop**:
+
+1. Run the manual **visual-update** workflow (Actions tab, "Run workflow"). It regenerates the
+   images on the same pinned runner and Node version as the `visual` job, runs the suite a second
+   time to prove they are stable, and uploads them as the `visual-baselines` artifact. It never
+   commits.
+2. Download the artifact, **look at the images**, and replace `visual/__screenshots__` with them in
+   a commit. A diff you did not expect is a regression, not something to accept.
+3. Locally, `npm run test:visual` may report small font differences against CI baselines; that is
+   expected. Use it to find real layout changes, and let CI decide. After the first reviewed CI
+   baselines are committed, remove `continue-on-error` from the `visual` job in
+   `.github/workflows/frontend.yml` so it gates merges.
