@@ -1425,6 +1425,13 @@ New UX plan §12 settles the 15 open questions (reason, loopholes, guard) and or
 **Open items from FE-UX37**
 1. Owner approval of §12, then M1-M4 in order.
 
+### FE-UX38 — M1: heading focus on navigation, radii tokens, first-run CLS ceiling (2026-10-10, branch `feat/FE-UX38-focus-radii-cls`, commit `34ed2ef`)
+
+UX plan §12 M1 (decisions 2-8). **Focus:** `components/route-focus.tsx`, mounted in the app shell, focuses `main h1` (`tabIndex=-1`, no scroll, no ring) after a client-side path change; not on first load, not for an unchanged path, not under an open modal, not when the new page put focus inside `main`. **Bug caught by the real browser:** the first version also skipped when *any* element had focus, but the header link just followed keeps focus across the navigation, so the move never happened (e2e failed on both browsers; unit test added for it). **Radii:** `borderRadius: { DEFAULT: 6px, lg: 10px }` (§4.4); the old baselines still passed inside the 0.2% tolerance, so all 72 were deleted and regenerated and one viewed. **CLS:** new e2e, first-run user under 0.2 at 320/360/412 px. **Tests:** `route-focus` (7), radius token assertion; `npm test` 492 passed; real backend, Chromium and Firefox: `keyboard-flows`, `layout-shift`, `a11y` all pass (Firefox skips the Chromium-only layout-shift specs); visual 104/104. Typecheck, lint, prettier clean.
+
+**Open items from FE-UX38**
+1. M2 (terms page and retention), M3 (CSP reporting then enforcement), M4 (CI-sourced baselines); owner tasks: screen-reader pass, real Safari, name check, legal text. The new baselines were made locally and will differ in CI until M4.
+
 ---
 
 ## 9. Definition of Done (release checklist)

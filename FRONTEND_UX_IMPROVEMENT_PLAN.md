@@ -648,7 +648,7 @@ The owner has no brand colour or logo and asked for decisions on six points. Eac
 
 ## 12. Decisions of record and implementation plan (2026-10-10, FE-UX37)
 
-Every checklist item in §9.1 is met except the two that need a person (3, and real Safari in 6). This section settles the 15 open questions with the reason, the loopholes considered and the guard that keeps each decision from breaking later. **Status: proposed, awaiting owner approval; nothing in it is implemented yet.** Facts used: the backend already has `TERMS_URL` and the upload form already links it (`backend/api/terms.py:14`, `components/upload-voice-form.tsx:236`); `CSP_ENFORCE` is read per request (`middleware.ts`), so enforcement can be switched without a rebuild; the CSP allows two `sonner` style hashes that a test recomputes (`lib/csp.ts`); the CI `visual` job runs on an unpinned `ubuntu-latest` runner while the baselines were made locally (`.github/workflows/frontend.yml:69`).
+Every checklist item in §9.1 is met except the two that need a person (3, and real Safari in 6). This section settles the 15 open questions with the reason, the loopholes considered and the guard that keeps each decision from breaking later. **Status: approved by the owner's repeated instruction on 2026-10-10; M1 done (FE-UX38), M2-M4 not started.** Facts used: the backend already has `TERMS_URL` and the upload form already links it (`backend/api/terms.py:14`, `components/upload-voice-form.tsx:236`); `CSP_ENFORCE` is read per request (`middleware.ts`), so enforcement can be switched without a rebuild; the CSP allows two `sonner` style hashes that a test recomputes (`lib/csp.ts`); the CI `visual` job runs on an unpinned `ubuntu-latest` runner while the baselines were made locally (`.github/workflows/frontend.yml:69`).
 
 ### 12.1 Decisions
 
@@ -670,6 +670,8 @@ Every checklist item in §9.1 is met except the two that need a person (3, and r
 | 14 | Retention shown in the app | **Yes:** expose `output_retention_days` on `GET /terms` | the hard-coded "30 days" in `history-list.tsx:49` is wrong the day the setting changes | See 12.2 M2 |
 | 15 | Old routes | **Keep the 308 redirects permanently** | zero cost, protects emailed and bookmarked links | a unit test pins both redirects with their query strings |
 
+**Amendments to §4 from decisions 2-6 (FE-UX38):** §4.7 `Alert` has three tones (danger, success, neutral) and no icon; there is no `Card` until a second use appears; `Waveform` lives in `components/take.tsx`. §4.4 radii are shipped as the tokens `rounded` = 6 px and `rounded-lg` = 10 px (`tailwind.config.ts`, asserted in `tests/theme.test.ts`).
+
 ### 12.2 Milestones, in order
 
 Each follows the repo SOP (branch, tests with zero failures, plan sync, merge to `main`). Items 9, 10, 12 and the legal text of 13 are owner tasks and are not milestones.
@@ -678,7 +680,7 @@ Each follows the repo SOP (branch, tests with zero failures, plan sync, merge to
 - Focus management: a client component in the app shell watches `usePathname()`; on a change after the first render it focuses the page `h1` (`tabIndex={-1}`, `preventScroll`). It must not run for query-only changes, must not take focus while a dialog is open, and must not run on the initial load. `h1:focus` gets no outline (it is not interactive).
 - Radii in `tailwind.config.ts`; regenerate and review the baselines.
 - First-run CLS ceiling in `e2e/layout-shift.spec.ts`; amend §4.7 and §4.4 text.
-- **Tests:** unit (focus moves on path change, not on a query change, not while a dialog is open); the keyboard e2e must pass with the `focusTop()` workaround deleted, which proves the fix; axe e2e; baseline review by eye.
+- **Tests:** unit (focus moves on path change, not on a query change, not while a dialog is open); the keyboard e2e asserts the heading is focused after following a nav link and that Tab then continues inside `main` (**correction:** the earlier note said `focusTop()` could be deleted; it cannot, because the nav now sits *behind* the focused heading, so reaching it by Tab still needs a reset in Firefox); axe e2e; baseline review by eye.
 - **Rollback:** revert one commit; no data or contract involved.
 
 **M2 — Terms and retention (decisions 13, 14)**
