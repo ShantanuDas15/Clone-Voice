@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { PageHeader } from "@/components/ui/page-header";
 import { HistoryList } from "@/components/history-list";
 
 export const metadata: Metadata = { title: "History" };
@@ -7,7 +8,7 @@ export const metadata: Metadata = { title: "History" };
 export default function HistoryPage() {
   return (
     <section className="max-w-xl">
-      <h1 className="mb-4 text-2xl font-bold">History</h1>
+      <PageHeader title="History">Replay or download what you have generated.</PageHeader>
       <HistoryList />
     </section>
   );

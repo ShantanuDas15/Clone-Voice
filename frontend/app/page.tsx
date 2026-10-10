@@ -12,32 +12,65 @@ const PROMISES = [
   "Generated speech is labelled as AI-generated in the app.",
 ] as const;
 
+// The product's real sequence (upload or record, then type, then play or download). No claim
+// about quality, speed or languages is made here.
+const STEPS = [
+  {
+    title: "Add a sample",
+    body: "Upload or record 10 to 30 seconds of a voice you have the right to use.",
+  },
+  { title: "Type your text", body: "Choose the voice and write what it should say." },
+  { title: "Play or download", body: "Listen right away, replay it later from your history." },
+] as const;
+
 export default function HomePage() {
   return (
-    <section className="py-12">
-      <h1 className="text-[2rem] font-bold leading-[2.375rem] tracking-tight sm:text-[2.75rem] sm:leading-[3rem]">
-        Clone a voice. Say anything.
-      </h1>
-      <p className="mt-4 max-w-prose text-lg text-muted-foreground">
-        Upload or record 10 to 30 seconds of a voice you have the right to use, then turn any text
-        into speech in that voice.
-      </p>
-      <div className="mt-8 flex flex-wrap gap-3">
-        <Link href="/signup" className={buttonVariants()}>
-          Create account
-        </Link>
-        <Link href="/login" className={buttonVariants({ variant: "secondary" })}>
-          Sign in
-        </Link>
-      </div>
-      <h2 className="mt-14 text-xl font-semibold">Before you start</h2>
-      <ul className="mt-3 max-w-prose divide-y divide-border border-y border-border">
-        {PROMISES.map((p) => (
-          <li key={p} className="py-3">
-            {p}
-          </li>
-        ))}
-      </ul>
-    </section>
+    <>
+      <section className="rounded-lg bg-muted px-6 py-14 text-center sm:py-20">
+        <h1 className="mx-auto max-w-2xl text-[2rem] font-semibold leading-[2.375rem] tracking-tight sm:text-5xl sm:leading-[3.25rem]">
+          Clone a voice. Say anything.
+        </h1>
+        <p className="mx-auto mt-5 max-w-xl text-lg text-muted-foreground">
+          Upload or record 10 to 30 seconds of a voice you have the right to use, then turn any text
+          into speech in that voice.
+        </p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link href="/signup" className={buttonVariants()}>
+            Create account
+          </Link>
+          <Link href="/login" className={buttonVariants({ variant: "secondary" })}>
+            Sign in
+          </Link>
+        </div>
+      </section>
+
+      <section aria-labelledby="how" className="mt-16">
+        <h2 id="how" className="text-xl font-semibold tracking-tight">
+          How it works
+        </h2>
+        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          {STEPS.map((s, i) => (
+            <div key={s.title} className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-sm font-medium text-primary">Step {i + 1}</p>
+              <h3 className="mt-2 font-semibold">{s.title}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="start" className="mt-16">
+        <h2 id="start" className="text-xl font-semibold tracking-tight">
+          Before you start
+        </h2>
+        <ul className="mt-5 divide-y divide-border rounded-lg border border-border bg-surface">
+          {PROMISES.map((p) => (
+            <li key={p} className="px-5 py-3.5">
+              {p}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </>
   );
 }

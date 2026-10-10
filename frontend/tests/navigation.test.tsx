@@ -45,7 +45,8 @@ describe("route layout", () => {
   it("has one page per job and none of the old ones", () => {
     for (const route of ["generate", "voices", "history", "account"]) {
       const src = readFileSync(path.join(root, "app/(app)", route, "page.tsx"), "utf8");
-      expect(src.match(/<h1\b/g), `${route} has exactly one h1`).toHaveLength(1);
+      // The h1 comes from PageHeader (one per page, asserted in page-chrome.test.tsx) or is literal.
+      expect(src.match(/<h1\b|<PageHeader\b/g), `${route} has exactly one h1`).toHaveLength(1);
     }
     for (const old of ["dashboard", "profile"]) {
       expect(() => readFileSync(path.join(root, "app/(app)", old, "page.tsx"))).toThrow();
