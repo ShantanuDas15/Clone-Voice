@@ -28,6 +28,12 @@ class Generation(Base):
     duration_seconds = Column(Float, nullable=True)
     tts_metadata = Column(JSON_TYPE, default=dict)
     status = Column(String(50), nullable=False, default="completed")
+    # SPEECH_QUALITY_PLAN.md S7.1: which speech engine produced the audio (or, on a failed row,
+    # was asked to). NULL on rows from before this was recorded. ``engine_fallback_from`` names
+    # the engine that was unavailable when the in-process fallback served the request instead.
+    engine = Column(String(50), nullable=True)
+    engine_version = Column(String(50), nullable=True)
+    engine_fallback_from = Column(String(50), nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

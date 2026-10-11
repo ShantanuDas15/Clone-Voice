@@ -35,7 +35,7 @@ router = APIRouter()
 
 
 def _record_failed_generation(
-    db: Session, user_id, voice_profile_id, text: str
+    db: Session, user_id, voice_profile_id, text: str, engine: Optional[str] = None
 ) -> None:
     """Persist a `status="failed"` audit row for an inference error.
 
@@ -51,6 +51,7 @@ def _record_failed_generation(
         output_audio_path=None,
         duration_seconds=None,
         status="failed",
+        engine=engine,
     )
     try:
         db.add(failed_generation)
@@ -70,6 +71,16 @@ def _remove_quietly(path: str) -> None:
         os.remove(path)
     except OSError:
         logger.exception("Failed to remove orphaned output: %s", path)
+
+
+def _engine_headers(generation: Generation) -> dict:
+    """Response headers saying which engine spoke, and whether it was the backup."""
+    headers = {}
+    if generation.engine:
+        headers["X-Voice-Engine"] = generation.engine
+    if generation.engine_fallback_from:
+        headers["X-Voice-Engine-Fallback"] = generation.engine_fallback_from
+    return headers
 
 
 def _persist_generation(db: Session, generation: Generation) -> None:
@@ -175,9 +186,10 @@ async def synthesize(
     )
 
     try:
-        out_path, duration = await run_inference_pipeline(
+        result = await run_inference_pipeline(
             req.text, embedding, str(user_id), **pipeline_extra
         )
+        out_path, duration = result
     except InferenceQueueFullError:
         logger.warning(
             "Inference queue full — rejecting synthesis request — "
@@ -196,7 +208,12 @@ async def synthesize(
             profile_id,
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, user_id, profile_id, req.text
+            _record_failed_generation,
+            db,
+            user_id,
+            profile_id,
+            req.text,
+            settings.TTS_ENGINE,
         )
         free_gpu_memory()
         raise HTTPException(
@@ -211,7 +228,12 @@ async def synthesize(
             profile_id,
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, user_id, profile_id, req.text
+            _record_failed_generation,
+            db,
+            user_id,
+            profile_id,
+            req.text,
+            settings.TTS_ENGINE,
         )
         raise HTTPException(
             status_code=502,
@@ -223,7 +245,12 @@ async def synthesize(
             "Speech engine unavailable — user_id=%s, profile_id=%s", user_id, profile_id
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, user_id, profile_id, req.text
+            _record_failed_generation,
+            db,
+            user_id,
+            profile_id,
+            req.text,
+            settings.TTS_ENGINE,
         )
         raise HTTPException(
             status_code=503,
@@ -236,7 +263,12 @@ async def synthesize(
             profile_id,
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, user_id, profile_id, req.text
+            _record_failed_generation,
+            db,
+            user_id,
+            profile_id,
+            req.text,
+            settings.TTS_ENGINE,
         )
         free_gpu_memory()
         raise HTTPException(
@@ -250,7 +282,12 @@ async def synthesize(
             profile_id,
         )
         await asyncio.to_thread(
-            _record_failed_generation, db, user_id, profile_id, req.text
+            _record_failed_generation,
+            db,
+            user_id,
+            profile_id,
+            req.text,
+            settings.TTS_ENGINE,
         )
         free_gpu_memory()
         raise HTTPException(
@@ -272,6 +309,10 @@ async def synthesize(
         output_audio_path=out_path,
         duration_seconds=duration,
         status="completed",
+        # Plain-tuple results (a test double) carry no engine facts: those columns stay NULL.
+        engine=getattr(result, "engine", None),
+        engine_version=getattr(result, "engine_version", None),
+        engine_fallback_from=getattr(result, "engine_fallback_from", None),
     )
     try:
         await asyncio.to_thread(_persist_generation, db, generation)
@@ -292,7 +333,10 @@ async def synthesize(
         )
 
     return FileResponse(
-        out_path, media_type="audio/wav", filename=f"synthesized_{generation.id}.wav"
+        out_path,
+        media_type="audio/wav",
+        filename=f"synthesized_{generation.id}.wav",
+        headers=_engine_headers(generation),
     )
 
 
@@ -348,6 +392,8 @@ def get_history(
                 duration_seconds=gen.duration_seconds,
                 audio_available=_output_file(gen.output_audio_path) is not None,
                 created_at=gen.created_at,
+                engine=gen.engine,
+                engine_fallback_from=gen.engine_fallback_from,
             )
         )
 

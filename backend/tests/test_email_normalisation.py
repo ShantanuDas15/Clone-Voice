@@ -93,8 +93,19 @@ def test_a_soft_deleted_account_cannot_log_in(client: TestClient, db_session):
 
 
 def test_the_migration_chain_has_one_head_and_this_revision_is_in_it():
-    # The head moves with each migration; this revision's own parent is what it pins.
-    assert get_head_revision() == "1234567890ak"
+    # The head moves with every migration, so pin neither it nor a count: only that there is
+    # exactly one head and that this revision is somewhere in its history.
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    from backend.core.migrations import ALEMBIC_DIR
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(ALEMBIC_DIR))
+    script = ScriptDirectory.from_config(cfg)
+    assert len(script.get_heads()) == 1
+    assert "1234567890aj" in {r.revision for r in script.walk_revisions()}
+    assert get_head_revision() == script.get_heads()[0]
     assert _load_migration().down_revision == "1234567890ai"
 
 
