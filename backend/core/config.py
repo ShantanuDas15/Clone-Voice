@@ -1,7 +1,7 @@
 """Application configuration and environment settings."""
 
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, get_args
 from urllib.parse import urlparse
 
 from limits import parse as parse_rate_limit
@@ -128,6 +128,12 @@ class Settings(BaseSettings):
     # SEC-3: per-IP ceiling for the ordinary signed-in and redirect endpoints
     # (profile, history, logout, Google redirect/callback), which had none.
     API_RATE_LIMIT: str = "120/minute"
+    # SPEECH_QUALITY_PLAN.md S7.2c: the per-IP ceiling on POST /synthesize, scaled to what the active
+    # engine costs. The default applies to every engine; SYNTHESIZE_RATE_LIMIT_BY_ENGINE overrides it
+    # for the engines named (e.g. {"chatterbox": "2/minute"} for a slow GPU engine). The limit follows
+    # TTS_ENGINE, read on each request.
+    SYNTHESIZE_RATE_LIMIT: str = "5/minute"
+    SYNTHESIZE_RATE_LIMIT_BY_ENGINE: dict[str, str] = Field(default_factory=dict)
 
     # HARDENING_PLAN.md finding P2-H1: local signup does not prove ownership of
     # the address. When True (the fail-safe default), an account whose email is
@@ -314,6 +320,7 @@ class Settings(BaseSettings):
         "AUTH_REFRESH_RATE_LIMIT",
         "AUTH_PASSWORD_FAILURE_LIMIT",
         "API_RATE_LIMIT",
+        "SYNTHESIZE_RATE_LIMIT",
     )
     @classmethod
     def rate_limit_is_parseable(cls, v: str) -> str:
@@ -322,6 +329,22 @@ class Settings(BaseSettings):
             parse_rate_limit(v)
         except ValueError:
             raise ValueError(f"not a valid rate limit: {v!r} (e.g. '10/minute')")
+        return v
+
+    @field_validator("SYNTHESIZE_RATE_LIMIT_BY_ENGINE")
+    @classmethod
+    def engine_rate_limits_valid(cls, v: dict[str, str]) -> dict[str, str]:
+        """Fail at startup on an unknown engine name or a malformed limit."""
+        known = set(get_args(cls.model_fields["TTS_ENGINE"].annotation))
+        for engine, limit in v.items():
+            if engine not in known:
+                raise ValueError(
+                    f"SYNTHESIZE_RATE_LIMIT_BY_ENGINE: unknown engine {engine!r}"
+                )
+            try:
+                parse_rate_limit(limit)
+            except ValueError:
+                raise ValueError(f"not a valid rate limit for {engine!r}: {limit!r}")
         return v
 
     @field_validator("EMAIL_VERIFICATION_EXPIRE_HOURS", "PASSWORD_RESET_EXPIRE_MINUTES")

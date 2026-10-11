@@ -55,4 +55,11 @@ def build_limiter() -> Limiter:
     )
 
 
+def synthesize_limit() -> str:
+    """The POST /synthesize limit for the active engine (S7.2c); read on every request."""
+    return settings.SYNTHESIZE_RATE_LIMIT_BY_ENGINE.get(
+        settings.TTS_ENGINE, settings.SYNTHESIZE_RATE_LIMIT
+    )
+
+
 limiter: Limiter = build_limiter()
