@@ -184,6 +184,12 @@ class Settings(BaseSettings):
     TTS_PAUSE_SECONDS: dict[str, float] = Field(
         default_factory=lambda: dict(DEFAULT_TTS_PAUSE_SECONDS)
     )
+    # Level every synthesized WAV to OUTPUT_TARGET_LUFS (BS.1770 integrated loudness),
+    # never past OUTPUT_PEAK_CEILING_DBFS (true peak), with DC removed and 10 ms edge
+    # fades (SPEECH_QUALITY_PLAN.md S3.3). Off = the raw vocoder output, clipped to +-1.
+    OUTPUT_NORMALIZE_ENABLED: bool = True
+    OUTPUT_TARGET_LUFS: float = Field(default=-18.0, ge=-40.0, le=-6.0)
+    OUTPUT_PEAK_CEILING_DBFS: float = Field(default=-1.0, ge=-12.0, le=0.0)
     # HARDENING_PLAN.md finding M6: on shutdown, wait up to this long for
     # in-flight forward passes (worker threads) to finish before exiting.
     INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS: float = 30.0

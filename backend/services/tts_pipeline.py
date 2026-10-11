@@ -15,11 +15,14 @@ import torch
 from backend.core import metrics
 from backend.core.config import settings
 from backend.core.cpu_limits import resolve_thread_count
+from backend.services.audio_polish import polish_waveform
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
-from backend.services.sv2tts.synthesizer.hparams import hparams as synth_hparams
+from backend.services.sv2tts.synthesizer.hparams import \
+    hparams as synth_hparams
 from backend.services.sv2tts.synthesizer.models.tacotron import Tacotron
 from backend.services.sv2tts.synthesizer.utils import cleaners
-from backend.services.sv2tts.synthesizer.utils.symbols import symbols as sv2tts_symbols
+from backend.services.sv2tts.synthesizer.utils.symbols import \
+    symbols as sv2tts_symbols
 from backend.services.sv2tts.synthesizer.utils.text import text_to_sequence
 from backend.services.sv2tts.vocoder import hparams as vocoder_hparams
 from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
@@ -749,6 +752,20 @@ def save_output(
     return file_path, float(duration)
 
 
+def finish_and_save(
+    waveform: np.ndarray, sample_rate: int, user_id: str
+) -> tuple[str, float]:
+    """Level and clean the vocoder output when enabled, then save it as a WAV."""
+    if settings.OUTPUT_NORMALIZE_ENABLED:
+        waveform, _ = polish_waveform(
+            waveform.squeeze(),
+            sample_rate,
+            settings.OUTPUT_TARGET_LUFS,
+            settings.OUTPUT_PEAK_CEILING_DBFS,
+        )
+    return save_output(waveform, sample_rate, user_id)
+
+
 async def run_inference_pipeline(
     text: str, embedding: np.ndarray, user_id: str
 ) -> tuple[str, float]:
@@ -805,7 +822,7 @@ async def run_inference_pipeline(
 
     with metrics.observe_stage("save_output"):
         out_path, duration = await asyncio.to_thread(
-            save_output, wav, settings.VOCODER_SAMPLE_RATE, user_id
+            finish_and_save, wav, settings.VOCODER_SAMPLE_RATE, user_id
         )
     return out_path, duration
 
