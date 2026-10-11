@@ -19,6 +19,8 @@ from backend.services.text_chunking import Boundary, Segment, classify_ending
 NEUTRAL = "neutral"
 EMOTIONS = ("neutral", "happy", "sad", "angry", "fearful", "surprised")
 PACES = ("slow", "normal", "fast")
+# The arousal of a sentence with no cue at all.
+NEUTRAL_AROUSAL = 0.3
 
 # word or phrase -> (emotion, weight 0-1). Longer phrases are matched first.
 LEXICON: dict[str, tuple[str, float]] = {
@@ -166,7 +168,7 @@ def analyze(text: str, boundary: Optional[Boundary] = None) -> Analysis:
     """
     text = (text or "").strip()
     if not text:
-        return Analysis(NEUTRAL, 0.0, 0.3, 0.0, "normal", False, (), 0, ())
+        return Analysis(NEUTRAL, 0.0, NEUTRAL_AROUSAL, 0.0, "normal", False, (), 0, ())
     cues: list[str] = []
     ending = boundary or classify_ending(text)
     exclamations = text.count("!")
@@ -199,7 +201,7 @@ def analyze(text: str, boundary: Optional[Boundary] = None) -> Analysis:
             - (0.1 if ending is Boundary.ELLIPSIS and emotion != "sad" else 0.0)
         )
     arousal = _clamp(
-        0.3
+        NEUTRAL_AROUSAL
         + 0.12 * min(exclamations, 3)
         + (0.15 if emphasis else 0.0)
         + _AROUSAL_SHIFT[emotion] * max(intensity, 0.5 if emotion != NEUTRAL else 0.0)
