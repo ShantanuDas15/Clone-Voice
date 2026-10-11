@@ -4,20 +4,13 @@ import asyncio
 import logging
 import os
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
 import numpy as np
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-    status,
-)
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile, status)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -29,20 +22,21 @@ from backend.core.security import get_current_user, get_verified_user
 from backend.core.validators import require_nonblank_name
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
-from backend.schemas.voice import QualityOut, VoiceProfileOut, VoiceProfileUploadOut
-from backend.services.audio_processing import (
-    preprocess_audio,
-    preprocess_semaphore,
-    save_upload,
-    validate_audio_file,
-)
+from backend.models.voice_profile_sample import VoiceProfileSample
+from backend.schemas.voice import (QualityOut, SampleOut, VoiceProfileOut,
+                                   VoiceProfileUploadOut)
+from backend.services.audio_processing import (preprocess_audio,
+                                               preprocess_semaphore,
+                                               save_upload,
+                                               validate_audio_file)
 from backend.services.audio_quality import assess_file
 from backend.services.erasure import erase_voice_profile, remove_files
-from backend.services.tts_pipeline import (
-    InferenceQueueFullError,
-    InferenceTimeoutError,
-    embed_speaker_async,
-)
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           embed_speaker_async)
+from backend.services.voice_embedding import (CLIP_AGREEMENT_WARN,
+                                              aggregate_embeddings,
+                                              clip_agreement, find_outliers)
 
 logger = logging.getLogger(__name__)
 
@@ -91,25 +85,29 @@ def _is_usable_embedding(embedding: np.ndarray) -> bool:
 
 async def _cleanup_failed_upload(
     db: Session,
-    file_path: str,
+    file_paths: List[str],
     user_id: uuid.UUID,
     name: str,
     consent_confirmed_at: datetime,
 ) -> None:
-    """Remove the orphaned upload and persist a `status="failed"` profile row.
+    """Remove every orphaned file and persist a `status="failed"` profile row.
 
     Shared by every embedding-extraction failure path (generic error, queue
     rejection, timeout) so each one leaves the same consistent audit trail.
+    The row records the first clip's path, as it did when a profile had one.
     """
-    try:
-        await asyncio.to_thread(os.remove, file_path)
-        logger.info("Removed orphaned upload after embedding failure: %s", file_path)
-    except OSError:
-        logger.exception("Failed to remove orphaned upload: %s", file_path)
+    for file_path in file_paths:
+        try:
+            await asyncio.to_thread(os.remove, file_path)
+            logger.info(
+                "Removed orphaned upload after embedding failure: %s", file_path
+            )
+        except OSError:
+            logger.exception("Failed to remove orphaned upload: %s", file_path)
     profile = VoiceProfile(
         user_id=user_id,
         name=name,
-        audio_sample_path=file_path,
+        audio_sample_path=file_paths[0] if file_paths else "",
         embedding_path="",
         status="failed",
         consent_confirmed_at=consent_confirmed_at,
@@ -124,6 +122,103 @@ async def _cleanup_failed_upload(
         await asyncio.to_thread(db.rollback)
 
 
+@dataclass
+class _Clip:
+    """One processed enrolment clip."""
+
+    audio_path: str
+    embedding_path: str
+    embedding: np.ndarray
+    quality: Optional[QualityOut]
+
+
+_RATING_ORDER = {"good": 0, "fair": 1, "poor": 2}
+
+
+def _collect_uploads(
+    file: Optional[UploadFile], files: Optional[List[UploadFile]]
+) -> List[UploadFile]:
+    """Return the clips of this request (``file`` first), or raise 422 if none or too many."""
+    uploads = ([file] if file is not None else []) + list(files or [])
+    if not uploads:
+        raise HTTPException(status_code=422, detail="Upload at least one audio sample.")
+    if len(uploads) > settings.VOICE_MAX_SAMPLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Too many samples: at most {settings.VOICE_MAX_SAMPLES} per voice.",
+        )
+    return uploads
+
+
+async def _process_clip(
+    upload: UploadFile, user_id: uuid.UUID, created: List[str]
+) -> _Clip:
+    """Validate, save, preprocess and embed one clip.
+
+    Every file written is appended to ``created`` as soon as it exists, so the caller
+    can remove them all if any clip (this or a later one) fails.
+    """
+    ext = await asyncio.to_thread(validate_audio_file, upload)
+    file_path = await asyncio.to_thread(save_upload, upload, str(user_id), ext)
+    created.append(file_path)
+    logger.info("Audio uploaded by user_id=%s — file=%s", user_id, file_path)
+
+    # HARDENING_PLAN.md finding P2-L10: bound how many uploads decode
+    # audio at once, so this doesn't compete unbounded with the model
+    # forward pass the inference semaphore protects.
+    async with preprocess_semaphore:
+        y_processed = await asyncio.to_thread(preprocess_audio, file_path)
+
+    logger.debug("Extracting speaker embedding for user_id=%s", user_id)
+    embedding = await embed_speaker_async(y_processed)
+    if not _is_usable_embedding(embedding):
+        logger.warning(
+            "Blank/invalid speaker embedding for user_id=%s — rejecting", user_id
+        )
+        raise HTTPException(
+            status_code=422,
+            detail="Could not extract a voice from this audio. "
+            "Please upload a clearer sample.",
+        )
+    embedding_path = os.path.splitext(file_path)[0] + "_embed.npy"
+    await asyncio.to_thread(np.save, embedding_path, embedding)
+    created.append(embedding_path)
+    logger.info(
+        "Speaker embedding saved: %s (shape=%s)", embedding_path, embedding.shape
+    )
+    quality = await _assess_quality_quietly(file_path)
+    return _Clip(file_path, embedding_path, embedding, quality)
+
+
+def _build_profile(
+    user_id: uuid.UUID,
+    name: str,
+    consent_confirmed_at: datetime,
+    clips: List[_Clip],
+    profile_embedding_path: str,
+    agreement: List[float],
+) -> VoiceProfile:
+    """Build the ready profile row with one sample row per clip."""
+    return VoiceProfile(
+        user_id=user_id,
+        name=name,
+        audio_sample_path=clips[0].audio_path,
+        embedding_path=profile_embedding_path,
+        status="ready",
+        consent_confirmed_at=consent_confirmed_at,
+        terms_version=settings.TERMS_VERSION,
+        samples=[
+            VoiceProfileSample(
+                position=i,
+                audio_path=clip.audio_path,
+                embedding_path=clip.embedding_path,
+                agreement=agreement[i],
+            )
+            for i, clip in enumerate(clips)
+        ],
+    )
+
+
 @router.post(
     "/upload",
     response_model=VoiceProfileUploadOut,
@@ -135,11 +230,17 @@ async def upload_audio(
     name: str = Form(..., min_length=1, max_length=255),
     consent_confirmed: bool = Form(...),
     terms_version: Optional[str] = Form(None, max_length=50),
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    files: Optional[List[UploadFile]] = File(None),
     current_user: User = Depends(get_verified_user),
     db: Session = Depends(get_db),
 ):
-    """Validate, process, and embed an uploaded audio sample."""
+    """Validate, process and embed one audio sample, or several clips of one speaker.
+
+    Send a single clip as ``file`` (as before) and/or several as ``files``. Several clips
+    are averaged into one steadier voice embedding (SPEECH_QUALITY_PLAN.md S2.1). If any
+    clip fails, none is kept and no profile is created.
+    """
     # HARDENING_PLAN.md finding P2-L1: `Form(min_length=1)` alone still
     # accepts a whitespace-only name; reject it before any file work.
     try:
@@ -166,6 +267,7 @@ async def upload_audio(
             detail="The terms have changed (current version "
             f"{settings.TERMS_VERSION}). Review them and confirm again.",
         )
+    uploads = _collect_uploads(file, files)
     consent_confirmed_at = datetime.now(timezone.utc)
 
     # HARDENING_PLAN.md finding P2-M1: release the connection the auth lookup
@@ -174,56 +276,29 @@ async def upload_audio(
     user_id = current_user.id
     await asyncio.to_thread(db.close)
 
-    ext = await asyncio.to_thread(validate_audio_file, file)
-    file_path = await asyncio.to_thread(save_upload, file, str(user_id), ext)
-    logger.info("Audio uploaded by user_id=%s — file=%s", user_id, file_path)
-
+    created: List[str] = []
+    clips: List[_Clip] = []
     try:
-        # HARDENING_PLAN.md finding P2-L10: bound how many uploads decode
-        # audio at once, so this doesn't compete unbounded with the model
-        # forward pass the inference semaphore protects.
-        async with preprocess_semaphore:
-            y_processed = await asyncio.to_thread(preprocess_audio, file_path)
+        for upload in uploads:
+            clips.append(await _process_clip(upload, user_id, created))
     except HTTPException:
-        # Unusable input (too short/silent/long/undecodable): don't keep the
-        # user's audio on disk for a profile that will never exist.
-        await asyncio.to_thread(_remove_quietly, file_path)
-        raise
-
-    embedding_path = os.path.splitext(file_path)[0] + "_embed.npy"
-
-    try:
-        logger.debug("Extracting speaker embedding for user_id=%s", user_id)
-        embedding = await embed_speaker_async(y_processed)
-        if not _is_usable_embedding(embedding):
-            logger.warning(
-                "Blank/invalid speaker embedding for user_id=%s — rejecting",
-                user_id,
-            )
-            await asyncio.to_thread(_remove_quietly, file_path)
-            raise HTTPException(
-                status_code=422,
-                detail="Could not extract a voice from this audio. "
-                "Please upload a clearer sample.",
-            )
-        await asyncio.to_thread(np.save, embedding_path, embedding)
-        logger.info(
-            "Speaker embedding saved: %s (shape=%s)", embedding_path, embedding.shape
-        )
-    except HTTPException:
+        # Unusable input (too short/silent/long/undecodable, blank embedding): don't keep
+        # any of the user's audio on disk for a profile that will never exist.
+        for path in created:
+            await asyncio.to_thread(_remove_quietly, path)
         raise
     except InferenceQueueFullError:
         logger.warning(
             "Inference queue full — rejecting upload for user_id=%s", user_id
         )
-        await _cleanup_failed_upload(db, file_path, user_id, name, consent_confirmed_at)
+        await _cleanup_failed_upload(db, created, user_id, name, consent_confirmed_at)
         raise HTTPException(
             status_code=429,
             detail="Voice profile service is busy. Please try again shortly.",
         )
     except InferenceTimeoutError:
         logger.exception("Embedding extraction timed out for user_id=%s", user_id)
-        await _cleanup_failed_upload(db, file_path, user_id, name, consent_confirmed_at)
+        await _cleanup_failed_upload(db, created, user_id, name, consent_confirmed_at)
         raise HTTPException(
             status_code=503,
             detail="Voice profile service is temporarily overloaded. Please try again shortly.",
@@ -233,21 +308,34 @@ async def upload_audio(
             "Embedding extraction failed for user_id=%s — persisting failed profile",
             user_id,
         )
-        await _cleanup_failed_upload(db, file_path, user_id, name, consent_confirmed_at)
+        await _cleanup_failed_upload(db, created, user_id, name, consent_confirmed_at)
         raise HTTPException(
             status_code=500, detail="Failed to extract speaker embedding"
         )
 
-    quality = await _assess_quality_quietly(file_path)
+    embeddings = [clip.embedding for clip in clips]
+    agreement = clip_agreement(embeddings)
+    mismatched = set(find_outliers(embeddings, CLIP_AGREEMENT_WARN))
+    if mismatched:
+        logger.warning(
+            "Clips %s of user_id=%s disagree with the rest of the profile",
+            sorted(mismatched),
+            user_id,
+        )
+    if len(clips) == 1:
+        # One clip: the profile embedding *is* the clip's, exactly as before S2.1b.
+        profile_embedding_path = clips[0].embedding_path
+    else:
+        profile_embedding_path = os.path.join(
+            os.path.dirname(clips[0].audio_path), f"{uuid.uuid4()}_profile_embed.npy"
+        )
+        await asyncio.to_thread(
+            np.save, profile_embedding_path, aggregate_embeddings(embeddings)
+        )
+        created.append(profile_embedding_path)
 
-    profile = VoiceProfile(
-        user_id=user_id,
-        name=name,
-        audio_sample_path=file_path,
-        embedding_path=embedding_path,
-        status="ready",
-        consent_confirmed_at=consent_confirmed_at,
-        terms_version=settings.TERMS_VERSION,
+    profile = _build_profile(
+        user_id, name, consent_confirmed_at, clips, profile_embedding_path, agreement
     )
     try:
         await asyncio.to_thread(_persist_profile, db, profile)
@@ -255,20 +343,39 @@ async def upload_audio(
         # HARDENING_PLAN.md P2-L2: no row will reference these files.
         logger.exception("Failed to persist voice profile for user_id=%s", user_id)
         await asyncio.to_thread(db.rollback)
-        await asyncio.to_thread(_remove_quietly, file_path)
-        await asyncio.to_thread(_remove_quietly, embedding_path)
+        for path in created:
+            await asyncio.to_thread(_remove_quietly, path)
         if is_transient_db_error(error):
             raise db_unavailable()
         raise HTTPException(status_code=500, detail="Failed to save voice profile")
 
     logger.info(
-        "Voice profile created: id=%s, name=%s, user_id=%s",
+        "Voice profile created: id=%s, name=%s, user_id=%s, clips=%d",
         profile.id,
         profile.name,
         user_id,
+        len(clips),
     )
-    return VoiceProfileUploadOut.model_validate(profile).model_copy(
-        update={"quality": quality}
+    reports = [clip.quality for clip in clips]
+    rated = [q for q in reports if q is not None]
+    worst = max(rated, key=lambda q: _RATING_ORDER[q.rating]) if rated else None
+    return VoiceProfileUploadOut(
+        id=profile.id,
+        name=profile.name,
+        status=profile.status,
+        consent_confirmed_at=profile.consent_confirmed_at,
+        terms_version=profile.terms_version,
+        created_at=profile.created_at,
+        quality=worst,
+        samples=[
+            SampleOut(
+                position=i,
+                agreement=round(agreement[i], 4),
+                mismatch=i in mismatched,
+                quality=reports[i],
+            )
+            for i in range(len(clips))
+        ],
     )
 
 

@@ -63,7 +63,23 @@ class QualityOut(BaseModel):
         )
 
 
+class SampleOut(BaseModel):
+    """One clip of the upload and how it compares with the others."""
+
+    position: int
+    # Cosine with the mean of the other clips (1.0 for a single clip).
+    agreement: float
+    # True when the clip scores low against the others: probably another speaker.
+    mismatch: bool
+    quality: Optional[QualityOut] = None
+
+
 class VoiceProfileUploadOut(VoiceProfileOut):
-    """The upload response: the profile, plus a recording-quality report when one could be made."""
+    """The upload response: the profile, plus recording-quality reports when they could be made.
+
+    ``quality`` is the report of the lowest-rated clip (the one most worth re-recording);
+    ``samples`` has one entry per uploaded clip, in upload order.
+    """
 
     quality: Optional[QualityOut] = None
+    samples: List[SampleOut] = []

@@ -17,6 +17,7 @@ on:
       - "backend/core/database.py"
       - "backend/check_schema.py"
       - "backend/requirements.txt"
+      - "backend/requirements.lock.txt"
       - ".github/workflows/backend-schema.yml"
   workflow_dispatch:
 
@@ -56,8 +57,11 @@ jobs:
       - name: Install the migration toolchain
         run: |
           grep -i -E '^(alembic|sqlalchemy|psycopg2-binary|pydantic|pydantic-settings)==' backend/requirements.txt > schema-requirements.txt
+          # backend/core/config.py imports `limits` directly, but requirements.txt
+          # only gets it through slowapi, so its pin is read from the lock file.
+          echo "limits==$(grep -i -E '^limits==' backend/requirements.lock.txt | head -1 | sed -E 's/^limits==([^ ]+).*/\1/')" >> schema-requirements.txt
           cat schema-requirements.txt
-          test "$(wc -l < schema-requirements.txt)" = 5
+          test "$(wc -l < schema-requirements.txt)" = 6
           pip install -r schema-requirements.txt
 
       - name: Generate a throwaway JWT secret (settings require one)

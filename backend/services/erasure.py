@@ -25,6 +25,7 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.user_identity import UserIdentity
 from backend.models.voice_profile import VoiceProfile
+from backend.models.voice_profile_sample import VoiceProfileSample
 from backend.services.refresh_tokens import revoke_all_for_user
 
 logger = logging.getLogger(__name__)
@@ -71,8 +72,24 @@ def erase_voice_profile(db: Session, profile: VoiceProfile) -> List[str]:
         .where(Generation.voice_profile_id == profile.id)
         .values(deleted_at=now)
     )
+    # Every enrolment clip of a multi-clip profile (S2.1b), audio and embedding.
+    clips = [
+        path
+        for audio_path, embedding_path in db.query(
+            VoiceProfileSample.audio_path, VoiceProfileSample.embedding_path
+        ).filter(
+            VoiceProfileSample.voice_profile_id == profile.id,
+            VoiceProfileSample.deleted_at.is_(None),
+        )
+        for path in (audio_path, embedding_path)
+    ]
+    db.execute(
+        update(VoiceProfileSample)
+        .where(VoiceProfileSample.voice_profile_id == profile.id)
+        .values(deleted_at=now)
+    )
     profile.deleted_at = now
-    return [profile.audio_sample_path, profile.embedding_path, *outputs]
+    return [profile.audio_sample_path, profile.embedding_path, *clips, *outputs]
 
 
 def remove_files(paths: Iterable[str]) -> int:

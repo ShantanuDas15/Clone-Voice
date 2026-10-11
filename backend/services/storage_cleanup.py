@@ -66,6 +66,7 @@ def get_protected_paths(
     # module safely importable from anywhere without ordering concerns.
     from backend.models.generation import Generation
     from backend.models.voice_profile import VoiceProfile
+    from backend.models.voice_profile_sample import VoiceProfileSample
 
     protected: Set[str] = set()
 
@@ -79,6 +80,20 @@ def get_protected_paths(
             protected.add(os.path.abspath(audio_path))
         if embedding_path:
             protected.add(os.path.abspath(embedding_path))
+
+    # Each enrolment clip of an active multi-clip profile (S2.1b).
+    active_clips = (
+        db.query(VoiceProfileSample.audio_path, VoiceProfileSample.embedding_path)
+        .join(VoiceProfile, VoiceProfile.id == VoiceProfileSample.voice_profile_id)
+        .filter(
+            VoiceProfile.deleted_at.is_(None),
+            VoiceProfileSample.deleted_at.is_(None),
+        )
+        .all()
+    )
+    for audio_path, embedding_path in active_clips:
+        protected.add(os.path.abspath(audio_path))
+        protected.add(os.path.abspath(embedding_path))
 
     if output_retention_days is None:
         output_retention_days = settings.OUTPUT_RETENTION_DAYS

@@ -12,6 +12,10 @@ from typing import List, Sequence
 
 import numpy as np
 
+# A clip scoring below this against the others is probably a different speaker (SPEECH_QUALITY_STUDY.md,
+# S2.1a: 95.8% of other-speaker clips fell below it, 1.7% of true clips did). A warning, never a control.
+CLIP_AGREEMENT_WARN = 0.75
+
 
 def _as_unit_matrix(embeddings: Sequence[np.ndarray]) -> np.ndarray:
     """Stack embeddings into rows of unit length; reject empty, ragged or zero input."""

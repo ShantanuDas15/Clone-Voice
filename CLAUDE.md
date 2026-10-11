@@ -145,6 +145,7 @@ backend/
 |-------|---------|------|
 | `users` | Auth identity | PK: `UUID` |
 | `voice_profiles` | Extracted speaker embedding | PK: `UUID`, FK: `user_id` |
+| `voice_profile_samples` | One row per enrolment clip of a multi-clip profile | PK: `UUID`, FK: `voice_profile_id` |
 | `generations` | Audit trail of synthesized outputs | PK: `UUID`, FKs: `user_id`, `voice_profile_id` |
 
 **Critical schema rules**:
@@ -167,7 +168,7 @@ backend/
 | `POST` | `/api/v1/auth/forgot-password`, `/reset-password` | ❌ | Password reset by emailed single-use token |
 | `GET` | `/api/v1/auth/google`, `/google/callback` | ❌ | Google OAuth |
 | `GET` | `/api/v1/terms` | ❌ | Current voice-consent terms (version, text) |
-| `POST` | `/api/v1/voice/upload` | ✅ | Upload an audio sample (+ `consent_confirmed=true`) → new voice profile |
+| `POST` | `/api/v1/voice/upload` | ✅ | Upload one audio sample (`file`) or several clips of one speaker (`files`, up to `VOICE_MAX_SAMPLES`), + `consent_confirmed=true` → new voice profile |
 | `GET` | `/api/v1/voice/profiles` | ✅ | List user's voice profiles |
 | `DELETE` | `/api/v1/voice/profiles/{profile_id}` | ✅ | Soft-delete a voice profile |
 | `POST` | `/api/v1/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output |

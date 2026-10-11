@@ -8,9 +8,31 @@
             "type": "boolean"
           },
           "file": {
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "type": "string"
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "contentMediaType": "application/octet-stream",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
           },
           "name": {
             "maxLength": 255,
@@ -33,8 +55,7 @@
         },
         "required": [
           "name",
-          "consent_confirmed",
-          "file"
+          "consent_confirmed"
         ],
         "title": "Body_upload_audio_api_v1_voice_upload_post",
         "type": "object"
@@ -284,6 +305,40 @@
           "new_password"
         ],
         "title": "ResetPasswordRequest",
+        "type": "object"
+      },
+      "SampleOut": {
+        "description": "One clip of the upload and how it compares with the others.",
+        "properties": {
+          "agreement": {
+            "title": "Agreement",
+            "type": "number"
+          },
+          "mismatch": {
+            "title": "Mismatch",
+            "type": "boolean"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "position",
+          "agreement",
+          "mismatch"
+        ],
+        "title": "SampleOut",
         "type": "object"
       },
       "SignupRequest": {
@@ -568,7 +623,7 @@
         "type": "object"
       },
       "VoiceProfileUploadOut": {
-        "description": "The upload response: the profile, plus a recording-quality report when one could be made.",
+        "description": "The upload response: the profile, plus recording-quality reports when they could be made.\n\n``quality`` is the report of the lowest-rated clip (the one most worth re-recording);\n``samples`` has one entry per uploaded clip, in upload order.",
         "properties": {
           "consent_confirmed_at": {
             "format": "date-time",
@@ -598,6 +653,14 @@
                 "type": "null"
               }
             ]
+          },
+          "samples": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
           },
           "status": {
             "title": "Status",
@@ -1332,7 +1395,7 @@
     },
     "/api/v1/voice/upload": {
       "post": {
-        "description": "Validate, process, and embed an uploaded audio sample.",
+        "description": "Validate, process and embed one audio sample, or several clips of one speaker.\n\nSend a single clip as ``file`` (as before) and/or several as ``files``. Several clips\nare averaged into one steadier voice embedding (SPEECH_QUALITY_PLAN.md S2.1). If any\nclip fails, none is kept and no profile is created.",
         "operationId": "upload_audio_api_v1_voice_upload_post",
         "requestBody": {
           "content": {
