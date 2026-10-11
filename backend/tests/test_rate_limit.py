@@ -157,7 +157,7 @@ import yaml
 from starlette.requests import Request
 
 from backend.core import rate_limit
-from backend.core.config import settings
+from backend.core.config import Settings, settings
 
 
 def _request(peer: str = "10.0.0.9", xff: str | None = None) -> Request:
@@ -276,3 +276,52 @@ def test_compose_wires_backend_to_shared_redis():
     backend = compose["services"]["backend"]
     assert backend["environment"]["RATE_LIMIT_STORAGE_URI"].startswith("redis://redis")
     assert "redis" in backend["depends_on"]
+
+
+# --- S7.2c: the synthesize limit follows the active engine ---------------------
+
+
+def test_synthesize_limit_defaults_to_5_per_minute_for_every_engine(monkeypatch):
+    for engine in ("sv2tts", "chatterbox", "chatterbox_turbo", "chatterbox_nano"):
+        monkeypatch.setattr(settings, "TTS_ENGINE", engine)
+        assert rate_limit.synthesize_limit() == "5/minute"
+
+
+def test_synthesize_limit_uses_the_override_of_the_active_engine_only(monkeypatch):
+    monkeypatch.setattr(
+        settings, "SYNTHESIZE_RATE_LIMIT_BY_ENGINE", {"chatterbox": "2/minute"}
+    )
+    monkeypatch.setattr(settings, "TTS_ENGINE", "chatterbox")
+    assert rate_limit.synthesize_limit() == "2/minute"
+    monkeypatch.setattr(settings, "TTS_ENGINE", "sv2tts")
+    assert rate_limit.synthesize_limit() == "5/minute"
+
+
+def test_synthesize_limit_is_enforced_at_the_engine_override(
+    client: TestClient, monkeypatch
+):
+    monkeypatch.setattr(settings, "SYNTHESIZE_RATE_LIMIT", "2/minute")
+    headers = _signup_and_token(client, "rl_engine@example.com")
+    body = {"voice_profile_id": str(uuid.uuid4()), "text": "Rate limit test payload"}
+    try:
+        _enable_limiter()
+        codes = [
+            client.post("/api/v1/synthesize", headers=headers, json=body).status_code
+            for _ in range(3)
+        ]
+        assert codes[-1] == 429 and 429 not in codes[:2]
+    finally:
+        _disable_limiter()
+
+
+@pytest.mark.parametrize(
+    "value", [{"nope": "2/minute"}, {"chatterbox": "fast"}, {"sv2tts": ""}]
+)
+def test_bad_engine_limits_fail_at_startup(value):
+    with pytest.raises(ValueError):
+        Settings(SYNTHESIZE_RATE_LIMIT_BY_ENGINE=value, _env_file=None)
+
+
+def test_a_malformed_default_limit_fails_at_startup():
+    with pytest.raises(ValueError):
+        Settings(SYNTHESIZE_RATE_LIMIT="often", _env_file=None)
