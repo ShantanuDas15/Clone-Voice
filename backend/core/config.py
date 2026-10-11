@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     # file that is mostly silence is rejected; MAX_AUDIO_DURATION_SECONDS
     # applies to the raw upload, checked before the expensive decode.
     MIN_VOICED_DURATION_SECONDS: float = 2.0
+    # SPEECH_QUALITY_PLAN.md S2.1b: most clips one voice profile may be built from. The
+    # whole request is still bounded by MAX_AUDIO_SIZE_MB, so this caps the work per
+    # upload, not the bytes.
+    VOICE_MAX_SAMPLES: int = Field(default=10, ge=1, le=20)
     MAX_AUDIO_DURATION_SECONDS: float = 300.0
     # HARDENING_PLAN.md finding M9: relative values are anchored to BASE_DIR
     # (backend/) by ``anchor_storage_dir``, never the process CWD; absolute

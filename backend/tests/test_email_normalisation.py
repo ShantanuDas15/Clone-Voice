@@ -92,8 +92,9 @@ def test_a_soft_deleted_account_cannot_log_in(client: TestClient, db_session):
 # --- Migration ---------------------------------------------------------------
 
 
-def test_the_migration_chain_has_one_head_and_it_is_this_revision():
-    assert get_head_revision() == "1234567890aj"
+def test_the_migration_chain_has_one_head_and_this_revision_is_in_it():
+    # The head moves with each migration; this revision's own parent is what it pins.
+    assert get_head_revision() == "1234567890ak"
     assert _load_migration().down_revision == "1234567890ai"
 
 

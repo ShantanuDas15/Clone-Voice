@@ -108,6 +108,19 @@ Stores the metadata and filesystem references for the AI voice embeddings extrac
 **Indexes**:
 - `CREATE INDEX idx_voice_profiles_user_id ON voice_profiles(user_id) WHERE deleted_at IS NULL;`
 
+**Multi-clip profiles** (`voice_profile_samples`, migration `1234567890ak`): a profile can be built from several clips of one speaker. `audio_sample_path` is the first clip and `embedding_path` is the profile's embedding (the unit-length mean of the clips' embeddings; for one clip, that clip's own embedding file). Profiles created before the table existed have no sample rows.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `UUID` | `PK` | Unique identifier. |
+| `voice_profile_id` | `UUID` | `NOT NULL`, `FK -> voice_profiles(id)` | Owning profile. `ON DELETE CASCADE`. |
+| `position` | `INTEGER` | `NOT NULL`, `UNIQUE (voice_profile_id, position)` | Upload order, from 0. |
+| `audio_path` / `embedding_path` | `TEXT` | `NOT NULL` | This clip's audio and embedding files. Erasure removes both. |
+| `agreement` | `FLOAT` | `NOT NULL` | Cosine of this clip with the mean of the others (1.0 for a lone clip). |
+| `created_at` / `updated_at` / `deleted_at` | `TIMESTAMPTZ` | as elsewhere | Audit timestamps and soft delete. |
+
+**Indexes**: `ix_voice_profile_samples_voice_profile_id` on `voice_profile_id`.
+
 ---
 
 ### 3. `generations` Table

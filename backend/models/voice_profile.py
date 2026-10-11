@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.types import Uuid
 
@@ -42,3 +43,10 @@ class VoiceProfile(Base):
         nullable=False,
     )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+    # Enrolment clips of a multi-clip profile (S2.1b); empty for older profiles.
+    samples = relationship(
+        "VoiceProfileSample",
+        order_by="VoiceProfileSample.position",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
