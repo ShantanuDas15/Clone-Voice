@@ -243,6 +243,64 @@ x3 clipping for 10 of 20; very quiet audio raised no hint.
 * The report is advice. It never rejects an upload: no measured level is bad enough to justify refusing
   someone their own voice, and the existing duration and silence floors still apply.
 
+## Output quality gate (S3.4, 2026-10-11)
+
+Question: can cheap checks on the vocoder output catch audio that should not be served, without
+refusing ordinary speech? Corpus: 6 LibriSpeech test-clean speakers (3 low-F0, 3 high-F0, as in S0.2),
+each cloned from one 10 to 30 s reference, real weights, CPU.
+
+### Calibration (seed 0, 168 syntheses)
+
+20 ordinary texts per speaker (1 to 25 words, questions, exclamations, numbers, abbreviations,
+multi-sentence) and 8 stress texts (40 repeated words, a 60-letter word, a very long word, punctuation
+only, repeated "the", digits, laughter, a single letter).
+
+| Measure (120 ordinary outputs) | Range seen | Gate threshold |
+|---|---|---|
+| Decodes that hit the 900-frame cap | 1 of 120 outputs (a plain 22-word sentence, one speaker) | any |
+| Loud level (95th percentile 20 ms frame) | -37 to -0.1 dBFS | below -45 dBFS is silent |
+| Silent frames (30 dB under the loud level) | 0.4% to 67% | above 85% |
+| Longest silent stretch | 0.02 to 0.90 s (the paragraph pause is 0.70 s) | above the longest configured pause + 1.0 s |
+| Samples at full scale | up to 0.96%, except one 1-word output at 8.3% | above 2% |
+| Duration / (0.29 s + 0.287 s x spoken words) | 0.68 to 1.64 (for 4 or more words) | outside 0.35 to 2.5 |
+
+Spoken words are counted after text normalisation, so "10:30 a.m." counts as the words said.
+Seconds per word alone is not usable: one-word texts ran 0.84 to 0.94 s per word while sentences ran 0.21
+to 0.35, hence the length model and its exemption for texts under 4 words. A long single word is slow
+but not broken (60 letters: 3.0 s, 5 times the model), which is why short texts are exempt.
+
+The stress texts raised no further failure signal. Two of the 48 hit the frame cap (the 40 repeated
+words, for two speakers).
+
+### Held-out check (seed 1, 120 ordinary syntheses through the full pipeline, gate on)
+
+| Outcome | Count |
+|---|---|
+| Passed first attempt | 118 |
+| Failed, retried, then passed | 1 (clipping on "Why?", recovered) |
+| Refused after both attempts | 1 (the 22-word "committee" sentence, truncated both times) |
+
+### What this shows
+
+* Truncation, the one failure seen on ordinary text, is detected exactly, because the synthesizer
+  reports it; no audio heuristic is involved.
+* The other checks did not fire on 118 of 120 ordinary outputs, apart from the one clipping case,
+  which the retry fixed.
+
+### Limits
+
+* **Retrying with a new seed does not always fix truncation.** The refused sentence is 143 characters
+  (under the 150-character chunk limit) and hit the cap for this speaker on both attempts, and for a
+  different speaker in the calibration run. For a slow voice a chunk can need more than 900 frames.
+  That is 1 of 120 ordinary requests refused (0.8%) with a clear error; a smaller chunk size on retry
+  would probably recover it and is the first follow-up.
+* Thresholds were set and checked on the same speakers (different seeds). Six speakers, adults only.
+* **No known-bad audio other than truncation and the one clipped output was observed**, so the silence,
+  long-gap and duration checks are guards with wide margins, not tested detectors of real failures.
+  Babbling and word repetition by Tacotron are not detected at all.
+* The checks use the raw vocoder output; the S3.3 levelling and edge fades come after.
+* Every retry is a full synthesis, so a refused request costs about twice a normal one.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

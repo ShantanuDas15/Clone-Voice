@@ -33,6 +33,18 @@ INFERENCE_REJECTIONS = Counter(
     ["reason"],  # queue_full | acquire_timeout | call_timeout
     registry=registry,
 )
+QUALITY_GATE_RESULTS = Counter(
+    "clonevoice_quality_gate_total",
+    "Synthesis attempts judged by the output quality gate (SPEECH_QUALITY_PLAN.md S3.4).",
+    ["result"],  # passed | retried | refused
+    registry=registry,
+)
+QUALITY_GATE_FAILURES = Counter(
+    "clonevoice_quality_gate_failures_total",
+    "Individual reasons an attempt failed the quality gate.",
+    ["reason"],
+    registry=registry,
+)
 INFERENCE_QUEUE_DEPTH = Gauge(
     "clonevoice_inference_queue_depth",
     "Requests currently waiting for the inference permit.",

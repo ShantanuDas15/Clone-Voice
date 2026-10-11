@@ -38,6 +38,15 @@ def email_verification_off_by_default(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def quality_gate_off_by_default(monkeypatch):
+    """The mock vocoder returns silence, which the output gate rightly refuses.
+
+    Tests of the gate itself turn it back on.
+    """
+    monkeypatch.setattr(settings, "TTS_QUALITY_GATE_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def no_real_email_by_default(monkeypatch):
     """Never let a test reach a real mail provider, whatever backend/.env says.
 

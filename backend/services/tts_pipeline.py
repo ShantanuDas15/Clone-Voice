@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ import torch
 from backend.core import metrics
 from backend.core.config import settings
 from backend.core.cpu_limits import resolve_thread_count
+from backend.services.audio_gate import check_output
 from backend.services.audio_polish import polish_waveform
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
 from backend.services.sv2tts.synthesizer.hparams import \
@@ -72,6 +74,10 @@ _inflight_tasks: Set["asyncio.Future[Any]"] = set()
 
 _T = TypeVar("_T")
 
+# Decodes that hit the synthesizer's frame cap on the current worker thread. Reset and read
+# by `_synthesize_counting_truncation`, so concurrent threads never mix their counts.
+_decode_state = threading.local()
+
 # Outcome of the one-time startup warm-up forward pass (HARDENING_PLAN.md
 # finding M7): "disabled" | "pending" | "ok" | "failed". Cached so readiness
 # probes never take the inference permit themselves.
@@ -97,6 +103,18 @@ class InferenceTimeoutError(RuntimeError):
     or any one acquired forward-pass stage runs longer than
     `settings.INFERENCE_CALL_TIMEOUT_SECONDS`. Mapped to HTTP 503 by
     callers."""
+
+
+class OutputQualityError(RuntimeError):
+    """Raised when every synthesis attempt failed the output quality gate
+    (SPEECH_QUALITY_PLAN.md S3.4). ``reasons`` are the last attempt's gate codes."""
+
+    def __init__(self, reasons: tuple) -> None:
+        """Keep the gate's reason codes of the final attempt."""
+        super().__init__(
+            "Synthesized audio failed the quality gate: " + ", ".join(reasons)
+        )
+        self.reasons = reasons
 
 
 class _InferenceSlot:
@@ -628,6 +646,7 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
     # Reaching the step cap means the stop token never fired, so the decode
     # was cut off mid-speech (HARDENING_PLAN.md finding P2-M3).
     if result.shape[1] >= synth_hparams.max_mel_frames:
+        _decode_state.truncated = getattr(_decode_state, "truncated", 0) + 1
         logger.warning(
             "Synthesizer hit the %d-frame cap for a %d-char chunk; audio truncated.",
             synth_hparams.max_mel_frames,
@@ -648,6 +667,15 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
         result = result[:, :-1]
 
     return result
+
+
+def _synthesize_counting_truncation(
+    text: str, embedding: np.ndarray
+) -> tuple[np.ndarray, int]:
+    """Run ``synthesize_speech`` and also return how many decodes hit the frame cap."""
+    _decode_state.truncated = 0
+    mel = synthesize_speech(text, embedding)
+    return mel, int(getattr(_decode_state, "truncated", 0))
 
 
 # WaveRNN returns (frames - 1) * hop samples and fades the last 20 hops, so it
@@ -796,24 +824,58 @@ async def run_inference_pipeline(
         InferenceTimeoutError: The slot wait, or either forward-pass stage
             (synthesizer, vocoder), exceeded its configured timeout.
     """
+    spoken_text = _clean_for_chunking(text)
+    max_pause = max(settings.TTS_PAUSE_SECONDS.values())
+    attempts = (
+        settings.TTS_QUALITY_MAX_ATTEMPTS if settings.TTS_QUALITY_GATE_ENABLED else 1
+    )
     async with _acquire_inference_slot() as slot:
         logger.debug(
             "Inference semaphore acquired — starting synthesizer forward pass."
         )
         try:
-            mel = await slot.run(
-                synthesize_speech,
-                text,
-                embedding,
-                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
-                stage="synthesizer",
-            )
-            wav = await slot.run(
-                vocode,
-                mel,
-                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
-                stage="vocoder",
-            )
+            for attempt in range(1, attempts + 1):
+                mel, truncated = await slot.run(
+                    _synthesize_counting_truncation,
+                    text,
+                    embedding,
+                    timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+                    stage="synthesizer",
+                )
+                wav = await slot.run(
+                    vocode,
+                    mel,
+                    timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+                    stage="vocoder",
+                )
+                if not settings.TTS_QUALITY_GATE_ENABLED:
+                    break
+                verdict = await asyncio.to_thread(
+                    check_output,
+                    wav,
+                    settings.VOCODER_SAMPLE_RATE,
+                    spoken_text,
+                    truncated,
+                    max_pause,
+                )
+                if verdict.passed:
+                    metrics.QUALITY_GATE_RESULTS.labels("passed").inc()
+                    break
+                for reason in verdict.reasons:
+                    metrics.QUALITY_GATE_FAILURES.labels(reason).inc()
+                last = attempt == attempts
+                metrics.QUALITY_GATE_RESULTS.labels(
+                    "refused" if last else "retried"
+                ).inc()
+                logger.warning(
+                    "Output failed the quality gate (%s), attempt %d of %d%s",
+                    ", ".join(verdict.reasons),
+                    attempt,
+                    attempts,
+                    "" if last else " — retrying",
+                )
+                if last:
+                    raise OutputQualityError(verdict.reasons)
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
                 "Inference forward pass exceeded the per-stage timeout."

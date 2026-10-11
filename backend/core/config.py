@@ -188,6 +188,12 @@ class Settings(BaseSettings):
     TTS_PAUSE_SECONDS: dict[str, float] = Field(
         default_factory=lambda: dict(DEFAULT_TTS_PAUSE_SECONDS)
     )
+    # SPEECH_QUALITY_PLAN.md S3.4: check each synthesis for truncation, silence, clipping
+    # and implausible length; on a failure run it again, up to this many attempts in all
+    # (each attempt is a full synthesis, so the worst-case latency scales with it), then
+    # refuse rather than serve broken audio.
+    TTS_QUALITY_GATE_ENABLED: bool = True
+    TTS_QUALITY_MAX_ATTEMPTS: int = Field(default=2, ge=1, le=5)
     # Level every synthesized WAV to OUTPUT_TARGET_LUFS (BS.1770 integrated loudness),
     # never past OUTPUT_PEAK_CEILING_DBFS (true peak), with DC removed and 10 ms edge
     # fades (SPEECH_QUALITY_PLAN.md S3.3). Off = the raw vocoder output, clipped to +-1.

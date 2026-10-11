@@ -8,7 +8,8 @@ from uuid import UUID
 
 import numpy as np
 import torch
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
+                     Response, status)
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -22,12 +23,10 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_pipeline import (
-    InferenceQueueFullError,
-    InferenceTimeoutError,
-    free_gpu_memory,
-    run_inference_pipeline,
-)
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           OutputQualityError, free_gpu_memory,
+                                           run_inference_pipeline)
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +194,21 @@ async def synthesize(
         raise HTTPException(
             status_code=503,
             detail="Synthesis service is temporarily overloaded. Please try again shortly.",
+        )
+    except OutputQualityError as error:
+        logger.error(
+            "Synthesis refused by the quality gate (%s) — user_id=%s, profile_id=%s",
+            ", ".join(error.reasons),
+            user_id,
+            profile_id,
+        )
+        await asyncio.to_thread(
+            _record_failed_generation, db, user_id, profile_id, req.text
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="The synthesized audio did not meet the quality bar. "
+            "Please try again, or shorten or reword the text.",
         )
     except torch.cuda.OutOfMemoryError:
         logger.exception(
