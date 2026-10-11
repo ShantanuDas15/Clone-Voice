@@ -568,6 +568,67 @@ Every request was answered; none became an error. Service returned without any o
 * The user is not told which engine served them, and the generation row does not record it (plan S7.1).
 * A worker that dies mid-request surfaces as a timeout or reset, which counts as unavailable; the request is served by the fallback after waiting up to `TTS_WORKER_TIMEOUT_SECONDS` (25 s by default).
 
+## Independent speaker encoder and predicted naturalness (S0.1d, 2026-10-11)
+
+Question: do the S4.2 conclusions survive measurement by instruments the engines were not built with?
+Until now speaker similarity was judged by resemblyzer, the encoder that conditions SV2TTS (which flatters
+SV2TTS), and naturalness was not measured at all. Both are now added to the committed scoring tool
+(`backend/score_engine_outputs.py --independent-encoder ecapa --mos utmos`, optional, evaluation only) and the
+same 240 outputs of the S4.2 benchmark (4 engines x 6 speakers x 10 texts) were scored again.
+
+* **Independent encoder**: SpeechBrain ECAPA-TDNN (Apache-2.0, trained on VoxCeleb), cosine against the mean
+  embedding of the speaker's real held-out clips. Its absolute values are not comparable with resemblyzer's.
+* **Predicted naturalness**: UTMOS22 strong (SpeechMOS, code MIT; the weights' own licence is not stated on its
+  page, which matters only because it never ships in the product). Audio is resampled to 16 kHz inside the model.
+
+| Engine | Similarity, resemblyzer | Similarity, ECAPA | Predicted MOS | Word error |
+|---|---|---|---|---|
+| SV2TTS | 0.763 [0.741, 0.784] | 0.307 [0.271, 0.342] | 2.49 [2.31, 2.66] | 0.178 |
+| Chatterbox 0.5B | 0.869 | 0.624 [0.590, 0.656] | 4.16 [4.08, 4.24] | 0.017 |
+| Chatterbox-Turbo | 0.856 | 0.584 [0.551, 0.617] | 4.11 [4.02, 4.20] | 0.003 |
+| Chatterbox-Nano | 0.856 | 0.580 [0.546, 0.616] | 4.14 [4.06, 4.21] | 0.005 |
+
+Paired against SV2TTS on the same speaker and text:
+
+| Engine | Resemblyzer gain | ECAPA gain | Predicted-MOS gain |
+|---|---|---|---|
+| Chatterbox 0.5B | +0.106 (56 of 60) | **+0.316** [+0.283, +0.350] (60 of 60) | **+1.68** [+1.53, +1.83] (60 of 60) |
+| Turbo | +0.092 (52 of 60) | +0.277 [+0.246, +0.308] (59 of 60) | +1.63 [+1.47, +1.79] (60 of 60) |
+| Nano | +0.093 (53 of 60) | +0.273 [+0.240, +0.305] (58 of 60) | +1.65 [+1.49, +1.82] (60 of 60) |
+
+Voice-group fairness (low-pitch against high-pitch speakers, mean similarity):
+
+| Engine | Gap, resemblyzer | Gap, ECAPA | ECAPA low / high |
+|---|---|---|---|
+| SV2TTS | 0.072 | **0.107** | 0.361 / 0.254 |
+| Chatterbox 0.5B | 0.020 | 0.029 | 0.609 / 0.638 |
+| Turbo | 0.031 | 0.020 | 0.574 / 0.594 |
+| Nano | 0.022 | 0.020 | 0.570 / 0.590 |
+
+### What this shows
+
+* **The earlier conclusion holds and was understated.** A different encoder finds the Chatterbox gain about three
+  times larger than resemblyzer did, in 58 to 60 of 60 pairs. The resemblyzer-only numbers were conservative,
+  as expected from a judge that shares its encoder with the baseline.
+* **Naturalness clears the plan's target for every Chatterbox variant** (predicted MOS at least 3.8; they score
+  4.1 to 4.2) and SV2TTS does not (2.49). Turbo and Nano are indistinguishable from the original on this measure.
+* **The fairness finding is stronger with the independent encoder**: SV2TTS is clearly worse for high-pitched
+  voices (gap 0.107, over the plan's 0.05 limit), while all three Chatterbox variants stay at or under 0.03.
+* The 12 SV2TTS outputs with a word error above 0.3 average a predicted MOS of 1.4, against 2.8 for the rest, so the
+  predictor notices the broken ones.
+
+### Limits
+
+* **A predicted MOS is not a listening test.** UTMOS was trained on the Blizzard and Voice Conversion Challenge
+  ratings, which are of synthetic English speech; it can reward clean, steady audio and it cannot judge identity
+  or expressiveness. The plan says only the listening test decides release, and none has been run.
+* ECAPA was trained on VoxCeleb (celebrity interview speech); other engines' voices were not tested on it
+  beyond this corpus. Absolute similarity values mean little; the paired differences are what to read.
+* Six adult speakers (3 low-pitch, 3 high-pitch), ten texts, one seed; no children or elderly voices.
+* Still no emotion classifier: whether any engine speaks with the requested emotion is unmeasured.
+* The new tools need `speechbrain`, `torch` and a network download of the UTMOS weights (about 390 MB); they are not
+  in `requirements-dev.txt`, for the same reason `faster-whisper` is not.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
