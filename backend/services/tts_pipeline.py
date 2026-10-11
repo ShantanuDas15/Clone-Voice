@@ -575,8 +575,13 @@ def _pause_frames(boundary: Boundary) -> int:
     return int(seconds * synth_hparams.sample_rate / synth_hparams.hop_size)
 
 
-def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
+def synthesize_speech(
+    text: str, embedding: np.ndarray, max_chars: Optional[int] = None
+) -> np.ndarray:
     """Generate a mel spectrogram for text of any supported length.
+
+    ``max_chars`` overrides ``TTS_CHUNK_MAX_CHARS`` for this call (the quality gate's retry
+    uses a smaller one after a truncated decode).
 
     The text is split into punctuation-aware segments (``TTS_CHUNK_MAX_CHARS``, see
     ``text_chunking``), each decoded separately by ``_synthesize_chunk`` so no single
@@ -587,7 +592,7 @@ def synthesize_speech(text: str, embedding: np.ndarray) -> np.ndarray:
     (HARDENING_PLAN.md finding P2-M3, SPEECH_QUALITY_PLAN.md S1.2 and S1.3).
     """
     segments = split_into_segments(
-        _clean_for_chunking(text), settings.TTS_CHUNK_MAX_CHARS
+        _clean_for_chunking(text), max_chars or settings.TTS_CHUNK_MAX_CHARS
     )
     if not segments:
         # let the single-chunk path handle degenerate input
@@ -670,12 +675,21 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
 
 
 def _synthesize_counting_truncation(
-    text: str, embedding: np.ndarray
+    text: str, embedding: np.ndarray, max_chars: Optional[int] = None
 ) -> tuple[np.ndarray, int]:
     """Run ``synthesize_speech`` and also return how many decodes hit the frame cap."""
     _decode_state.truncated = 0
-    mel = synthesize_speech(text, embedding)
+    if max_chars is None:
+        mel = synthesize_speech(text, embedding)
+    else:
+        mel = synthesize_speech(text, embedding, max_chars)
     return mel, int(getattr(_decode_state, "truncated", 0))
+
+
+# After a truncated decode the retry splits the text into chunks this many times smaller,
+# never below the floor (a chunk of a few words always fits in the frame cap).
+_RETRY_CHUNK_DIVISOR = 2
+_MIN_RETRY_CHUNK_CHARS = 20
 
 
 # WaveRNN returns (frames - 1) * hop samples and fades the last 20 hops, so it
@@ -834,11 +848,13 @@ async def run_inference_pipeline(
             "Inference semaphore acquired — starting synthesizer forward pass."
         )
         try:
+            chunk_chars: Optional[int] = None
             for attempt in range(1, attempts + 1):
                 mel, truncated = await slot.run(
                     _synthesize_counting_truncation,
                     text,
                     embedding,
+                    *(() if chunk_chars is None else (chunk_chars,)),
                     timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
                     stage="synthesizer",
                 )
@@ -876,6 +892,14 @@ async def run_inference_pipeline(
                 )
                 if last:
                     raise OutputQualityError(verdict.reasons)
+                if "truncated" in verdict.reasons:
+                    # The same decode would truncate again (SPEECH_QUALITY_STUDY.md,
+                    # S3.4): retry in smaller chunks, which always fit the frame cap.
+                    chunk_chars = max(
+                        _MIN_RETRY_CHUNK_CHARS,
+                        (chunk_chars or settings.TTS_CHUNK_MAX_CHARS)
+                        // _RETRY_CHUNK_DIVISOR,
+                    )
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
                 "Inference forward pass exceeded the per-stage timeout."
