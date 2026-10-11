@@ -803,7 +803,10 @@ def finish_and_save(
 
 
 async def run_inference_pipeline(
-    text: str, embedding: np.ndarray, user_id: str
+    text: str,
+    embedding: np.ndarray,
+    user_id: str,
+    reference_audio_path: Optional[str] = None,
 ) -> tuple[str, float]:
     """Run the full TTS inference pipeline serialised by the inference semaphore.
 
@@ -835,7 +838,14 @@ async def run_inference_pipeline(
     from backend.services.tts_engine import get_engine
 
     engine = get_engine()
-    conditioning = engine.conditioning_from_array(embedding)
+    if engine.needs_reference_audio:
+        # Reads and trims the profile's stored sample: blocking, so off the event loop.
+        conditioning = await asyncio.to_thread(
+            engine.conditioning_from_profile, embedding, reference_audio_path
+        )
+    else:
+        conditioning = engine.conditioning_from_array(embedding)
+    sample_rate = settings.VOCODER_SAMPLE_RATE
     spoken_text = _clean_for_chunking(text)
     max_pause = max(settings.TTS_PAUSE_SECONDS.values())
     attempts = (
@@ -866,12 +876,13 @@ async def run_inference_pipeline(
                     truncation_retries=truncation_retries,
                 )
                 wav, truncated = result.waveform, result.truncated_decodes
+                sample_rate = result.sample_rate
                 if not settings.TTS_QUALITY_GATE_ENABLED:
                     break
                 verdict = await asyncio.to_thread(
                     check_output,
                     wav,
-                    settings.VOCODER_SAMPLE_RATE,
+                    sample_rate,
                     spoken_text,
                     truncated,
                     max_pause,
@@ -906,7 +917,7 @@ async def run_inference_pipeline(
 
     with metrics.observe_stage("save_output"):
         out_path, duration = await asyncio.to_thread(
-            finish_and_save, wav, settings.VOCODER_SAMPLE_RATE, user_id
+            finish_and_save, wav, sample_rate, user_id
         )
     return out_path, duration
 

@@ -28,9 +28,13 @@ from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
 from backend.services.tts_engine import get_engine
-from backend.services.tts_pipeline import (drain_inflight_inference,
-                                           get_model_health, get_warmup_status,
-                                           load_models, warmup_inference)
+from backend.services.tts_pipeline import (
+    drain_inflight_inference,
+    get_model_health,
+    get_warmup_status,
+    load_models,
+    warmup_inference,
+)
 
 
 def configure_logging() -> None:
@@ -322,14 +326,19 @@ def liveness() -> dict:
 
 def _engine_summary() -> dict:
     """Name, version and capabilities of the active speech engine, for the readiness payload."""
-    caps = get_engine().capabilities()
-    return {
+    engine = get_engine()
+    caps = engine.capabilities()
+    summary = {
         "name": caps.name,
         "version": caps.version,
         "sample_rate": caps.sample_rate,
         "max_chars": caps.max_chars,
         "emotions": list(caps.emotions),
     }
+    if engine.needs_reference_audio:
+        # Informational only: a worker that is down must not take the whole app out of service.
+        summary["worker"] = engine.health().get("worker")
+    return summary
 
 
 @app.get("/health/ready")
@@ -354,6 +363,8 @@ async def readiness() -> JSONResponse:
         logger.exception("Readiness DB check failed.")
         database_ok = False
 
+    # A worker engine's health is an HTTP call, so it must not run on the event loop.
+    engine_summary = await asyncio.to_thread(_engine_summary)
     model_status = get_model_health(settings.DEVICE)
     models_ready = model_status.pop("ready")
     warmup = get_warmup_status()
@@ -364,7 +375,7 @@ async def readiness() -> JSONResponse:
         "status": "ok" if ready else "degraded",
         "version": "1.0.0",
         "database": {"ok": database_ok},
-        "engine": _engine_summary(),
+        "engine": engine_summary,
         "models": model_status,
         "warmup": warmup,
     }

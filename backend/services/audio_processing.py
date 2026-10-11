@@ -187,3 +187,40 @@ def preprocess_audio(file_path: str) -> np.ndarray:
             detail="Could not process this audio file. "
             "Please upload a valid, uncorrupted recording.",
         )
+
+
+# SPEECH_QUALITY_PLAN.md S4.3: a reference-audio engine is given a short clean clip, not an
+# embedding. A clone needs about 10 s of speech; the extra seconds are headroom for the
+# worker to choose from, and the cap keeps the request small (20 s of 16-bit 16 kHz is 640 KB).
+REFERENCE_MAX_SECONDS = 20.0
+REFERENCE_MIN_SECONDS = 1.0
+_REFERENCE_DECODE_SECONDS = 40.0
+
+
+def load_reference_audio(
+    file_path: str, max_seconds: float = REFERENCE_MAX_SECONDS
+) -> bytes:
+    """Return up to ``max_seconds`` of a stored sample's speech as 16 kHz mono 16-bit WAV bytes.
+
+    Decodes only the start of the file, trims leading and trailing silence and keeps the level as
+    recorded (the engine levels it itself). The file was validated at upload, so a clip with
+    almost no speech here means it is corrupt or was replaced: that is an error, not a 422.
+
+    Raises:
+        ValueError: If the clip has less than ``REFERENCE_MIN_SECONDS`` of speech.
+    """
+    import io
+
+    import soundfile as sf
+
+    y, _ = librosa.load(file_path, sr=SAMPLE_RATE, duration=_REFERENCE_DECODE_SECONDS)
+    y, _ = librosa.effects.trim(y, top_db=30)
+    y = y[: int(max_seconds * SAMPLE_RATE)]
+    if (
+        len(y) / SAMPLE_RATE < REFERENCE_MIN_SECONDS
+        or float(np.max(np.abs(y), initial=0.0)) <= 0.0
+    ):
+        raise ValueError("reference audio has too little speech")
+    buffer = io.BytesIO()
+    sf.write(buffer, y, SAMPLE_RATE, format="WAV", subtype="PCM_16")
+    return buffer.getvalue()
