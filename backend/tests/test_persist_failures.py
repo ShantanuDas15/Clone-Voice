@@ -130,7 +130,7 @@ def test_upload_failed_profile_db_error_does_not_mask_status(
 ):
     """A DB error while recording the failed profile keeps the original 429/503/500."""
     files = {"file": ("t.wav", create_dummy_wav(), "audio/wav")}
-    with patch("backend.api.voice.embed_speaker_async", side_effect=exc), patch(
+    with patch("backend.services.tts_pipeline.embed_speaker_async", side_effect=exc), patch(
         "backend.api.voice._persist_profile", side_effect=_db_error
     ):
         res = client.post(

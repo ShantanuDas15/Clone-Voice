@@ -31,9 +31,9 @@ from backend.services.audio_processing import (preprocess_audio,
                                                validate_audio_file)
 from backend.services.audio_quality import assess_file
 from backend.services.erasure import erase_voice_profile, remove_files
+from backend.services.tts_engine import get_engine
 from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           embed_speaker_async)
+                                           InferenceTimeoutError)
 from backend.services.voice_embedding import (CLIP_AGREEMENT_WARN,
                                               aggregate_embeddings,
                                               clip_agreement, find_outliers)
@@ -170,7 +170,7 @@ async def _process_clip(
         y_processed = await asyncio.to_thread(preprocess_audio, file_path)
 
     logger.debug("Extracting speaker embedding for user_id=%s", user_id)
-    embedding = await embed_speaker_async(y_processed)
+    embedding = (await get_engine().prepare_voice(y_processed)).embedding
     if not _is_usable_embedding(embedding):
         logger.warning(
             "Blank/invalid speaker embedding for user_id=%s — rejecting", user_id
