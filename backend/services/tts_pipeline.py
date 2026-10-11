@@ -802,12 +802,35 @@ def finish_and_save(
     return save_output(waveform, sample_rate, user_id)
 
 
+class InferenceResult(tuple):
+    """``(output path, duration)`` exactly as before, with the serving engine attached.
+
+    It unpacks as a pair, so callers that only want the file keep working; the API reads
+    ``engine``, ``engine_version`` and ``engine_fallback_from`` to record who spoke.
+    """
+
+    def __new__(
+        cls,
+        path: str,
+        duration: float,
+        engine: str,
+        engine_version: str,
+        engine_fallback_from: Optional[str] = None,
+    ) -> "InferenceResult":
+        """Build the pair and attach the engine facts."""
+        self = super().__new__(cls, (path, duration))
+        self.engine = engine
+        self.engine_version = engine_version
+        self.engine_fallback_from = engine_fallback_from
+        return self
+
+
 async def run_inference_pipeline(
     text: str,
     embedding: np.ndarray,
     user_id: str,
     reference_audio_path: Optional[str] = None,
-) -> tuple[str, float]:
+) -> "InferenceResult":
     """Run the full TTS inference pipeline serialised by the inference semaphore.
 
     Acquires ``_inference_semaphore`` before executing the two model forward
@@ -828,7 +851,8 @@ async def run_inference_pipeline(
         user_id: Owner of this generation; used for output directory routing.
 
     Returns:
-        Tuple of (absolute output WAV path, duration in seconds).
+        An ``InferenceResult``: (absolute output WAV path, duration in seconds), which also
+        says which engine produced the audio and whether it was the fallback.
 
     Raises:
         InferenceQueueFullError: The inference queue is already at capacity.
@@ -851,6 +875,7 @@ async def run_inference_pipeline(
     attempts = (
         settings.TTS_QUALITY_MAX_ATTEMPTS if settings.TTS_QUALITY_GATE_ENABLED else 1
     )
+    served_by, fallback_from = engine, None
     async with _acquire_inference_slot() as slot:
         logger.debug(
             "Inference semaphore acquired — starting synthesizer forward pass."
@@ -933,6 +958,7 @@ async def run_inference_pipeline(
                 metrics.ENGINE_FALLBACKS.labels(
                     engine.name, fallback.name, error.reason
                 ).inc()
+                served_by, fallback_from = fallback, engine.name
                 wav, sample_rate = await synthesize_checked(
                     fallback, fallback.conditioning_from_array(embedding)
                 )
@@ -946,7 +972,9 @@ async def run_inference_pipeline(
         out_path, duration = await asyncio.to_thread(
             finish_and_save, wav, sample_rate, user_id
         )
-    return out_path, duration
+    return InferenceResult(
+        out_path, duration, served_by.name, served_by.version, fallback_from
+    )
 
 
 async def embed_speaker_async(audio: np.ndarray) -> np.ndarray:

@@ -5,7 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 from unidecode import unidecode
 
-from backend.services.sv2tts.synthesizer.utils.symbols import symbols as _sv2tts_symbols
+from backend.services.sv2tts.synthesizer.utils.symbols import \
+    symbols as _sv2tts_symbols
 from backend.services.text_normalization import clean_text
 
 # The real Tacotron2 checkpoint's embedding table only has one row per symbol
@@ -77,5 +78,9 @@ class GenerationOut(BaseModel):
     duration_seconds: Optional[float] = None
     audio_available: bool = False
     created_at: datetime
+    # The engine that produced the audio; engine_fallback_from is set when the preferred
+    # engine was unavailable and the backup voice engine served the request. None on old rows.
+    engine: Optional[str] = None
+    engine_fallback_from: Optional[str] = None
 
     model_config = {"from_attributes": True}

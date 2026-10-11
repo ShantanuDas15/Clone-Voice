@@ -136,6 +136,9 @@ An immutable audit trail and history log of every synthesized audio clip.
 | `duration_seconds`| `FLOAT` | `NULL` | Length of the generated audio (useful for rate-limiting/billing). |
 | `tts_metadata` | `JSONB` | `DEFAULT '{}'` | Stores TTS parameters used (e.g., speed, variance, model version). |
 | `status` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'completed'` | State: `pending`, `completed`, `failed`. |
+| `engine` | `VARCHAR(50)` | `NULL` | Speech engine that produced the audio (on a failed row, the engine that was asked). `NULL` on rows from before this was recorded (migration `1234567890al`): it means "not recorded", not `sv2tts`. |
+| `engine_version` | `VARCHAR(50)` | `NULL` | That engine's version. |
+| `engine_fallback_from` | `VARCHAR(50)` | `NULL` | Set when the preferred engine was unavailable and the in-process backup engine served the request: the name of the engine that was unavailable. |
 | `created_at` | `TIMESTAMPTZ`| `NOT NULL`, `DEFAULT NOW()` | Immutable timestamp of generation. |
 
 *Note: No `updated_at` or `deleted_at`. Generation records are immutable logs. Deleting from history hides it from the user but retains the DB row for compliance/telemetry.*

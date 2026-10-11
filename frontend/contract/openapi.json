@@ -116,6 +116,28 @@
             ],
             "title": "Duration Seconds"
           },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
+          "engine_fallback_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Fallback From"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

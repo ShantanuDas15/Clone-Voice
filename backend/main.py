@@ -28,13 +28,9 @@ from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
 from backend.services.tts_engine import get_engine
-from backend.services.tts_pipeline import (
-    drain_inflight_inference,
-    get_model_health,
-    get_warmup_status,
-    load_models,
-    warmup_inference,
-)
+from backend.services.tts_pipeline import (drain_inflight_inference,
+                                           get_model_health, get_warmup_status,
+                                           load_models, warmup_inference)
 
 
 def configure_logging() -> None:
@@ -251,6 +247,8 @@ app.add_middleware(
         "X-Request-ID",
         "Retry-After",
         "X-Total-Count",
+        "X-Voice-Engine",
+        "X-Voice-Engine-Fallback",
     ],
 )
 
