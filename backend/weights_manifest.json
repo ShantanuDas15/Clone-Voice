@@ -2,7 +2,7 @@
   "source": "https://huggingface.co/CorentinJ/SV2TTS",
   "source_repo": "https://github.com/CorentinJ/Real-Time-Voice-Cloning",
   "license": "MIT",
-  "note": "encoder.pt is NOT used — the speaker encoder's pretrained weights come from the resemblyzer package instead. Only synthesizer.pt and vocoder.pt are required.",
+  "note": "encoder.pt is NOT used \u2014 the speaker encoder's pretrained weights come from the resemblyzer package instead. Only synthesizer.pt and vocoder.pt are required. The audioseal/* entries are the inaudible-watermark networks (SPEECH_QUALITY_PLAN.md S7.2b), fetched from facebook/audioseal into <WEIGHTS_DIR>/audioseal/.",
   "files": {
     "synthesizer.pt": {
       "sha256": "c05e07428f95d0ed8755e1ef54cc8ae251300413d94ce5867a56afe39c499d94",
@@ -11,6 +11,18 @@
     "vocoder.pt": {
       "sha256": "1d7a6861589e927e0fbdaa5849ca022258fe2b58a20cc7bfb8fb598ccf936169",
       "size_bytes": 53845290
+    },
+    "audioseal/generator_base.pth": {
+      "sha256": "7a845b5fbe9364a63a3909d8ab3fe064d13a76ae4c2e983573e08c69b7b51748",
+      "size_bytes": 58805980,
+      "source": "https://huggingface.co/facebook/audioseal",
+      "license": "MIT (stated on the model card and README)"
+    },
+    "audioseal/detector_base.pth": {
+      "sha256": "8a78e8a83584113523e161fc599fcab10fd0e94c04d2eb9d2fa1e9ec91ab69d9",
+      "size_bytes": 34667641,
+      "source": "https://huggingface.co/facebook/audioseal",
+      "license": "MIT (stated on the model card and README)"
     }
   }
 }
