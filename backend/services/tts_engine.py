@@ -72,7 +72,23 @@ class SynthesisResult:
 
 
 class EngineUnavailableError(RuntimeError):
-    """The engine's backend (for example a remote inference worker) cannot be reached or refused."""
+    """The engine's backend (for example a remote inference worker) cannot be reached or refused.
+
+    ``reason`` names the cause for metrics: ``unavailable``, ``busy`` or ``circuit_open``.
+    """
+
+    def __init__(self, message: str, reason: str = "unavailable") -> None:
+        """Keep the message and the metric reason."""
+        super().__init__(message)
+        self.reason = reason
+
+
+class EngineBusyError(EngineUnavailableError):
+    """The backend is up but at capacity: worth a fallback, not a sign of an outage."""
+
+    def __init__(self, message: str) -> None:
+        """A busy backend."""
+        super().__init__(message, reason="busy")
 
 
 class UnsupportedStyleError(ValueError):
@@ -166,3 +182,15 @@ def _build(name: str) -> TTSEngine:
 def get_engine() -> TTSEngine:
     """Return the engine selected by ``TTS_ENGINE``."""
     return _build(settings.TTS_ENGINE)
+
+
+def get_fallback_engine(primary: TTSEngine) -> Optional[TTSEngine]:
+    """The engine to use when ``primary`` is unavailable, or None.
+
+    None when the fallback is switched off or the primary already is the fallback. Only an
+    engine that runs in this process qualifies, so the fallback cannot itself be unavailable.
+    """
+    name = settings.TTS_FALLBACK_ENGINE
+    if name == "none" or name == primary.name:
+        return None
+    return _build(name)

@@ -529,6 +529,45 @@ authenticated synthesis (24 kHz float WAV).
 * In this harness `/health/ready` returned 503 only because my scratch SQLite database had no `alembic_version`
   table; the engine block itself showed the worker reachable.
 
+## Worker outage and the fallback (S4.4, 2026-10-11)
+
+Question: when the Chatterbox worker goes away, do users still get speech, and does service come back by itself?
+
+Setup: the real pipeline with the real SV2TTS weights on the CPU as the fallback, the real Nano worker (built
+from its lock file) on the GPU, `TTS_WORKER_BREAKER_FAILURES=3`, cooldown 8 s. One speaker, one 52-character
+sentence, ten requests in sequence while the worker was started, killed and started again.
+
+| Request | State | Served by | Time | Circuit afterwards |
+|---|---|---|---|---|
+| 1 to 2 | worker up | Chatterbox, 24 kHz | 1.32 s, 0.53 s | closed |
+| 3 to 4 | worker killed | **SV2TTS, 16 kHz** | 6.7 s, 6.3 s | closed |
+| 5 | still down | SV2TTS | 6.5 s | **open** (third failure) |
+| 6 to 7 | still down | SV2TTS | 7.1 s, 6.5 s | half-open, then open again |
+| 8 | down, after the cooldown | SV2TTS | 6.5 s | open (the probe failed) |
+| 9 | worker restarted, after the cooldown | **Chatterbox, 24 kHz** | 1.34 s | **closed** (the probe worked) |
+| 10 | worker up | Chatterbox | 0.51 s | closed |
+
+Every request was answered; none became an error. Service returned without any operator action.
+
+### What this shows and what it costs
+
+* The fallback works end to end, and the breaker opens, probes and closes as designed.
+* **The fallback is slow and lower quality**: about 6.5 s against 0.5 s (about 13 times slower, on this CPU with
+  24 cores) and 16 kHz against 24 kHz. A user during an outage gets a worse voice later, not an error. Every
+  such request is logged and counted (`clonevoice_engine_fallback_total`), and nothing tells the user.
+* A refused connection fails instantly, so this run does not show the breaker's main benefit, which is skipping
+  a **blackholed** worker whose connect would otherwise wait the full connect timeout (5 s) on every request.
+  The 26 tests cover it with a fake clock; it was not measured against a network that drops packets.
+
+### Limits
+
+* One speaker, one text, one machine. The fallback is slower on a smaller CPU: with 8 threads SV2TTS ran at
+  1.9 times real time in S4.2b.
+* Only an unavailable worker triggers the fallback. A worker that answers with bad audio is handled by the
+  quality gate (retry, then a 502), not by SV2TTS.
+* The user is not told which engine served them, and the generation row does not record it (plan S7.1).
+* A worker that dies mid-request surfaces as a timeout or reset, which counts as unavailable; the request is served by the fallback after waiting up to `TTS_WORKER_TIMEOUT_SECONDS` (25 s by default).
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

@@ -201,6 +201,15 @@ class Settings(BaseSettings):
     TTS_WORKER_URL: str = ""
     TTS_WORKER_TOKEN: str = ""
     TTS_WORKER_TIMEOUT_SECONDS: float = Field(default=25.0, gt=0.0, le=300.0)
+    # SPEECH_QUALITY_PLAN.md S4.4: when a worker engine is unavailable (down, timing out,
+    # refusing, busy), serve the request with this in-process engine instead of failing it.
+    # "none" turns the fallback off. The fallback engine's voice quality is lower: every use
+    # is logged and counted (clonevoice_engine_fallback_total).
+    TTS_FALLBACK_ENGINE: Literal["none", "sv2tts"] = "sv2tts"
+    # After this many unavailable replies in a row the worker is treated as down: requests skip
+    # it (and go straight to the fallback) until the cooldown ends, then one request tries it.
+    TTS_WORKER_BREAKER_FAILURES: int = Field(default=3, ge=1, le=20)
+    TTS_WORKER_BREAKER_COOLDOWN_SECONDS: float = Field(default=30.0, ge=1.0, le=600.0)
     # SPEECH_QUALITY_PLAN.md S3.4: check each synthesis for truncation, silence, clipping
     # and implausible length; on a failure run it again, up to this many attempts in all
     # (each attempt is a full synthesis, so the worst-case latency scales with it), then

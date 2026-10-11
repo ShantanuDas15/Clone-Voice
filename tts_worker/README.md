@@ -48,6 +48,15 @@ TTS_WORKER_TOKEN=<the same value>
 `TTS_WORKER_DEVICE=cpu` works for `nano` (cap threads to the real core count, for example `OMP_NUM_THREADS=8`:
 more threads were slower in the S4.2b measurements).
 
+## When the worker is unavailable
+
+The application does not fail the request. If the worker is down, timing out, refusing the token or busy,
+the request is served by the in-process SV2TTS engine (`TTS_FALLBACK_ENGINE`, on by default), logged and
+counted in `clonevoice_engine_fallback_total`. SV2TTS is lower quality (16 kHz) and, on a CPU, several times
+slower. After `TTS_WORKER_BREAKER_FAILURES` (3) outages in a row the app skips the worker for
+`TTS_WORKER_BREAKER_COOLDOWN_SECONDS` (30), then sends one probe request; its success restores normal service.
+A busy reply falls back but never opens the circuit. Set `TTS_FALLBACK_ENGINE=none` to get a `503` instead.
+
 ## Dependencies
 
 `requirements.txt` holds the direct pins; `requirements.lock.txt` is the resolved set (no hashes, because
@@ -58,5 +67,6 @@ Nano is not in the PyPI release of `chatterbox-tts`, so it is installed from a p
 ## Not yet verified
 
 * The Docker image has not been built (Docker was unavailable), and CI does not build it.
+* The fallback was exercised against a killed and restarted worker, not against a network that drops packets.
 * No hosting provider has been chosen (plan question Q1); nothing here is deployed.
 * The model's training data is undisclosed (`SPEECH_QUALITY_STUDY.md`), an owner decision before it serves real users.

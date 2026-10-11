@@ -45,6 +45,12 @@ QUALITY_GATE_FAILURES = Counter(
     ["reason"],
     registry=registry,
 )
+ENGINE_FALLBACKS = Counter(
+    "clonevoice_engine_fallback_total",
+    "Requests served by the fallback engine because the primary one was unavailable.",
+    ["primary", "fallback", "reason"],  # reason: unavailable | busy | circuit_open
+    registry=registry,
+)
 INFERENCE_QUEUE_DEPTH = Gauge(
     "clonevoice_inference_queue_depth",
     "Requests currently waiting for the inference permit.",
