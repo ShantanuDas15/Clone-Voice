@@ -1,0 +1,192 @@
+"""Chatterbox speech engines, served by a separate inference worker (SPEECH_QUALITY_PLAN.md S4.3).
+
+Chatterbox cannot share this application's Python environment (it pins ``torch==2.6.0``,
+``transformers==5.2.0`` and ``gradio``; the app pins ``torch==2.13.0`` and a hash-locked
+dependency set), so it runs in its own service, ``tts_worker/``. This module is the app's side:
+a ``TTSEngine`` that sends the text and the speaker's reference audio to the worker over HTTP and
+returns the waveform, under the same inference slot, timeouts and quality gate as any engine.
+
+The worker is stateless and must not keep user audio; the app sends the reference on every
+request. The wire protocol is small and versioned by path (``/v1``): see ``tts_worker/app.py``.
+"""
+
+import io
+import logging
+from typing import Callable, Optional, Tuple
+
+import httpx
+import numpy as np
+import soundfile as sf
+
+from backend.core.config import settings
+from backend.services.audio_processing import load_reference_audio
+from backend.services.tts_engine import (NEUTRAL, EngineCapabilities,
+                                         EngineUnavailableError, StageRunner,
+                                         SynthesisResult, SynthesisStyle,
+                                         TTSEngine, VoiceConditioning,
+                                         WrongEngineError)
+
+logger = logging.getLogger(__name__)
+
+# The wire protocol, mirrored in tts_worker/app.py (a test keeps the two in step).
+PATH_SYNTHESIZE = "/v1/synthesize"
+PATH_HEALTH = "/health"
+HEADER_SAMPLE_RATE = "X-Sample-Rate"
+HEADER_TRUNCATED = "X-Truncated-Decodes"
+HEADER_MODEL = "X-Model"
+
+# Engine id (the TTS_ENGINE value) to the model the worker must be serving.
+VARIANTS = {
+    "chatterbox": "original",
+    "chatterbox_turbo": "turbo",
+    "chatterbox_nano": "nano",
+}
+SAMPLE_RATE = 24000
+MAX_CHARS = 500
+HEALTH_TIMEOUT_SECONDS = 2.0
+
+
+class ChatterboxEngine(TTSEngine):
+    """One Chatterbox model (original, Turbo or Nano) behind the inference worker."""
+
+    version = "1"
+    needs_reference_audio = True
+
+    def __init__(self, name: str) -> None:
+        """Create the engine registered as ``name`` (a key of ``VARIANTS``)."""
+        if name not in VARIANTS:
+            raise ValueError(f"unknown Chatterbox engine {name!r}")
+        self.name = name
+        self.model = VARIANTS[name]
+        # Tests inject an httpx transport; production leaves it None.
+        self.transport: Optional[httpx.BaseTransport] = None
+
+    def capabilities(self) -> EngineCapabilities:
+        """24 kHz, English, neutral only (tags and intensity are not exposed yet)."""
+        return EngineCapabilities(
+            name=self.name,
+            version=self.version,
+            sample_rate=SAMPLE_RATE,
+            max_chars=MAX_CHARS,
+            emotions=(NEUTRAL,),
+        )
+
+    def _client(self, timeout: float) -> httpx.Client:
+        """An HTTP client for the worker, with its bearer token."""
+        return httpx.Client(
+            base_url=settings.TTS_WORKER_URL,
+            headers={"Authorization": f"Bearer {settings.TTS_WORKER_TOKEN}"},
+            timeout=httpx.Timeout(timeout, connect=min(5.0, timeout)),
+            transport=self.transport,
+        )
+
+    def health(self, expected_device: Optional[str] = None) -> dict:
+        """Ask the worker whether it is up and serving this model; never raises."""
+        try:
+            with self._client(HEALTH_TIMEOUT_SECONDS) as client:
+                response = client.get(PATH_HEALTH)
+            body = response.json() if response.status_code == 200 else {}
+        except (httpx.HTTPError, ValueError):
+            return {"ready": False, "worker": {"reachable": False}}
+        serving = body.get("model")
+        ready = bool(body.get("ready")) and serving == self.model
+        return {
+            "ready": ready,
+            "worker": {
+                "reachable": True,
+                "model": serving,
+                "device": body.get("device"),
+            },
+        }
+
+    def conditioning_from_array(self, embedding: np.ndarray) -> VoiceConditioning:
+        """A conditioning with no reference audio yet (use ``conditioning_from_profile``)."""
+        return VoiceConditioning(self.name, self.version, embedding=embedding)
+
+    def conditioning_from_profile(
+        self, embedding: np.ndarray, reference_audio_path: Optional[str]
+    ) -> VoiceConditioning:
+        """Read the profile's retained sample as the speaker reference (blocking)."""
+        if not reference_audio_path:
+            raise WrongEngineError("this voice has no stored reference audio")
+        return VoiceConditioning(
+            self.name,
+            self.version,
+            embedding=embedding,
+            reference_audio=load_reference_audio(reference_audio_path),
+        )
+
+    async def prepare_voice(self, audio: np.ndarray) -> VoiceConditioning:
+        """Capture the voice at upload.
+
+        Every profile keeps the SV2TTS speaker embedding (it drives the multi-clip agreement
+        check and the fallback engine); this engine reads the retained audio at synthesis.
+        """
+        from backend.services.sv2tts_engine import Sv2ttsEngine
+
+        sv2tts = await Sv2ttsEngine().prepare_voice(audio)
+        return self.conditioning_from_array(sv2tts.embedding)
+
+    def _call_worker(
+        self, text: str, reference: bytes, truncation_retries: int
+    ) -> Tuple[np.ndarray, int, int]:
+        """POST one synthesis to the worker; return (waveform, sample rate, truncated decodes)."""
+        try:
+            with self._client(settings.TTS_WORKER_TIMEOUT_SECONDS) as client:
+                response = client.post(
+                    PATH_SYNTHESIZE,
+                    data={
+                        "text": text,
+                        "model": self.model,
+                        "truncation_retries": str(truncation_retries),
+                    },
+                    files={"reference": ("reference.wav", reference, "audio/wav")},
+                )
+        except httpx.TimeoutException:
+            raise EngineUnavailableError("the inference worker timed out") from None
+        except httpx.HTTPError:
+            raise EngineUnavailableError(
+                "the inference worker is unreachable"
+            ) from None
+
+        status = response.status_code
+        if status in (401, 403):
+            logger.error("The inference worker refused the service token (%d)", status)
+            raise EngineUnavailableError("the inference worker refused the request")
+        if status >= 500:
+            raise EngineUnavailableError(f"the inference worker failed ({status})")
+        if status != 200:
+            raise RuntimeError(f"the inference worker rejected the request ({status})")
+
+        try:
+            waveform, rate = sf.read(io.BytesIO(response.content), dtype="float32")
+            truncated = int(response.headers.get(HEADER_TRUNCATED, "0"))
+        except (RuntimeError, ValueError):
+            raise EngineUnavailableError(
+                "the inference worker sent unreadable audio"
+            ) from None
+        if waveform.ndim != 1:
+            waveform = waveform.mean(axis=1)
+        return waveform, int(rate), truncated
+
+    async def synthesize(
+        self,
+        text: str,
+        conditioning: VoiceConditioning,
+        style: Optional[SynthesisStyle],
+        *,
+        run_stage: StageRunner,
+        truncation_retries: int = 0,
+    ) -> SynthesisResult:
+        """Send the text and reference to the worker as one timed ``worker`` stage."""
+        self.check_request(conditioning, style)
+        if not conditioning.reference_audio:
+            raise WrongEngineError("this voice has no reference audio")
+        waveform, rate, truncated = await run_stage(
+            "worker",
+            self._call_worker,
+            text,
+            conditioning.reference_audio,
+            truncation_retries,
+        )
+        return SynthesisResult(waveform, rate, truncated)

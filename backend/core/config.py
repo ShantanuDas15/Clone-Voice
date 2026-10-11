@@ -188,9 +188,19 @@ class Settings(BaseSettings):
     TTS_PAUSE_SECONDS: dict[str, float] = Field(
         default_factory=lambda: dict(DEFAULT_TTS_PAUSE_SECONDS)
     )
-    # SPEECH_QUALITY_PLAN.md S4.1: which speech engine serves requests. Only the original
-    # SV2TTS engine exists so far; a better one is added behind this setting.
-    TTS_ENGINE: Literal["sv2tts"] = "sv2tts"
+    # SPEECH_QUALITY_PLAN.md S4.1: which speech engine serves requests. "sv2tts" runs in this
+    # process; the chatterbox* engines run in the separate inference worker (tts_worker/)
+    # named by TTS_WORKER_URL (S4.3) and need a GPU there for the full model (Nano also runs
+    # on a CPU).
+    TTS_ENGINE: Literal[
+        "sv2tts", "chatterbox", "chatterbox_turbo", "chatterbox_nano"
+    ] = "sv2tts"
+    # The inference worker's base URL and the shared bearer token (a secret: keep it in .env).
+    # https is required unless the worker is on this machine. The call timeout must stay
+    # under INFERENCE_CALL_TIMEOUT_SECONDS so the request thread ends before its stage times out.
+    TTS_WORKER_URL: str = ""
+    TTS_WORKER_TOKEN: str = ""
+    TTS_WORKER_TIMEOUT_SECONDS: float = Field(default=25.0, gt=0.0, le=300.0)
     # SPEECH_QUALITY_PLAN.md S3.4: check each synthesis for truncation, silence, clipping
     # and implausible length; on a failure run it again, up to this many attempts in all
     # (each attempt is a full synthesis, so the worst-case latency scales with it), then
@@ -321,6 +331,37 @@ class Settings(BaseSettings):
         ):
             if field not in self.model_fields_set:
                 setattr(self, field, str(root / subdir))
+        return self
+
+    @model_validator(mode="after")
+    def worker_engine_is_configured(self) -> "Settings":
+        """Fail at startup on a worker engine with no usable, safe worker settings."""
+        if self.TTS_ENGINE == "sv2tts":
+            return self
+        url = urlparse(self.TTS_WORKER_URL)
+        if (
+            not self.TTS_WORKER_URL
+            or not url.hostname
+            or url.scheme not in {"http", "https"}
+        ):
+            raise ValueError(
+                f"TTS_ENGINE={self.TTS_ENGINE} requires TTS_WORKER_URL (an http(s) URL)"
+            )
+        if url.scheme != "https" and url.hostname not in {
+            "localhost",
+            "127.0.0.1",
+            "::1",
+        }:
+            raise ValueError(
+                "TTS_WORKER_URL must be https unless the worker is on this machine: "
+                "voice recordings are sent to it"
+            )
+        if len(self.TTS_WORKER_TOKEN) < 32:
+            raise ValueError("TTS_WORKER_TOKEN must be at least 32 characters")
+        if self.TTS_WORKER_TIMEOUT_SECONDS >= self.INFERENCE_CALL_TIMEOUT_SECONDS:
+            raise ValueError(
+                "TTS_WORKER_TIMEOUT_SECONDS must be below INFERENCE_CALL_TIMEOUT_SECONDS"
+            )
         return self
 
     @model_validator(mode="after")

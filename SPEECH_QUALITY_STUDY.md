@@ -494,6 +494,41 @@ it does not show it sounds like a laugh, which needs a listener.
   Training data of all three is undisclosed, the watermark is always on, and its package needs `setuptools<81`.
 * The tag check measures duration and level, not content.
 
+## Chatterbox through the inference worker (S4.3, 2026-10-11)
+
+Question: does the integrated path (application API, then the separate worker over HTTP, then the quality
+gate and storage) work with the real model, and what does the extra hop cost?
+
+Setup: the application's own API (`/voice/upload`, `/synthesize`, `DELETE /voice/profiles/...`) with
+`TTS_ENGINE=chatterbox_nano`, the real Nano worker on the RTX 4060 over loopback HTTP, one real LibriSpeech
+speaker (one reference clip uploaded), four texts. The worker ran from a **fresh virtual environment built
+from `tts_worker/requirements.lock.txt`**, not the environment used for the benchmarks.
+
+| Text | Audio | Request time | End-to-end RTF | Similarity to the real speaker |
+|---|---|---|---|---|
+| 31 characters (first request, includes warm-up) | 1.84 s | 1.47 s | 0.80 | 0.815 |
+| 61 characters | 3.40 s | 0.55 s | 0.16 | 0.846 |
+| 142 characters | 7.72 s | 0.99 s | 0.13 | 0.896 |
+| 460 characters, 30.9 s of speech | 30.88 s | 4.23 s | 0.14 | 0.887 |
+
+Every reply was 24 kHz. Reading the reference, the HTTP hop, the gate and levelling add little: the
+end-to-end factor (0.13 to 0.16) is close to the model's own 0.12. After five requests the worker had left
+no temporary files and its log held none of the request texts; deleting the profile removed every upload file.
+The S3.4 quality gate, calibrated on SV2TTS, passes all 180 Chatterbox outputs from the benchmarks (duration
+ratios 0.78 to 1.43), so it needed no recalibration. A worker built from the lock file answered health and an
+authenticated synthesis (24 kHz float WAV).
+
+### Limits
+
+* One speaker, one model (Nano), four texts, loopback network. A remote worker adds network latency and sends about 640 KB of reference per request.
+* **Long text can be cut silently.** The 460-character text produced 30.9 s of speech; the model samples at most
+  1000 speech tokens (about 40 s). A denser 500-character text may be cut with no signal: the worker reports
+  no truncation, so only the gate's duration check can notice.
+* No fallback to SV2TTS when the worker is down yet (plan S4.4): the request gets a 503 and a failed audit row.
+* The worker image (`tts_worker/Dockerfile`) is unbuilt. The lock has no hashes (two requirements install from Git commits).
+* In this harness `/health/ready` returned 503 only because my scratch SQLite database had no `alembic_version`
+  table; the engine block itself showed the worker reachable.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

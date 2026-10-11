@@ -123,6 +123,7 @@ backend/
 ├── services/
 │   ├── tts_engine.py          # TTSEngine interface + registry (TTS_ENGINE); every engine implements it
 │   ├── sv2tts_engine.py       # The SV2TTS engine (adapter over tts_pipeline)
+│   ├── chatterbox_engine.py   # Chatterbox engines (client of the inference worker)
 │   ├── tts_pipeline.py        # SV2TTS inference (Encoder, Synthesizer, Vocoder), slot, quality gate, output
 │   └── audio_processing.py    # Librosa preprocessing (resample, trim, normalize)
 ├── models/
@@ -130,6 +131,7 @@ backend/
 ├── core/
 │   ├── security.py            # JWT and password hashing
 │   └── config.py              # Environment variable management
+├── ../tts_worker/             # Separate inference worker service (own env) for Chatterbox
 ├── weights/                   # Pre-trained model weights (gitignored if >100MB)
 ├── uploads/                   # Audio sample inputs stored by user_id (gitignored)
 ├── outputs/                   # Generated SR output audio stored by user_id (gitignored)

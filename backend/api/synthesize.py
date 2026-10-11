@@ -23,6 +23,7 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
+from backend.services.tts_engine import EngineUnavailableError, get_engine
 from backend.services.tts_pipeline import (InferenceQueueFullError,
                                            InferenceTimeoutError,
                                            OutputQualityError, free_gpu_memory,
@@ -150,6 +151,13 @@ async def synthesize(
     user_id = current_user.id
     profile_id = profile.id
     embedding_path = profile.embedding_path
+    # A reference-audio engine (Chatterbox) also needs the stored sample; the SV2TTS call is
+    # left exactly as it was.
+    pipeline_extra = (
+        {"reference_audio_path": profile.audio_sample_path}
+        if get_engine().needs_reference_audio
+        else {}
+    )
 
     try:
         embedding = await asyncio.to_thread(np.load, embedding_path)
@@ -168,7 +176,7 @@ async def synthesize(
 
     try:
         out_path, duration = await run_inference_pipeline(
-            req.text, embedding, str(user_id)
+            req.text, embedding, str(user_id), **pipeline_extra
         )
     except InferenceQueueFullError:
         logger.warning(
@@ -209,6 +217,17 @@ async def synthesize(
             status_code=502,
             detail="The synthesized audio did not meet the quality bar. "
             "Please try again, or shorten or reword the text.",
+        )
+    except EngineUnavailableError:
+        logger.exception(
+            "Speech engine unavailable — user_id=%s, profile_id=%s", user_id, profile_id
+        )
+        await asyncio.to_thread(
+            _record_failed_generation, db, user_id, profile_id, req.text
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="The speech service is temporarily unavailable. Please try again shortly.",
         )
     except torch.cuda.OutOfMemoryError:
         logger.exception(

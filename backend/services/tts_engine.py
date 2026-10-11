@@ -42,12 +42,15 @@ class VoiceConditioning:
     """What an engine needs to speak as one voice.
 
     Tagged with the engine and its version so a profile made for one engine is never fed to
-    another (SPEECH_QUALITY_PLAN.md S4.5 stores these per profile).
+    another (SPEECH_QUALITY_PLAN.md S4.5 stores these per profile). An embedding engine
+    (SV2TTS) uses ``embedding``; a reference-audio engine (Chatterbox) uses
+    ``reference_audio``, a short clean WAV of the speaker.
     """
 
     engine: str
     version: str
-    embedding: np.ndarray
+    embedding: Optional[np.ndarray] = None
+    reference_audio: Optional[bytes] = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,10 @@ class SynthesisResult:
     truncated_decodes: int = 0
 
 
+class EngineUnavailableError(RuntimeError):
+    """The engine's backend (for example a remote inference worker) cannot be reached or refused."""
+
+
 class UnsupportedStyleError(ValueError):
     """The requested style is outside the engine's capabilities."""
 
@@ -81,6 +88,8 @@ class TTSEngine(ABC):
 
     name: str
     version: str
+    # True when the engine conditions on the speaker's reference audio rather than an embedding.
+    needs_reference_audio: bool = False
 
     @abstractmethod
     def capabilities(self) -> EngineCapabilities:
@@ -93,6 +102,12 @@ class TTSEngine(ABC):
     @abstractmethod
     def conditioning_from_array(self, embedding: np.ndarray) -> VoiceConditioning:
         """Wrap a stored profile embedding as this engine's conditioning."""
+
+    def conditioning_from_profile(
+        self, embedding: np.ndarray, reference_audio_path: Optional[str]
+    ) -> VoiceConditioning:
+        """Build the conditioning for a stored profile; embedding engines ignore the audio."""
+        return self.conditioning_from_array(embedding)
 
     @abstractmethod
     async def prepare_voice(self, audio: np.ndarray) -> VoiceConditioning:
@@ -141,6 +156,10 @@ def _build(name: str) -> TTSEngine:
         from backend.services.sv2tts_engine import Sv2ttsEngine
 
         return Sv2ttsEngine()
+    if name.startswith("chatterbox"):
+        from backend.services.chatterbox_engine import ChatterboxEngine
+
+        return ChatterboxEngine(name)
     raise ValueError(f"unknown TTS engine {name!r}")
 
 
