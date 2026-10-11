@@ -1,0 +1,150 @@
+{
+  "checked": "2026-10-11",
+  "method": "Licence and capability facts were read from each project's own GitHub page, model card or LICENSE file on the date above (see SPEECH_QUALITY_STUDY.md, section S4.2). Page text was summarised, so for a candidate that is adopted its LICENSE file must be read in full first.",
+  "licence_values": {
+    "ok": "code and weights are under a licence that permits commercial use, as stated by the project",
+    "unclear": "a licence is named but commercial terms, or the weights' licence, were not confirmed",
+    "blocked": "the weights or code forbid commercial use, or need a separate commercial agreement"
+  },
+  "decision_values": {
+    "candidate": "benchmarked, and worth taking to S4.3 if the open conditions are met",
+    "unassessed": "licence does not rule it out but it was not benchmarked",
+    "rejected": "ruled out, with the reason in notes"
+  },
+  "candidates": [
+    {
+      "id": "chatterbox",
+      "name": "Chatterbox (Resemble AI), original English 0.5B",
+      "code_license": "MIT",
+      "weights_license": "MIT (Hugging Face model metadata)",
+      "licence": "ok",
+      "benchmarked": true,
+      "decision": "candidate",
+      "evidence": [
+        "https://github.com/resemble-ai/chatterbox",
+        "https://raw.githubusercontent.com/resemble-ai/chatterbox/master/LICENSE",
+        "https://huggingface.co/ResembleAI/chatterbox"
+      ],
+      "notes": "Training data is described only as 0.5M hours of cleaned data, with no dataset names or licences, so the data terms behind the MIT weights cannot be checked. Every output carries the PerTh watermark and the README gives no way to remove it. Emotion control is a single exaggeration scalar, not emotion labels. The watermark package imports pkg_resources, which current setuptools no longer ships."
+    },
+    {
+      "id": "zonos",
+      "name": "Zonos v0.1 (Zyphra), 2B",
+      "code_license": "Apache-2.0",
+      "weights_license": "Apache-2.0 (Hugging Face model metadata)",
+      "licence": "ok",
+      "benchmarked": false,
+      "decision": "unassessed",
+      "evidence": [
+        "https://github.com/Zyphra/Zonos",
+        "https://huggingface.co/Zyphra/Zonos-v0.1-transformer"
+      ],
+      "notes": "Emotion controls (happiness, anger, sadness, fear), 44 kHz, Linux and NVIDIA 3000-series with 6 GB or more only. Needs the espeak-ng system package, which is not installed on the development machine. Training data unnamed (200k hours)."
+    },
+    {
+      "id": "cosyvoice3",
+      "name": "Fun-CosyVoice 3.0 (FunAudioLLM), 0.5B",
+      "code_license": "Apache-2.0",
+      "weights_license": "Apache-2.0 (Hugging Face model metadata)",
+      "licence": "ok",
+      "benchmarked": false,
+      "decision": "unassessed",
+      "evidence": [
+        "https://github.com/FunAudioLLM/CosyVoice",
+        "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512"
+      ],
+      "notes": "Instruction control for emotion, speed and volume; self-reported English WER 2.24%. The README says instruct inference uses a separate checkpoint. Needs sox and a conda environment. The model page calls its examples academic, with no training data statement."
+    },
+    {
+      "id": "openvoice_v2",
+      "name": "OpenVoice V2 (MyShell)",
+      "code_license": "MIT",
+      "weights_license": "MIT (stated for V1 and V2 together)",
+      "licence": "ok",
+      "benchmarked": false,
+      "decision": "unassessed",
+      "evidence": ["https://github.com/myshell-ai/OpenVoice"],
+      "notes": "A tone-colour converter plus a separate base TTS, so identity and delivery come from different models. Style controls are described for V1; whether V2 keeps them is not stated. Not benchmarked."
+    },
+    {
+      "id": "omnivoice",
+      "name": "OmniVoice (k2-fsa)",
+      "code_license": "Apache-2.0",
+      "weights_license": "not stated on the repository page",
+      "licence": "unclear",
+      "benchmarked": false,
+      "decision": "unassessed",
+      "evidence": ["https://github.com/k2-fsa/OmniVoice"],
+      "notes": "Released 2026, 600+ languages, zero-shot cloning from 3 to 10 seconds, non-verbal tags, but no emotion control is described. Weights licence and training data not stated."
+    },
+    {
+      "id": "styletts2",
+      "name": "StyleTTS 2",
+      "code_license": "MIT",
+      "weights_license": "no licence named; usage terms attached",
+      "licence": "unclear",
+      "benchmarked": false,
+      "decision": "rejected",
+      "evidence": ["https://github.com/yl4579/StyleTTS2"],
+      "notes": "No user-facing emotion or style control (style is a latent sampled from the text). The pretrained models require telling listeners the speech is synthesized and using only voices whose owners allow cloning. Inference depends on a GPL-licensed phonemizer package. Rejected because it cannot deliver the emotion goal."
+    },
+    {
+      "id": "f5_tts",
+      "name": "F5-TTS",
+      "code_license": "MIT",
+      "weights_license": "CC-BY-NC-4.0",
+      "licence": "blocked",
+      "benchmarked": false,
+      "decision": "rejected",
+      "evidence": ["https://huggingface.co/SWivid/F5-TTS"],
+      "notes": "Checkpoint licence is non-commercial (the model page lists cc-by-nc-4.0 and Emilia as the training set)."
+    },
+    {
+      "id": "xtts_v2",
+      "name": "XTTS-v2 (Coqui)",
+      "code_license": "MPL-2.0 (toolkit)",
+      "weights_license": "Coqui Public Model License",
+      "licence": "blocked",
+      "benchmarked": false,
+      "decision": "rejected",
+      "evidence": ["https://huggingface.co/coqui/XTTS-v2"],
+      "notes": "The model page names the CPML; secondary sources describe it as non-commercial and the company as shut down, so there is nobody to license it from. The CPML text itself was not read."
+    },
+    {
+      "id": "fish_audio_s2_pro",
+      "name": "Fish Audio S2 Pro, 4B",
+      "code_license": "Fish Audio Research License",
+      "weights_license": "Fish Audio Research License",
+      "licence": "blocked",
+      "benchmarked": false,
+      "decision": "rejected",
+      "evidence": [
+        "https://github.com/fishaudio/fish-speech",
+        "https://raw.githubusercontent.com/fishaudio/fish-speech/main/LICENSE"
+      ],
+      "notes": "Research and non-commercial use only; commercial use needs a separate written agreement with Fish Audio. Strong emotion tags, but not usable without that agreement."
+    },
+    {
+      "id": "indextts2",
+      "name": "IndexTTS2 / 2.5 (bilibili)",
+      "code_license": "bilibili Model Use License Agreement",
+      "weights_license": "bilibili Model Use License Agreement",
+      "licence": "unclear",
+      "benchmarked": false,
+      "decision": "rejected",
+      "evidence": ["https://github.com/index-tts/index-tts"],
+      "notes": "Best emotion control found (separate emotion reference, 8-value emotion vector, text-described emotion), but the README says commercial use needs contacting the authors and the licence text could not be fetched. Revisit only if a commercial agreement is obtained."
+    },
+    {
+      "id": "orpheus",
+      "name": "Orpheus TTS (Canopy), 3B",
+      "code_license": "Apache-2.0",
+      "weights_license": "not stated on the repository page",
+      "licence": "unclear",
+      "benchmarked": false,
+      "decision": "rejected",
+      "evidence": ["https://github.com/canopyai/Orpheus-TTS"],
+      "notes": "The README says the pretrained model was not trained for zero-shot voice cloning, so it cannot clone a user's voice from a short clip. Emotion tags (laugh, sigh) exist."
+    }
+  ]
+}
