@@ -23,7 +23,8 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services.tts_engine import EngineUnavailableError, get_engine
+from backend.services.tts_engine import (EngineUnavailableError,
+                                         get_engine_for_user)
 from backend.services.tts_pipeline import (InferenceQueueFullError,
                                            InferenceTimeoutError,
                                            OutputQualityError, free_gpu_memory,
@@ -166,7 +167,7 @@ async def synthesize(
     # left exactly as it was.
     pipeline_extra = (
         {"reference_audio_path": profile.audio_sample_path}
-        if get_engine().needs_reference_audio
+        if get_engine_for_user(str(current_user.id)).needs_reference_audio
         else {}
     )
 

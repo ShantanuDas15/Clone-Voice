@@ -318,10 +318,10 @@ def test_synthesize_limit_is_enforced_at_the_engine_override(
     "value", [{"nope": "2/minute"}, {"chatterbox": "fast"}, {"sv2tts": ""}]
 )
 def test_bad_engine_limits_fail_at_startup(value):
-    with pytest.raises(ValueError):
-        Settings(SYNTHESIZE_RATE_LIMIT_BY_ENGINE=value, _env_file=None)
+    with pytest.raises(ValueError, match="SYNTHESIZE_RATE_LIMIT_BY_ENGINE|rate limit"):
+        Settings(SYNTHESIZE_RATE_LIMIT_BY_ENGINE=value)
 
 
 def test_a_malformed_default_limit_fails_at_startup():
-    with pytest.raises(ValueError):
-        Settings(SYNTHESIZE_RATE_LIMIT="often", _env_file=None)
+    with pytest.raises(ValueError, match="not a valid rate limit"):
+        Settings(SYNTHESIZE_RATE_LIMIT="often")
