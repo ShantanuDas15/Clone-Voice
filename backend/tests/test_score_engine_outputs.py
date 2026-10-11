@@ -220,3 +220,183 @@ def test_main_refuses_a_baseline_that_is_not_an_engine(tmp_path, corpus):
                 "other",
             ]
         )
+
+
+# --- the optional independent encoder and naturalness score ------------------
+
+
+class _OtherEncoder:
+    """A second, different encoder: the loudest of 8 coarse bands, so it disagrees with the first."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def embed_utterance(self, y: np.ndarray) -> np.ndarray:
+        self.calls += 1
+        v = np.abs(np.fft.rfft(y[: SR // 2], 512))[:8].astype(np.float64)
+        return v / (np.linalg.norm(v) or 1.0)
+
+
+def _score_with(tmp_path, corpus, texts, independent=None, predict_mos=None):
+    engine = tmp_path / "out" / "eng"
+    _write(engine / "a" / "0.wav", _tone(150.0))
+    _write(engine / "a" / "1.wav", _tone(300.0))
+    from backend import evaluate_synthesis as ev
+
+    return sc.score_engine(
+        engine,
+        ev.load_dataset(corpus),
+        ev.load_groups(corpus / "groups.json"),
+        texts,
+        _SpectrumEncoder(),
+        None,
+        lambda text: text,
+        independent,
+        predict_mos,
+    )
+
+
+def test_the_extra_columns_exist_only_when_asked_for(tmp_path, corpus, texts):
+    plain = _score_with(tmp_path, corpus, texts)
+    assert all("secs_independent" not in r and "mos" not in r for r in plain)
+    rows = _score_with(
+        tmp_path,
+        corpus,
+        texts,
+        _OtherEncoder(),
+        lambda y: 3.5 + float(np.max(np.abs(y))),
+    )
+    assert all(isinstance(r["secs_independent"], float) for r in rows)
+    assert rows[0]["mos"] == pytest.approx(3.8, abs=0.01)
+
+
+def test_the_independent_score_comes_from_the_independent_encoder(
+    tmp_path, corpus, texts
+):
+    other = _OtherEncoder()
+    rows = _score_with(tmp_path, corpus, texts, other)
+    assert other.calls > 0
+    # The matching-pitch output scores higher than the wrong-pitch one with this encoder as well.
+    assert rows[0]["secs_independent"] > rows[1]["secs_independent"]
+
+
+def _extra_row(speaker, i, group, secs, ind=None, mos=None):
+    row = _row(speaker, i, group, secs)
+    if ind is not None:
+        row["secs_independent"] = ind
+    if mos is not None:
+        row["mos"] = mos
+    return row
+
+
+def test_summary_pairs_the_independent_similarity_and_the_mos():
+    base = [
+        _extra_row("a", 0, "g", 0.8, 0.5, 3.0),
+        _extra_row("a", 1, "g", 0.8, 0.5, 3.2),
+    ]
+    new = [
+        _extra_row("a", 0, "g", 0.9, 0.7, 4.0),
+        _extra_row("a", 1, "g", 0.9, 0.4, 4.4),
+    ]
+    report = sc.summarize({"base": base, "new": new}, baseline="base")
+    assert report["engines"]["new"]["mos"]["mean"] == pytest.approx(4.2)
+    paired = report["paired_vs_baseline"]["new"]
+    assert paired["mos_difference"]["mean"] == pytest.approx(1.1)
+    assert paired["mos_better_count"] == 2
+    assert paired["secs_independent_difference"]["mean"] == pytest.approx(0.05)
+    assert paired["secs_independent_better_count"] == 1
+
+
+def test_without_the_extras_the_summary_reports_nulls():
+    report = sc.summarize({"e": [_row("a", 0, "g", 0.8)]})
+    assert report["engines"]["e"]["mos"]["n"] == 0
+    json.dumps(report, allow_nan=False)
+
+
+def test_main_loads_the_extras_only_when_the_flags_ask(tmp_path, corpus, capsys):
+    _write(tmp_path / "out" / "x" / "a" / "0.wav", _tone(150.0))
+    calls = {"ecapa": 0, "utmos": 0}
+
+    def fake_ecapa():
+        calls["ecapa"] += 1
+        return _OtherEncoder()
+
+    def fake_utmos():
+        calls["utmos"] += 1
+        return lambda y: 4.0
+
+    base_args = [
+        "--corpus",
+        str(corpus),
+        "--outputs",
+        str(tmp_path / "out"),
+        "--engines",
+        "x",
+        "--whisper-model",
+        "none",
+    ]
+    with patch(
+        "resemblyzer.VoiceEncoder", lambda device: _SpectrumEncoder()
+    ), patch.object(sc, "make_ecapa_encoder", fake_ecapa), patch.object(
+        sc, "make_utmos_predictor", fake_utmos
+    ):
+        sc.main(base_args)
+        assert calls == {"ecapa": 0, "utmos": 0}
+        capsys.readouterr()
+        sc.main(base_args + ["--independent-encoder", "ecapa", "--mos", "utmos"])
+    assert calls == {"ecapa": 1, "utmos": 1}
+    report = json.loads(capsys.readouterr().out)
+    assert report["engines"]["x"]["mos"]["mean"] == 4.0
+    assert report["engines"]["x"]["secs_independent"]["n"] == 1
+
+
+def test_a_missing_speechbrain_gives_an_install_hint(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "speechbrain.inference.speaker", None)
+    with pytest.raises(SystemExit, match="speechbrain"):
+        sc.make_ecapa_encoder()
+
+
+def test_group_gaps_are_reported_for_both_encoders():
+    rows = [
+        _extra_row("a", 0, "low", 0.8, 0.6),
+        _extra_row("b", 0, "high", 0.7, 0.3),
+    ]
+    engine = sc.summarize({"e": rows})["engines"]["e"]
+    assert engine["group_gap"] == pytest.approx(0.1)
+    assert engine["group_gap_independent"] == pytest.approx(0.3)
+    assert engine["group_secs_independent"] == {"low": 0.6, "high": 0.3}
+
+
+def test_a_group_gap_needs_the_independent_scores_to_exist():
+    engine = sc.summarize({"e": [_row("a", 0, "g", 0.8)]})["engines"]["e"]
+    assert (
+        engine["group_gap_independent"] is None
+        and engine["group_secs_independent"] == {}
+    )
+
+
+def test_the_written_report_keeps_every_output_but_stdout_stays_a_summary(
+    tmp_path, corpus, capsys
+):
+    _write(tmp_path / "out" / "x" / "a" / "0.wav", _tone(150.0))
+    path = tmp_path / "report.json"
+    with patch("resemblyzer.VoiceEncoder", lambda device: _SpectrumEncoder()):
+        sc.main(
+            [
+                "--corpus",
+                str(corpus),
+                "--outputs",
+                str(tmp_path / "out"),
+                "--engines",
+                "x",
+                "--whisper-model",
+                "none",
+                "--out",
+                str(path),
+            ]
+        )
+    assert "rows" not in json.loads(capsys.readouterr().out)
+    saved = json.loads(path.read_text())
+    assert len(saved["rows"]["x"]) == 1 and saved["engines"]["x"]["outputs"] == 1

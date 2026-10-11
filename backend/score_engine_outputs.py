@@ -11,7 +11,10 @@ speaker one ``0_ref_*`` reference clip and the held-out real clips.
 Every engine is scored by the same code as ``evaluate_synthesis``: speaker similarity to the mean
 embedding of the speaker's real held-out clips (resemblyzer, which favours an engine conditioned by
 the same encoder), pitch error and range against the same clips, and Whisper word error rate against
-the normalised text. Evaluation only: needs resemblyzer and faster-whisper, neither a runtime dependency.
+the normalised text. Two optional extras remove the remaining blind spots (SPEECH_QUALITY_PLAN.md S0.1):
+``--independent-encoder ecapa`` repeats the similarity with a different speaker encoder (SpeechBrain
+ECAPA-TDNN), and ``--mos utmos`` adds a predicted naturalness score (UTMOS22). Evaluation only: these
+need resemblyzer, faster-whisper, speechbrain and torch, none of them a runtime dependency.
 """
 
 import argparse
@@ -45,13 +48,20 @@ def _load(path: Path) -> np.ndarray:
     return np.asarray(librosa.load(str(path), sr=SAMPLE_RATE)[0], dtype=np.float32)
 
 
-def real_reference(encoder, held_out: Sequence[str]) -> Dict[str, np.ndarray]:
-    """Target embedding and pitch track of a speaker's real held-out clips."""
+def real_reference(
+    encoder, held_out: Sequence[str], independent=None
+) -> Dict[str, np.ndarray]:
+    """Target embeddings and pitch track of a speaker's real held-out clips."""
     clips = [_load(Path(p)) for p in held_out]
-    return {
+    reference = {
         "target": np.mean([encoder.embed_utterance(y) for y in clips], axis=0),
         "f0": np.concatenate([ev.f0_track(y) for y in clips]),
     }
+    if independent is not None:
+        reference["target_independent"] = np.mean(
+            [independent.embed_utterance(y) for y in clips], axis=0
+        )
+    return reference
 
 
 def score_engine(
@@ -62,11 +72,17 @@ def score_engine(
     encoder,
     transcribe: Optional[Callable[[np.ndarray], str]],
     spoken_form: Callable[[str], str],
+    independent=None,
+    predict_mos: Optional[Callable[[np.ndarray], float]] = None,
 ) -> List[Dict[str, object]]:
-    """Score every ``<engine_dir>/<speaker>/<i>.wav`` that exists; missing files are skipped."""
+    """Score every ``<engine_dir>/<speaker>/<i>.wav`` that exists; missing files are skipped.
+
+    ``independent`` is a second speaker encoder (anything with ``embed_utterance``) and
+    ``predict_mos`` maps 16 kHz audio to a predicted naturalness score; both are optional.
+    """
     rows: List[Dict[str, object]] = []
     for speaker, files in speakers.items():
-        reference = real_reference(encoder, files[1:])
+        reference = real_reference(encoder, files[1:], independent)
         for i, item in enumerate(texts):
             path = engine_dir / speaker / f"{i}.wav"
             if not path.exists():
@@ -82,6 +98,12 @@ def score_engine(
                 "f0_error_semitones": ev.f0_error_semitones(reference["f0"], f0),
                 "f0_range_ratio": ev.f0_range_ratio(reference["f0"], f0),
             }
+            if independent is not None:
+                row["secs_independent"] = ev.secs(
+                    independent.embed_utterance(y), reference["target_independent"]
+                )
+            if predict_mos is not None:
+                row["mos"] = float(predict_mos(y))
             if transcribe is not None and not item["skip_wer"]:
                 row["wer"] = ev.word_error_rate(
                     spoken_form(str(item["text"])), transcribe(y)
@@ -103,6 +125,15 @@ def _ci(values: Sequence[float]) -> Dict[str, Optional[float]]:
     return {"mean": mean, "low": low, "high": high, "n": len(values)}
 
 
+def _group_means(rows: Sequence[Mapping[str, object]], key: str) -> Dict[str, float]:
+    """Mean of ``key`` per voice group, over the rows that have it."""
+    by_group: Dict[str, List[float]] = {}
+    for r in rows:
+        if r.get(key) is not None:
+            by_group.setdefault(str(r["group"]), []).append(float(r[key]))
+    return {g: float(np.mean(v)) for g, v in by_group.items()}
+
+
 def summarize(
     rows_by_engine: Mapping[str, Sequence[Mapping[str, object]]],
     baseline: Optional[str] = None,
@@ -110,18 +141,24 @@ def summarize(
     """Per-engine means with intervals, group gaps, and paired differences against ``baseline``."""
     report: Dict[str, object] = {"engines": {}, "paired_vs_baseline": {}}
     for engine, rows in rows_by_engine.items():
-        by_group: Dict[str, List[float]] = {}
-        for r in rows:
-            by_group.setdefault(str(r["group"]), []).append(float(r["secs"]))
-        means = {g: float(np.mean(v)) for g, v in by_group.items()}
+        means = _group_means(rows, "secs")
+        independent_means = _group_means(rows, "secs_independent")
         report["engines"][engine] = {
             "outputs": len(rows),
             "secs": _ci(_values(rows, "secs")),
+            "secs_independent": _ci(_values(rows, "secs_independent")),
+            "mos": _ci(_values(rows, "mos")),
             "wer": _ci(_values(rows, "wer")),
             "f0_error_semitones": _ci(_values(rows, "f0_error_semitones")),
             "f0_range_ratio": _ci(_values(rows, "f0_range_ratio")),
             "group_secs": means,
             "group_gap": (max(means.values()) - min(means.values())) if means else None,
+            "group_secs_independent": independent_means,
+            "group_gap_independent": (
+                max(independent_means.values()) - min(independent_means.values())
+                if independent_means
+                else None
+            ),
             "wer_above_0.3": sum(1 for v in _values(rows, "wer") if v > 0.3),
         }
     if baseline is not None:
@@ -129,20 +166,82 @@ def summarize(
         for engine, rows in rows_by_engine.items():
             if engine == baseline:
                 continue
-            paired = {"secs": [], "wer": []}
+            paired = {"secs": [], "secs_independent": [], "mos": [], "wer": []}
             for r in rows:
                 b = base.get((r["speaker"], r["i"]))
                 if b is None:
                     continue
                 paired["secs"].append(float(r["secs"]) - float(b["secs"]))
+                for key in ("secs_independent", "mos"):
+                    if r.get(key) is not None and b.get(key) is not None:
+                        paired[key].append(float(r[key]) - float(b[key]))
                 if r.get("wer") is not None and b.get("wer") is not None:
                     paired["wer"].append(float(r["wer"]) - float(b["wer"]))
             report["paired_vs_baseline"][engine] = {
                 "secs_difference": _ci(paired["secs"]),
                 "secs_better_count": sum(1 for d in paired["secs"] if d > 0),
+                "secs_independent_difference": _ci(paired["secs_independent"]),
+                "secs_independent_better_count": sum(
+                    1 for d in paired["secs_independent"] if d > 0
+                ),
+                "mos_difference": _ci(paired["mos"]),
+                "mos_better_count": sum(1 for d in paired["mos"] if d > 0),
                 "wer_difference": _ci(paired["wer"]),
             }
     return report
+
+
+class _EcapaEncoder:
+    """SpeechBrain ECAPA-TDNN speaker embeddings (Apache-2.0; trained on VoxCeleb)."""
+
+    def __init__(self) -> None:
+        """Load the pretrained model on the CPU."""
+        try:
+            from speechbrain.inference.speaker import EncoderClassifier
+        except ImportError:
+            raise SystemExit(
+                "speechbrain is required for --independent-encoder ecapa: pip install speechbrain"
+            )
+        self._model = EncoderClassifier.from_hparams(
+            source="speechbrain/spkrec-ecapa-voxceleb",
+            savedir=str(Path.home() / ".cache" / "clonevoice-eval" / "ecapa"),
+            run_opts={"device": "cpu"},
+        )
+
+    def embed_utterance(self, y: np.ndarray) -> np.ndarray:
+        """A 192-dimensional embedding of 16 kHz mono audio."""
+        import torch
+
+        with torch.no_grad():
+            tensor = torch.from_numpy(np.asarray(y, dtype=np.float32))[None]
+            return self._model.encode_batch(tensor).squeeze().cpu().numpy()
+
+
+def make_ecapa_encoder() -> _EcapaEncoder:
+    """The independent speaker encoder: a different model, data and training from resemblyzer's."""
+    return _EcapaEncoder()
+
+
+def make_utmos_predictor() -> Callable[[np.ndarray], float]:
+    """A predicted-MOS function (UTMOS22 strong, via torch.hub) for 16 kHz mono audio.
+
+    The model comes from the SpeechMOS project (code MIT; the weights' own licence is not
+    stated there), which is acceptable for evaluation only: it never ships in the product.
+    """
+    try:
+        import torch
+    except ImportError:
+        raise SystemExit("torch is required for --mos utmos")
+    model = torch.hub.load(
+        "tarepan/SpeechMOS:v1.2.0", "utmos22_strong", trust_repo=True
+    )
+
+    def predict(y: np.ndarray) -> float:
+        with torch.no_grad():
+            tensor = torch.from_numpy(np.asarray(y, dtype=np.float32))[None]
+            return float(model(tensor, SAMPLE_RATE))
+
+    return predict
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -155,6 +254,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--groups", type=Path, help="speaker-to-group JSON")
     parser.add_argument("--texts", type=Path, default=DEFAULT_TEXTS)
     parser.add_argument("--whisper-model", default="small.en", help="'none' skips WER")
+    parser.add_argument(
+        "--independent-encoder",
+        choices=("none", "ecapa"),
+        default="none",
+        help="also score speaker similarity with a second, different encoder",
+    )
+    parser.add_argument(
+        "--mos",
+        choices=("none", "utmos"),
+        default="none",
+        help="also score a predicted naturalness (MOS)",
+    )
     parser.add_argument("--out", type=Path, help="write the JSON report here")
     args = parser.parse_args(argv)
 
@@ -174,17 +285,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         else ev.make_whisper_transcriber(args.whisper_model)
     )
     encoder = VoiceEncoder(device="cpu")
+    independent = make_ecapa_encoder() if args.independent_encoder == "ecapa" else None
+    predict_mos = make_utmos_predictor() if args.mos == "utmos" else None
     rows = {
         e: score_engine(
-            args.outputs / e, speakers, groups, texts, encoder, transcribe, clean_text
+            args.outputs / e,
+            speakers,
+            groups,
+            texts,
+            encoder,
+            transcribe,
+            clean_text,
+            independent,
+            predict_mos,
         )
         for e in engines
     }
     report = summarize(rows, args.baseline)
-    text = json.dumps(report, indent=2)
+    print(json.dumps(report, indent=2))
     if args.out:
-        args.out.write_text(text + "\n", encoding="utf-8")
-    print(text)
+        # The file also keeps every scored output, so the summary can be re-derived.
+        full = {**report, "rows": rows}
+        args.out.write_text(json.dumps(full, indent=2) + "\n", encoding="utf-8")
     return 0
 
 
