@@ -31,6 +31,7 @@ from backend.services.tts_engine import get_engine
 from backend.services.tts_pipeline import (drain_inflight_inference,
                                            get_model_health, get_warmup_status,
                                            load_models, warmup_inference)
+from backend.services.watermark import watermark_status
 
 
 def configure_logging() -> None:
@@ -367,14 +368,18 @@ async def readiness() -> JSONResponse:
     models_ready = model_status.pop("ready")
     warmup = get_warmup_status()
     warmup_ok = warmup in ("disabled", "ok")
+    # The watermark is a safety control: without its networks no audio may be served.
+    watermark = await asyncio.to_thread(watermark_status)
+    watermark_ok = (not watermark["enabled"]) or watermark["loaded"]
 
-    ready = database_ok and models_ready and warmup_ok
+    ready = database_ok and models_ready and warmup_ok and watermark_ok
     payload = {
         "status": "ok" if ready else "degraded",
         "version": "1.0.0",
         "database": {"ok": database_ok},
         "engine": engine_summary,
         "models": model_status,
+        "watermark": watermark,
         "warmup": warmup,
     }
     return JSONResponse(status_code=200 if ready else 503, content=payload)

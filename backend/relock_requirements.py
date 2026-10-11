@@ -4,7 +4,12 @@ HARDENING_PLAN.md finding P2-L9: run this after editing requirements.txt so
 the hash-pinned lock (every transitive dependency, not just the direct pins)
 stays in sync. Needs `uv` (``pip install uv``; already in requirements-dev.txt).
 
-Usage: python -m backend.relock_requirements
+Usage: python -m backend.relock_requirements [--upgrade]
+
+By default every package already in the lock keeps its version, so adding a dependency adds only
+that dependency and what it needs, and nothing else changes silently (a fresh resolve moves every
+unpinned transitive package, security-relevant ones included, to its newest release). Pass
+``--upgrade`` to take the newest versions of everything, and review the diff.
 """
 
 import re
@@ -56,7 +61,25 @@ def _strip_torch_block(text: str) -> str:
     return "".join(out)
 
 
-def main() -> int:
+def existing_pins(lock_text: str) -> str:
+    """The ``name==version`` lines of a lock file, as pip constraints (hashes and comments dropped)."""
+    pins = []
+    for line in lock_text.splitlines():
+        match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*==[^\s\\;]+)", line)
+        if match and not line.startswith("torch=="):
+            pins.append(match.group(1))
+    return "\n".join(pins) + "\n"
+
+
+def main(argv=None) -> int:
+    upgrade = "--upgrade" in (argv if argv is not None else sys.argv[1:])
+    keep = BACKEND_DIR / ".relock_keep.txt"
+    keep_args = []
+    if not upgrade and LOCK_FILE.exists():
+        keep.write_text(
+            existing_pins(LOCK_FILE.read_text(encoding="utf-8")), encoding="utf-8"
+        )
+        keep_args = ["-c", keep.name]
     # Run with relative filenames from BACKEND_DIR: `uv` mishandles absolute
     # paths containing spaces (this repo's own directory has one), silently
     # truncating the path at the first space and failing with "File not
@@ -71,6 +94,7 @@ def main() -> int:
             "cpu",
             "-c",
             CONSTRAINTS.name,
+            *keep_args,
             # No --output-file: uv 0.11 treats "-" as a literal filename and
             # drops a stray `backend/-`; the lock text is read from stdout.
             REQUIREMENTS.name,
@@ -80,6 +104,7 @@ def main() -> int:
         text=True,
         check=False,
     )
+    keep.unlink(missing_ok=True)
     if result.returncode != 0:
         sys.stderr.write(result.stderr)
         return result.returncode

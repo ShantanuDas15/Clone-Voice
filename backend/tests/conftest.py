@@ -47,6 +47,12 @@ def quality_gate_off_by_default(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def watermark_off_by_default(monkeypatch):
+    """The real watermark networks are provisioned weights (not in CI); tests of it turn it on."""
+    monkeypatch.setattr(settings, "WATERMARK_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def fresh_engines():
     """Engines are cached singletons, and a worker engine carries circuit-breaker state.
 

@@ -221,6 +221,61 @@ def fetch_and_verify_checkpoints(weights_dir: str) -> bool:
     return True
 
 
+def fetch_watermark_weights(weights_dir: str) -> bool:
+    """Ensure the AudioSeal watermark networks are present and checksum-verified.
+
+    Same discipline as the synthesizer checkpoints: a file already present and matching its
+    pinned hash is kept, anything else is fetched from Hugging Face and verified before use.
+    Does nothing (and succeeds) when ``WATERMARK_ENABLED`` is off.
+    """
+    if not settings.WATERMARK_ENABLED:
+        return True
+    from backend.services.watermark import HF_REPO_ID as WM_REPO
+    from backend.services.watermark import MANIFEST_KEYS, SUBDIR
+
+    folder = os.path.join(weights_dir, SUBDIR)
+    os.makedirs(folder, exist_ok=True)
+    manifest = load_manifest()
+    for name, key in MANIFEST_KEYS.items():
+        path = os.path.join(folder, name)
+        if os.path.exists(path):
+            try:
+                verify_checksum(path, key, manifest)
+                continue
+            except RuntimeError:
+                logger.warning(
+                    "'%s' failed checksum verification — re-downloading.", key
+                )
+        try:
+            downloaded = hf_hub_download(
+                repo_id=WM_REPO, filename=name, local_dir=folder
+            )
+            verify_checksum(downloaded, key, manifest)
+        except Exception:
+            logger.exception("Could not provision the watermark weights '%s'.", name)
+            return False
+    return True
+
+
+def _check_watermark_weights(weights_dir: str) -> bool:
+    """True if the watermark weights are present and verified (or the watermark is off)."""
+    if not settings.WATERMARK_ENABLED:
+        return True
+    from backend.services.watermark import MANIFEST_KEYS, SUBDIR
+
+    manifest = load_manifest()
+    for name, key in MANIFEST_KEYS.items():
+        path = os.path.join(weights_dir, SUBDIR, name)
+        try:
+            verify_checksum(path, key, manifest)
+        except (OSError, RuntimeError):
+            logger.error(
+                "Watermark weights '%s' are missing or fail verification.", key
+            )
+            return False
+    return True
+
+
 def download_weights() -> bool:
     """Provision what can be automated without a network call, and report
     what's missing.
@@ -233,7 +288,8 @@ def download_weights() -> bool:
     """
     encoder_ready = _ensure_encoder_weights()
     checkpoints_ready = _check_synthesizer_and_vocoder(settings.WEIGHTS_DIR)
-    return encoder_ready and checkpoints_ready
+    watermark_ready = _check_watermark_weights(settings.WEIGHTS_DIR)
+    return encoder_ready and checkpoints_ready and watermark_ready
 
 
 def fetch_weights() -> bool:
@@ -252,7 +308,8 @@ def fetch_weights() -> bool:
     """
     encoder_ready = _ensure_encoder_weights()
     checkpoints_ready = fetch_and_verify_checkpoints(settings.WEIGHTS_DIR)
-    return encoder_ready and checkpoints_ready
+    watermark_ready = fetch_watermark_weights(settings.WEIGHTS_DIR)
+    return encoder_ready and checkpoints_ready and watermark_ready
 
 
 def verify_inference() -> bool:

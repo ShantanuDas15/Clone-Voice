@@ -789,9 +789,16 @@ def save_output(
 
 
 def finish_and_save(
-    waveform: np.ndarray, sample_rate: int, user_id: str
+    waveform: np.ndarray,
+    sample_rate: int,
+    user_id: str,
+    engine_name: Optional[str] = None,
 ) -> tuple[str, float]:
-    """Level and clean the vocoder output when enabled, then save it as a WAV."""
+    """Level and clean the vocoder output when enabled, watermark it, then save it as a WAV.
+
+    The watermark is added last, to the final signal, so nothing downstream changes it. It fails
+    closed: if it cannot be applied this raises and no file is written.
+    """
     if settings.OUTPUT_NORMALIZE_ENABLED:
         waveform, _ = polish_waveform(
             waveform.squeeze(),
@@ -799,6 +806,10 @@ def finish_and_save(
             settings.OUTPUT_TARGET_LUFS,
             settings.OUTPUT_PEAK_CEILING_DBFS,
         )
+    if settings.WATERMARK_ENABLED:
+        from backend.services.watermark import get_watermarker
+
+        waveform = get_watermarker().apply(waveform.squeeze(), sample_rate, engine_name)
     return save_output(waveform, sample_rate, user_id)
 
 
@@ -970,7 +981,7 @@ async def run_inference_pipeline(
 
     with metrics.observe_stage("save_output"):
         out_path, duration = await asyncio.to_thread(
-            finish_and_save, wav, sample_rate, user_id
+            finish_and_save, wav, sample_rate, user_id, served_by.name
         )
     return InferenceResult(
         out_path, duration, served_by.name, served_by.version, fallback_from

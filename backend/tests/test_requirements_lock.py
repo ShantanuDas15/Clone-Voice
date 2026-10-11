@@ -154,3 +154,31 @@ def test_docker_workflow_rebuilds_on_lock_file_changes() -> None:
     workflow = _read(".github/workflows/docker-build.yml")
     assert '"backend/requirements.lock.txt"' in workflow
     assert '"backend/requirements.constraints.txt"' in workflow
+
+
+def test_existing_pins_keeps_versions_and_drops_hashes_comments_and_torch() -> None:
+    """The relock keeps what the lock already pins, so a new dependency changes nothing else."""
+    from backend.relock_requirements import existing_pins
+
+    lock = (
+        "# a comment\n"
+        "annotated-types==0.7.0 \\\n"
+        "    --hash=sha256:abc \\\n"
+        "    --hash=sha256:def\n"
+        "    # via pydantic\n"
+        "torch==2.13.0\n"
+        "Unidecode==1.3.8 \\\n"
+        "    --hash=sha256:123\n"
+        "typing==3.7.4.3 ; python_version >= '3.8'\n"
+    )
+    assert existing_pins(lock).splitlines() == [
+        "annotated-types==0.7.0",
+        "Unidecode==1.3.8",
+        "typing==3.7.4.3",
+    ]
+
+
+def test_the_lock_contains_the_watermark_dependency_and_stays_hashed() -> None:
+    lock = _read("backend/requirements.lock.txt")
+    assert "audioseal==0.2.0" in lock
+    assert lock.count("--hash=sha256:") > 100

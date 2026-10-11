@@ -201,6 +201,13 @@ class Settings(BaseSettings):
     TTS_WORKER_URL: str = ""
     TTS_WORKER_TOKEN: str = ""
     TTS_WORKER_TIMEOUT_SECONDS: float = Field(default=25.0, gt=0.0, le=300.0)
+    # SPEECH_QUALITY_PLAN.md S7.2b: add an inaudible watermark (AudioSeal) to every synthesized
+    # WAV, so a clip can be traced to this service after it is re-encoded. Fail closed: if it
+    # cannot be applied the request fails rather than serving unmarked audio. The 12-bit tag
+    # identifies this deployment in the message the watermark carries. Weights come from
+    # `python -m backend.download_weights --fetch` (checksum-pinned); nothing downloads at run time.
+    WATERMARK_ENABLED: bool = True
+    WATERMARK_TAG: int = Field(default=0xC10, ge=0, le=0xFFF)
     # SPEECH_QUALITY_PLAN.md S4.4: when a worker engine is unavailable (down, timing out,
     # refusing, busy), serve the request with this in-process engine instead of failing it.
     # "none" turns the fallback off. The fallback engine's voice quality is lower: every use
