@@ -908,15 +908,25 @@ async def run_inference_pipeline(
             truncation_retries = 0
             wav, rate = np.zeros(0, np.float32), settings.VOCODER_SAMPLE_RATE
             for attempt in range(1, attempts + 1):
-                result = await which.synthesize(
-                    text,
-                    voice,
-                    None,
-                    run_stage=run_stage,
-                    truncation_retries=truncation_retries,
-                )
+                started = time.perf_counter()
+                try:
+                    result = await which.synthesize(
+                        text,
+                        voice,
+                        None,
+                        run_stage=run_stage,
+                        truncation_retries=truncation_retries,
+                    )
+                except EngineUnavailableError:
+                    metrics.ENGINE_SYNTHESIS.labels(which.name, "unavailable").inc()
+                    raise
                 wav, rate = result.waveform, result.sample_rate
+                if len(wav) > 0 and rate > 0:
+                    metrics.ENGINE_RTF.labels(which.name).observe(
+                        (time.perf_counter() - started) / (len(wav) / rate)
+                    )
                 if not settings.TTS_QUALITY_GATE_ENABLED:
+                    metrics.ENGINE_SYNTHESIS.labels(which.name, "ok").inc()
                     break
                 verdict = await asyncio.to_thread(
                     check_output,
@@ -928,10 +938,14 @@ async def run_inference_pipeline(
                 )
                 if verdict.passed:
                     metrics.QUALITY_GATE_RESULTS.labels("passed").inc()
+                    metrics.ENGINE_SYNTHESIS.labels(which.name, "ok").inc()
                     break
                 for reason in verdict.reasons:
                     metrics.QUALITY_GATE_FAILURES.labels(reason).inc()
                 last = attempt == attempts
+                metrics.ENGINE_SYNTHESIS.labels(
+                    which.name, "gate_refused" if last else "gate_retried"
+                ).inc()
                 metrics.QUALITY_GATE_RESULTS.labels(
                     "refused" if last else "retried"
                 ).inc()

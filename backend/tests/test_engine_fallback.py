@@ -13,13 +13,26 @@ from backend.core import metrics
 from backend.core.config import Settings, settings
 from backend.services import tts_engine, tts_pipeline
 from backend.services.chatterbox_engine import ChatterboxEngine, CircuitBreaker
-from backend.services.tts_engine import (EngineBusyError, EngineCapabilities,
-                                         EngineUnavailableError,
-                                         SynthesisResult, TTSEngine,
-                                         VoiceConditioning, WrongEngineError,
-                                         get_engine, get_fallback_engine)
-from backend.tests.test_chatterbox_engine import (EMB, SR, TOKEN, _Model,
-                                                  _Server, _tone, _wav)
+from backend.services.tts_engine import (
+    EngineBusyError,
+    EngineCapabilities,
+    EngineUnavailableError,
+    SynthesisResult,
+    TTSEngine,
+    VoiceConditioning,
+    WrongEngineError,
+    get_engine,
+    get_fallback_engine,
+)
+from backend.tests.test_chatterbox_engine import (
+    EMB,
+    SR,
+    TOKEN,
+    _Model,
+    _Server,
+    _tone,
+    _wav,
+)
 
 PRIMARY = "chatterbox_nano"
 
@@ -443,3 +456,62 @@ def test_the_api_serves_a_user_while_the_worker_is_down(
         .all()
     )
     assert [r.status for r in rows] == ["completed"]
+
+
+# --- S7.3a: per-engine RTF and outcomes ----------------------------------------
+
+
+def _sample(name, **labels):
+    return metrics.registry.get_sample_value(name, labels) or 0.0
+
+
+def test_the_rtf_is_synthesis_seconds_over_audio_seconds(monkeypatch, mock_sv2tts):
+    clock = {"now": 100.0}
+
+    class Slow(_FlakyEngine):
+        async def synthesize(self, *args, **kwargs):
+            clock["now"] += 3.0  # three seconds of work ...
+            return await super().synthesize(*args, **kwargs)
+
+    monkeypatch.setattr(tts_pipeline.time, "perf_counter", lambda: clock["now"])
+    _install(monkeypatch, Slow(wave=_tone(2.0, rate=24000)))  # ... for two of audio
+    before = _sample("clonevoice_engine_rtf_sum", engine=PRIMARY)
+    _run()
+    assert _sample("clonevoice_engine_rtf_sum", engine=PRIMARY) - before == (
+        pytest.approx(1.5)
+    )
+
+
+def test_an_unavailable_engine_is_counted_for_that_engine_and_the_fallback_ok(
+    monkeypatch, mock_sv2tts
+):
+    _install(monkeypatch, _FlakyEngine(EngineUnavailableError("down")))
+    down = _sample(
+        "clonevoice_engine_synthesis_total", engine=PRIMARY, outcome="unavailable"
+    )
+    ok = _sample("clonevoice_engine_synthesis_total", engine="sv2tts", outcome="ok")
+    _run()
+    assert (
+        _sample(
+            "clonevoice_engine_synthesis_total", engine=PRIMARY, outcome="unavailable"
+        )
+        == down + 1
+    )
+    assert (
+        _sample("clonevoice_engine_synthesis_total", engine="sv2tts", outcome="ok")
+        == ok + 1
+    )
+
+
+def test_a_refused_attempt_is_counted_as_retried_then_refused(monkeypatch, mock_sv2tts):
+    monkeypatch.setattr(settings, "TTS_QUALITY_GATE_ENABLED", True)
+    monkeypatch.setattr(settings, "TTS_QUALITY_MAX_ATTEMPTS", 2)
+    _install(monkeypatch, _FlakyEngine(wave=np.zeros(24000 * 2, np.float32)))
+    count = lambda o: _sample(
+        "clonevoice_engine_synthesis_total", engine=PRIMARY, outcome=o
+    )
+    retried, refused = count("gate_retried"), count("gate_refused")
+    with pytest.raises(Exception):
+        _run()
+    assert count("gate_retried") == retried + 1
+    assert count("gate_refused") == refused + 1

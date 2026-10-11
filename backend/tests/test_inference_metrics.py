@@ -263,3 +263,26 @@ def test_metrics_disabled_still_404_outside_development(
     monkeypatch.setattr(settings, "APP_ENV", "production")
     monkeypatch.setattr(settings, "METRICS_ENABLED", False)
     assert client.get("/metrics").status_code == 404
+
+
+# --- S7.3a: per-engine real-time factor and outcomes ---------------------------
+
+
+def _outcome(engine: str, outcome: str) -> float:
+    return _sample(
+        "clonevoice_engine_synthesis_total", {"engine": engine, "outcome": outcome}
+    )
+
+
+def test_an_attempt_records_the_engine_rtf_and_an_ok_outcome(
+    fresh_semaphore, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(tts.settings, "OUTPUT_DIR", str(tmp_path))
+    rtf = _sample("clonevoice_engine_rtf_count", {"engine": "sv2tts"})
+    ok = _outcome("sv2tts", "ok")
+
+    asyncio.run(tts.run_inference_pipeline("hello there", EMB, "u1"))
+
+    assert _sample("clonevoice_engine_rtf_count", {"engine": "sv2tts"}) == rtf + 1
+    assert _sample("clonevoice_engine_rtf_sum", {"engine": "sv2tts"}) > 0
+    assert _outcome("sv2tts", "ok") == ok + 1
