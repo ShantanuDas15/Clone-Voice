@@ -25,7 +25,35 @@
         "https://raw.githubusercontent.com/resemble-ai/chatterbox/master/LICENSE",
         "https://huggingface.co/ResembleAI/chatterbox"
       ],
-      "notes": "Training data is described only as 0.5M hours of cleaned data, with no dataset names or licences, so the data terms behind the MIT weights cannot be checked. Every output carries the PerTh watermark and the README gives no way to remove it. Emotion control is a single exaggeration scalar, not emotion labels. The watermark package imports pkg_resources, which current setuptools no longer ships."
+      "notes": "Training data is described only as 0.5M hours of cleaned data, with no dataset names or licences, so the data terms behind the MIT weights cannot be checked. Every output carries the PerTh watermark and the README gives no way to remove it. Emotion control is a single exaggeration scalar, not emotion labels. The watermark package imports pkg_resources, which current setuptools no longer ships. Measured (S4.2a): 24 kHz, GPU only (CPU real-time factor 6.5, 6.7 GiB)."
+    },
+    {
+      "id": "chatterbox_turbo",
+      "name": "Chatterbox-Turbo (Resemble AI), 350M, English",
+      "code_license": "MIT",
+      "weights_license": "MIT (Hugging Face model metadata)",
+      "licence": "ok",
+      "benchmarked": true,
+      "decision": "candidate",
+      "evidence": [
+        "https://github.com/resemble-ai/chatterbox",
+        "https://huggingface.co/ResembleAI/chatterbox-turbo"
+      ],
+      "notes": "Paralinguistic tags ([laugh], [chuckle], [cough]) are native; exaggeration, cfg and min_p are ignored by this model. Measured (S4.2b): similarity close to the original, near-zero word error rate, GPU real-time factor 0.25, 3.2 GiB; on CPU about as fast as SV2TTS (2.1 against 1.9 at 8 threads) with 5.7 GiB. Training data is not described, so the data terms behind the MIT weights cannot be checked. Every output carries the PerTh watermark. The watermark package imports pkg_resources (needs setuptools<81)."
+    },
+    {
+      "id": "chatterbox_nano",
+      "name": "Chatterbox-Nano (Resemble AI), 110M, English",
+      "code_license": "MIT",
+      "weights_license": "MIT (Hugging Face model metadata)",
+      "licence": "ok",
+      "benchmarked": true,
+      "decision": "candidate",
+      "evidence": [
+        "https://github.com/resemble-ai/chatterbox",
+        "https://huggingface.co/ResembleAI/chatterbox-nano"
+      ],
+      "notes": "Same architecture and tags as Turbo. Loaded with from_pretrained(device, nano=True), which the PyPI release 0.1.7 does not have: it needs the GitHub master branch. Measured (S4.2b): the only engine tested that runs faster than real time on CPU (real-time factor 0.76 at 8 threads, 4.3 GiB); GPU 0.12, 2.3 GiB; pitch error is the weakest of the Chatterbox variants. Training data is not described, so the data terms behind the MIT weights cannot be checked. Every output carries the PerTh watermark. The watermark package imports pkg_resources (needs setuptools<81)."
     },
     {
       "id": "zonos",
@@ -63,7 +91,9 @@
       "licence": "ok",
       "benchmarked": false,
       "decision": "unassessed",
-      "evidence": ["https://github.com/myshell-ai/OpenVoice"],
+      "evidence": [
+        "https://github.com/myshell-ai/OpenVoice"
+      ],
       "notes": "A tone-colour converter plus a separate base TTS, so identity and delivery come from different models. Style controls are described for V1; whether V2 keeps them is not stated. Not benchmarked."
     },
     {
@@ -74,7 +104,9 @@
       "licence": "unclear",
       "benchmarked": false,
       "decision": "unassessed",
-      "evidence": ["https://github.com/k2-fsa/OmniVoice"],
+      "evidence": [
+        "https://github.com/k2-fsa/OmniVoice"
+      ],
       "notes": "Released 2026, 600+ languages, zero-shot cloning from 3 to 10 seconds, non-verbal tags, but no emotion control is described. Weights licence and training data not stated."
     },
     {
@@ -85,7 +117,9 @@
       "licence": "unclear",
       "benchmarked": false,
       "decision": "rejected",
-      "evidence": ["https://github.com/yl4579/StyleTTS2"],
+      "evidence": [
+        "https://github.com/yl4579/StyleTTS2"
+      ],
       "notes": "No user-facing emotion or style control (style is a latent sampled from the text). The pretrained models require telling listeners the speech is synthesized and using only voices whose owners allow cloning. Inference depends on a GPL-licensed phonemizer package. Rejected because it cannot deliver the emotion goal."
     },
     {
@@ -96,7 +130,9 @@
       "licence": "blocked",
       "benchmarked": false,
       "decision": "rejected",
-      "evidence": ["https://huggingface.co/SWivid/F5-TTS"],
+      "evidence": [
+        "https://huggingface.co/SWivid/F5-TTS"
+      ],
       "notes": "Checkpoint licence is non-commercial (the model page lists cc-by-nc-4.0 and Emilia as the training set)."
     },
     {
@@ -107,7 +143,9 @@
       "licence": "blocked",
       "benchmarked": false,
       "decision": "rejected",
-      "evidence": ["https://huggingface.co/coqui/XTTS-v2"],
+      "evidence": [
+        "https://huggingface.co/coqui/XTTS-v2"
+      ],
       "notes": "The model page names the CPML; secondary sources describe it as non-commercial and the company as shut down, so there is nobody to license it from. The CPML text itself was not read."
     },
     {
@@ -132,7 +170,9 @@
       "licence": "unclear",
       "benchmarked": false,
       "decision": "rejected",
-      "evidence": ["https://github.com/index-tts/index-tts"],
+      "evidence": [
+        "https://github.com/index-tts/index-tts"
+      ],
       "notes": "Best emotion control found (separate emotion reference, 8-value emotion vector, text-described emotion), but the README says commercial use needs contacting the authors and the licence text could not be fetched. Revisit only if a commercial agreement is obtained."
     },
     {
@@ -143,7 +183,9 @@
       "licence": "unclear",
       "benchmarked": false,
       "decision": "rejected",
-      "evidence": ["https://github.com/canopyai/Orpheus-TTS"],
+      "evidence": [
+        "https://github.com/canopyai/Orpheus-TTS"
+      ],
       "notes": "The README says the pretrained model was not trained for zero-shot voice cloning, so it cannot clone a user's voice from a short clip. Emotion tags (laugh, sigh) exist."
     }
   ]

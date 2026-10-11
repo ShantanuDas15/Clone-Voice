@@ -1,0 +1,45 @@
+{
+  "description": "The 10 texts of the S4.2 engine benchmark (SPEECH_QUALITY_PLAN.md S4.2a/S4.2b). Output file i of an engine is the rendering of texts[i]. skip_wer marks a text with no single spoken form, so an ASR transcript cannot be matched to it.",
+  "texts": [
+    {
+      "text": "Hello there.",
+      "skip_wer": false
+    },
+    {
+      "text": "How are you today?",
+      "skip_wer": false
+    },
+    {
+      "text": "I can't believe you did that!",
+      "skip_wer": false
+    },
+    {
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "skip_wer": false
+    },
+    {
+      "text": "Please call me back at your earliest convenience, because the meeting has been moved to three o'clock.",
+      "skip_wer": false
+    },
+    {
+      "text": "Wait... what did you just say? I did not hear you properly!",
+      "skip_wer": false
+    },
+    {
+      "text": "The committee reviewed the proposal carefully and decided to postpone the final vote until next month, pending further analysis of the budget.",
+      "skip_wer": false
+    },
+    {
+      "text": "Dr. Smith arrived at 10:30 a.m. and left before noon.",
+      "skip_wer": true
+    },
+    {
+      "text": "Stop! Do not move. Put your hands where I can see them.",
+      "skip_wer": false
+    },
+    {
+      "text": "Once upon a time, in a small village by the sea, there lived an old fisherman and his wife.",
+      "skip_wer": false
+    }
+  ]
+}

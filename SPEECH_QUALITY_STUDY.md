@@ -403,7 +403,7 @@ does not rise with it. At 1.5 the speaker similarity falls 0.067 from the defaul
   both pitch groups alike, outputs 24 kHz (removing the 8 kHz ceiling), and is faster than SV2TTS on a GPU.
   The similarity is judged by resemblyzer, the encoder that conditions SV2TTS, so the comparison favours
   SV2TTS if anything.
-* It cannot replace SV2TTS on a CPU-only host: 6.5 times slower than real time and 6.7 GiB of memory.
+* The original model cannot replace SV2TTS on a CPU-only host (but see the variants below): 6.5 times slower than real time and 6.7 GiB of memory.
   A 7 s sentence would take about 45 s, over the 30 s per-stage timeout. The two-tier design in section 7.1
   stands: Chatterbox as a GPU tier, SV2TTS as the CPU fallback.
 * `exaggeration` is one intensity knob that behaves mostly like loudness. It is not the happy, sad and angry
@@ -416,15 +416,83 @@ does not rise with it. At 1.5 the speaker similarity falls 0.067 from the defaul
 * **No predicted naturalness (MOS), no emotion classifier and no listening test**, so the plan's gate
   ("beats the baseline on similarity and MOS") is half evidenced. Pitch range overshoots (1.33 against a
   0.8 to 1.2 target), which a listener might hear as exaggerated.
-* The CPU figures are one speaker and seven texts. Chatterbox-Turbo (350M) and Chatterbox-Nano (110M, claimed
-  3 times real time on 8 CPU cores) were not run: the installed package did not include them. They are the
-  only route to a CPU-capable Chatterbox and are the first follow-up.
+* The CPU figures are one speaker and seven texts. Chatterbox-Turbo (350M) and Chatterbox-Nano (110M) were
+  not run in S4.2a. **Correction (S4.2b):** this section first said the installed package did not include
+  them. That was wrong: I had not checked. Turbo was in the package; only Nano needed a newer version. Both
+  are measured in the next section.
 * Zonos, CosyVoice 3 and OpenVoice V2 are licence-clean but unbenchmarked; Zonos is the strongest of them
   on paper (emotion controls, 44 kHz) and needs `espeak-ng`.
-* The benchmark scripts are scratch code and are not committed; S4.2b should make them a tool.
+* The generation scripts are scratch code and are not committed. The scoring is now the committed, tested `backend/score_engine_outputs.py` (S4.2b), which reproduces these numbers exactly.
 * Training-data provenance for Chatterbox is undisclosed. Whether that is acceptable is a decision for the
   owner (plan risk R1), not a test result.
 * Hosting (plan Q1) is still open: Chatterbox needs a GPU host with about 4 GiB of free memory.
+
+## Chatterbox variants: Turbo and Nano (S4.2b, 2026-10-11)
+
+Question: can a smaller Chatterbox keep the quality gain and run on a CPU? Same speakers, texts, scorer and
+baseline as the section above, now run by the committed `backend/score_engine_outputs.py` (it reproduced the
+S4.2a figures to the third decimal). Turbo (350M) comes with the PyPI package; Nano (110M) needs the GitHub
+master branch (`from_pretrained(device, nano=True)`). Both are English and MIT-licensed per their model cards.
+
+### Quality (60 outputs each, GPU)
+
+| Metric | SV2TTS | Chatterbox 0.5B | Turbo 350M | Nano 110M |
+|---|---|---|---|---|
+| Speaker similarity | 0.763 | 0.869 | 0.856 [0.840, 0.870] | 0.856 [0.838, 0.873] |
+| Paired gain over SV2TTS | | +0.106 (56 of 60) | **+0.092** [+0.072, +0.113] (52 of 60) | **+0.093** [+0.074, +0.113] (53 of 60) |
+| Word error rate | 0.178 | 0.017 | **0.003** | **0.005** |
+| Outputs with WER above 0.30 | 12 | 1 | 0 | 0 |
+| Mean pitch error (semitones) | 4.4 | 2.0 | 2.1 | 3.4 [2.1, 5.2] |
+| Pitch range, clone / real (target 0.8 to 1.2) | 0.80 | 1.33 | 1.15 | 1.11 |
+| Low-F0 / high-F0 gap | 0.072 | 0.020 | 0.031 | 0.022 |
+
+Against the original, Turbo and Nano are 0.014 and 0.013 lower in similarity (intervals [-0.021, -0.007] and
+[-0.023, -0.004]): small but real. Both keep nearly all of the gain, have the lowest word error, and bring the
+pitch range inside the target. Nano's pitch error is the weakest of the three and its interval is wide.
+
+### Speed and memory
+
+| | SV2TTS | Chatterbox 0.5B | Turbo | Nano |
+|---|---|---|---|---|
+| GPU real-time factor | 0.83 | 0.56 | **0.25** | **0.12** |
+| GPU peak memory | 0.42 GiB | 3.6 GiB | 3.2 GiB | 2.3 GiB |
+| CPU, 24 threads (machine default) | 2.33 | 6.48 | 2.13 | 1.28 |
+| CPU, 8 threads | 1.88 | not run | 2.08 | **0.76** |
+| CPU, 4 threads | not run | not run | not run | 1.12 |
+| CPU memory (resident) | 1.6 GiB | 6.7 GiB | 5.7 GiB | 4.3 GiB |
+
+CPU runs are one speaker and seven texts (a real-time factor below 1 is faster than real time). The thread
+count matters more than the machine: with all 24 threads Nano is slower than with 8, so a deployment must cap
+threads (`TORCH_NUM_THREADS`, `cpu_limits.py`) to the cores it really has. Nano's own claim, "3x faster than
+real time on 8 cores" (a factor of 0.33), was **not** reproduced: 0.76 here. The first-time GPU loads took 513 s
+(Turbo) and 122 s (Nano) because they include downloading; cached CPU loads took 4 to 6 s.
+
+### Paralinguistic tags
+
+Turbo and Nano take `[laugh]`, `[chuckle]` and `[cough]` in the text, and ignore `exaggeration`. Three
+sentences with and without a tag, 2 speakers: with the tag the clip was longer in 6 of 6 cases (about +1.0 s)
+and had a louder burst (+2.8 dB Turbo, +4.8 dB Nano). That shows the tag changes the audio in the expected way;
+it does not show it sounds like a laugh, which needs a listener.
+
+### What this shows
+
+* **Nano is the first engine here that is both better than SV2TTS and faster than real time on a CPU**: similarity
+  +0.093, almost no word errors, 24 kHz, real-time factor 0.76 on 8 threads. The cost is memory: 4.3 GiB against
+  1.6 GiB. That revises the S4.2a conclusion ("CPU not viable") for this variant.
+* Turbo is the sensible GPU variant: half the original's time and memory for 0.014 of similarity, plus tags.
+  The original keeps the only intensity control (`exaggeration`).
+* **None of them gives happy, sad or angry.** Tags are sound events; `exaggeration` is an intensity that mostly moves
+  loudness. S5's labelled emotion still needs another engine (Zonos is unbenchmarked; IndexTTS2 is not licensable
+  without an agreement) or reference-style conditioning.
+
+### Limits
+
+* Six adult speakers, ten texts, one seed; the CPU result is one speaker and seven texts; no children or elderly.
+* **Still no predicted naturalness, emotion classifier or listening test.** The plan's gate needs them.
+* Nano's memory (4.3 GiB) may not fit the production container; the container limit was not checked.
+* Nano needs a GitHub-master install, not the PyPI release; pinning a commit and its dependency set is S4.3's work.
+  Training data of all three is undisclosed, the watermark is always on, and its package needs `setuptools<81`.
+* The tag check measures duration and level, not content.
 
 ## Next measurements, in order
 
