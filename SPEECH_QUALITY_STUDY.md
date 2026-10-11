@@ -317,6 +317,115 @@ on the same seeds, so this shows the new retry recovers these cases, not by how 
 The first attempt still truncates for these texts about a third of the time, so those requests cost two
 syntheses of time.
 
+## Engine candidates (S4.2a, 2026-10-11)
+
+Question: is there an open engine that clones better than SV2TTS, takes emotion, can be used
+commercially, and fits the hardware? The machine-readable record is `backend/eval_data/engine_candidates.json`
+(a test keeps it complete and refuses a selectable engine whose licence is not recorded as ok).
+
+### Licence and capability check (11 candidates)
+
+Read from each project's own GitHub page, model card or LICENSE file. Page text was summarised, so before
+any candidate is adopted its LICENSE file must be read in full.
+
+| Candidate | Licence (code / weights) | Verdict |
+|---|---|---|
+| **Chatterbox** (Resemble AI) | MIT / MIT (LICENSE file read; model metadata) | **Candidate**, benchmarked below |
+| Zonos v0.1 | Apache-2.0 / Apache-2.0 (metadata) | Licence ok; not benchmarked (needs `espeak-ng`, not installable here) |
+| Fun-CosyVoice 3.0 | Apache-2.0 / Apache-2.0 (metadata) | Licence ok; not benchmarked (needs `sox`; instruct mode uses a separate checkpoint) |
+| OpenVoice V2 | MIT / MIT | Licence ok; not benchmarked (tone converter on a separate base TTS) |
+| OmniVoice | Apache-2.0 / not stated | Unclear weights licence; no emotion control described |
+| StyleTTS 2 | MIT / terms attached | Rejected: no user emotion control; GPL phonemizer dependency; must disclose synthesis |
+| F5-TTS | MIT / **CC-BY-NC-4.0** | Rejected: non-commercial weights |
+| XTTS-v2 | MPL-2.0 / **Coqui Public Model License** | Rejected: non-commercial, company gone (CPML text not read) |
+| Fish Audio S2 Pro | **Research licence** / same | Rejected: commercial use needs a separate written agreement (LICENSE file read) |
+| IndexTTS2 / 2.5 | bilibili Model Use License / same | Rejected for now: commercial use needs contacting the authors (licence text not fetched); has the best emotion control found |
+| Orpheus 3B | Apache-2.0 / not stated | Rejected: not trained for zero-shot cloning |
+
+Chatterbox is the only strong candidate that is both commercially licensed and runnable here. Its
+training data is described only as "0.5M hours of cleaned data", with no dataset names, so the terms of the
+data behind the MIT weights cannot be checked. Every output carries the PerTh watermark and the README
+gives no way to remove it (which S7.2 wants anyway). Its watermark package imports `pkg_resources`, which
+current setuptools no longer ships, so a fresh install fails at model load until `setuptools<81` is pinned.
+
+### Benchmark: Chatterbox against the production SV2TTS pipeline
+
+Same 6 LibriSpeech test-clean speakers as the S3.4 calibration (3 low-F0, 3 high-F0), each cloned from one
+10 to 30 s reference; the same 10 texts for both engines (1 to 25 words: statements, questions, an
+exclamation, an ellipsis, numbers, a multi-sentence passage), one seed each; 60 outputs per engine. SV2TTS
+ran through the full production pipeline (gate, levelling). Chatterbox is the original English 0.5B model at its
+default settings (`exaggeration` 0.5, `cfg_weight` 0.5), speaker conditioning prepared once per speaker.
+Scored with the S0 code: speaker similarity against the mean embedding of the speaker's real held-out
+clips; pitch against the same clips; Whisper `small.en` word error rate against the normalised text (the
+"Dr. ... 10:30 a.m." text is left out of WER because it has no single spoken form).
+
+| Metric | SV2TTS | Chatterbox |
+|---|---|---|
+| Speaker similarity (mean, 95% CI) | 0.763 [0.741, 0.784] | **0.869** [0.855, 0.883] |
+| Paired difference | | **+0.106** [+0.087, +0.125]; better for 56 of 60 outputs |
+| Low-F0 / high-F0 group | 0.799 / 0.727 (gap 0.072) | 0.859 / 0.879 (gap 0.020, reversed) |
+| Word error rate | 0.178 [0.096, 0.268] | **0.017** [0.003, 0.039] |
+| Outputs with WER above 0.30 | 12 of 54 | 1 of 54 |
+| Mean pitch error (semitones; target 1) | 4.4 | 2.0 |
+| Pitch range, clone / real (target 0.8 to 1.2) | 0.80 | 1.33 (too wide) |
+| Output sample rate | 16 kHz | **24 kHz** |
+
+Speed and memory (this machine: RTX 4060 Laptop 8 GB, 24 CPU cores, 14 GB RAM):
+
+| | SV2TTS | Chatterbox |
+|---|---|---|
+| GPU real-time factor (60 outputs) | 0.83 | **0.56** |
+| GPU peak memory | 0.42 GiB | 3.6 GiB |
+| CPU real-time factor (1 speaker, 7 texts) | 2.3 | **6.5** |
+| CPU peak memory (resident) | 1.6 GiB | 6.7 GiB |
+| Model load | 1.0 s (GPU), 2.6 s (CPU) | 7.3 s |
+
+A real-time factor above 1 means slower than real time.
+
+### Emotion control: the `exaggeration` setting
+
+2 speakers x 4 sentences (emotional, sad, a question, a neutral statement) at exaggeration 0.25, 0.5, 1.0 and 1.5:
+
+| Exaggeration | Level (dBFS) | Pitch range (semitones) | Similarity to the real speaker | Similarity to the 0.5 version |
+|---|---|---|---|---|
+| 0.25 | -28.6 | 14.6 | 0.873 | 0.902 |
+| 0.5 | -26.6 | 16.9 | 0.877 | 1.000 |
+| 1.0 | -22.8 | 15.2 | 0.856 | 0.878 |
+| 1.5 | -18.3 | 15.9 | 0.810 | 0.810 |
+
+Duration is nearly constant. The setting mostly moves loudness (about 10 dB across the range); pitch range
+does not rise with it. At 1.5 the speaker similarity falls 0.067 from the default, more than the plan's
+0.03 limit for an emotion change; at 1.0 it falls 0.021, inside it.
+
+### What this shows
+
+* On this sample Chatterbox is a large step up for voice similarity, intelligibility and pitch error, treats
+  both pitch groups alike, outputs 24 kHz (removing the 8 kHz ceiling), and is faster than SV2TTS on a GPU.
+  The similarity is judged by resemblyzer, the encoder that conditions SV2TTS, so the comparison favours
+  SV2TTS if anything.
+* It cannot replace SV2TTS on a CPU-only host: 6.5 times slower than real time and 6.7 GiB of memory.
+  A 7 s sentence would take about 45 s, over the 30 s per-stage timeout. The two-tier design in section 7.1
+  stands: Chatterbox as a GPU tier, SV2TTS as the CPU fallback.
+* `exaggeration` is one intensity knob that behaves mostly like loudness. It is not the happy, sad and angry
+  control that S5 needs. Reaching those needs an engine with labelled emotions, or reference-style
+  conditioning (S5.2), or the paralinguistic tags of the smaller Chatterbox variants (S6.2).
+
+### Limits
+
+* Six adult speakers, ten texts, one seed. No child or elderly speech.
+* **No predicted naturalness (MOS), no emotion classifier and no listening test**, so the plan's gate
+  ("beats the baseline on similarity and MOS") is half evidenced. Pitch range overshoots (1.33 against a
+  0.8 to 1.2 target), which a listener might hear as exaggerated.
+* The CPU figures are one speaker and seven texts. Chatterbox-Turbo (350M) and Chatterbox-Nano (110M, claimed
+  3 times real time on 8 CPU cores) were not run: the installed package did not include them. They are the
+  only route to a CPU-capable Chatterbox and are the first follow-up.
+* Zonos, CosyVoice 3 and OpenVoice V2 are licence-clean but unbenchmarked; Zonos is the strongest of them
+  on paper (emotion controls, 44 kHz) and needs `espeak-ng`.
+* The benchmark scripts are scratch code and are not committed; S4.2b should make them a tool.
+* Training-data provenance for Chatterbox is undisclosed. Whether that is acceptable is a decision for the
+  owner (plan risk R1), not a test result.
+* Hosting (plan Q1) is still open: Chatterbox needs a GPU host with about 4 GiB of free memory.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
