@@ -835,7 +835,8 @@ async def run_inference_pipeline(
         InferenceTimeoutError: The slot wait, or either forward-pass stage
             (synthesizer, vocoder), exceeded its configured timeout.
     """
-    from backend.services.tts_engine import get_engine
+    from backend.services.tts_engine import (EngineUnavailableError, TTSEngine,
+                                             get_engine, get_fallback_engine)
 
     engine = get_engine()
     if engine.needs_reference_audio:
@@ -845,7 +846,6 @@ async def run_inference_pipeline(
         )
     else:
         conditioning = engine.conditioning_from_array(embedding)
-    sample_rate = settings.VOCODER_SAMPLE_RATE
     spoken_text = _clean_for_chunking(text)
     max_pause = max(settings.TTS_PAUSE_SECONDS.values())
     attempts = (
@@ -865,26 +865,29 @@ async def run_inference_pipeline(
                 stage=stage,
             )
 
-        try:
+        async def synthesize_checked(
+            which: "TTSEngine", voice: Any
+        ) -> tuple[np.ndarray, int]:
+            """Synthesize with ``which``, gating each attempt and retrying a bad one."""
             truncation_retries = 0
+            wav, rate = np.zeros(0, np.float32), settings.VOCODER_SAMPLE_RATE
             for attempt in range(1, attempts + 1):
-                result = await engine.synthesize(
+                result = await which.synthesize(
                     text,
-                    conditioning,
+                    voice,
                     None,
                     run_stage=run_stage,
                     truncation_retries=truncation_retries,
                 )
-                wav, truncated = result.waveform, result.truncated_decodes
-                sample_rate = result.sample_rate
+                wav, rate = result.waveform, result.sample_rate
                 if not settings.TTS_QUALITY_GATE_ENABLED:
                     break
                 verdict = await asyncio.to_thread(
                     check_output,
                     wav,
-                    sample_rate,
+                    rate,
                     spoken_text,
-                    truncated,
+                    result.truncated_decodes,
                     max_pause,
                 )
                 if verdict.passed:
@@ -909,6 +912,30 @@ async def run_inference_pipeline(
                     # The same decode would truncate again (SPEECH_QUALITY_STUDY.md,
                     # S3.4): tell the engine, which decodes more conservatively.
                     truncation_retries += 1
+            return wav, rate
+
+        try:
+            try:
+                wav, sample_rate = await synthesize_checked(engine, conditioning)
+            except EngineUnavailableError as error:
+                # S4.4: the worker is down, timing out, refusing or busy. Serve the request with
+                # the in-process engine rather than fail it; a quality refusal or a bad request
+                # is not an outage and is not retried elsewhere.
+                fallback = get_fallback_engine(engine)
+                if fallback is None:
+                    raise
+                logger.warning(
+                    "%s is unavailable (%s): serving this request with %s",
+                    engine.name,
+                    error,
+                    fallback.name,
+                )
+                metrics.ENGINE_FALLBACKS.labels(
+                    engine.name, fallback.name, error.reason
+                ).inc()
+                wav, sample_rate = await synthesize_checked(
+                    fallback, fallback.conditioning_from_array(embedding)
+                )
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
                 "Inference forward pass exceeded the per-stage timeout."

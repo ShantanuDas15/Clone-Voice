@@ -327,7 +327,12 @@ def test_a_worker_that_is_down_is_unavailable(engine, monkeypatch):
 def test_health_reports_the_worker_and_its_model(worker, engine):
     health = engine.health()
     assert health["ready"] is True
-    assert health["worker"] == {"reachable": True, "model": "nano", "device": "cpu"}
+    assert health["worker"] == {
+        "reachable": True,
+        "model": "nano",
+        "device": "cpu",
+        "circuit": "closed",
+    }
     assert (
         ChatterboxEngine("chatterbox_turbo").health()["ready"] is False
     )  # serves nano
@@ -339,7 +344,10 @@ def test_health_never_raises_when_the_worker_is_down(engine, monkeypatch):
         port = s.getsockname()[1]
     monkeypatch.setattr(settings, "TTS_WORKER_URL", f"http://127.0.0.1:{port}")
     monkeypatch.setattr(settings, "TTS_WORKER_TOKEN", TOKEN)
-    assert engine.health() == {"ready": False, "worker": {"reachable": False}}
+    assert engine.health() == {
+        "ready": False,
+        "worker": {"reachable": False, "circuit": "closed"},
+    }
 
 
 # --- the client's handling of replies (mock transport) ---------------------
@@ -529,7 +537,7 @@ def test_the_api_passes_the_stored_sample_only_to_a_reference_engine(
         assert len(captured["args"]) == 3
 
 
-def test_an_unreachable_worker_is_a_503_with_a_failed_audit_row(
+def test_an_unreachable_worker_is_a_503_with_a_failed_audit_row_when_the_fallback_is_off(
     client, auth_headers, db_session, monkeypatch
 ):
     from backend.models.generation import Generation
@@ -539,6 +547,7 @@ def test_an_unreachable_worker_is_a_503_with_a_failed_audit_row(
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     monkeypatch.setattr(settings, "TTS_ENGINE", "chatterbox_nano")
+    monkeypatch.setattr(settings, "TTS_FALLBACK_ENGINE", "none")
     monkeypatch.setattr(settings, "TTS_WORKER_URL", f"http://127.0.0.1:{port}")
     monkeypatch.setattr(settings, "TTS_WORKER_TOKEN", TOKEN)
     res = client.post(
@@ -583,7 +592,7 @@ def test_readiness_names_the_worker_without_failing_when_it_is_down(
     monkeypatch.setattr(settings, "TTS_WORKER_TOKEN", TOKEN)
     body = client.get("/health/ready").json()
     assert body["engine"]["name"] == "chatterbox_nano"
-    assert body["engine"]["worker"] == {"reachable": False}
+    assert body["engine"]["worker"] == {"reachable": False, "circuit": "closed"}
     assert (
         client.get("/health/ready").status_code == 200
     )  # a down worker does not take the app out

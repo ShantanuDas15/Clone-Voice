@@ -12,6 +12,8 @@ request. The wire protocol is small and versioned by path (``/v1``): see ``tts_w
 
 import io
 import logging
+import threading
+import time
 from typing import Callable, Optional, Tuple
 
 import httpx
@@ -20,11 +22,18 @@ import soundfile as sf
 
 from backend.core.config import settings
 from backend.services.audio_processing import load_reference_audio
-from backend.services.tts_engine import (NEUTRAL, EngineCapabilities,
-                                         EngineUnavailableError, StageRunner,
-                                         SynthesisResult, SynthesisStyle,
-                                         TTSEngine, VoiceConditioning,
-                                         WrongEngineError)
+from backend.services.tts_engine import (
+    NEUTRAL,
+    EngineBusyError,
+    EngineCapabilities,
+    EngineUnavailableError,
+    StageRunner,
+    SynthesisResult,
+    SynthesisStyle,
+    TTSEngine,
+    VoiceConditioning,
+    WrongEngineError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +55,73 @@ MAX_CHARS = 500
 HEALTH_TIMEOUT_SECONDS = 2.0
 
 
+def _is_busy(response: httpx.Response) -> bool:
+    """True for the worker's own 'busy' reply (a 503 that says so), not any 503."""
+    try:
+        return response.json().get("detail") == "busy"
+    except (ValueError, AttributeError):
+        return False
+
+
+class CircuitBreaker:
+    """Stops calling a backend that keeps failing, then probes it once after a cooldown.
+
+    Closed: calls go through. ``threshold`` failures in a row open it. Open: ``allow`` is false
+    until ``cooldown`` seconds pass; then exactly one caller is allowed through (half-open). That
+    probe's success closes the breaker, its failure re-opens it for another cooldown.
+    """
+
+    def __init__(
+        self,
+        threshold: int,
+        cooldown: float,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        """Create a closed breaker."""
+        self.threshold = threshold
+        self.cooldown = cooldown
+        self.clock = clock
+        self._lock = threading.Lock()
+        self._failures = 0
+        self._opened_at: Optional[float] = None
+        self._probing = False
+
+    @property
+    def state(self) -> str:
+        """``closed``, ``open`` or ``half_open``."""
+        with self._lock:
+            if self._opened_at is None:
+                return "closed"
+            if self._probing or self.clock() - self._opened_at >= self.cooldown:
+                return "half_open"
+            return "open"
+
+    def allow(self) -> bool:
+        """True if a call may go through now."""
+        with self._lock:
+            if self._opened_at is None:
+                return True
+            if not self._probing and self.clock() - self._opened_at >= self.cooldown:
+                self._probing = True
+                return True
+            return False
+
+    def success(self) -> None:
+        """A call worked: close the breaker."""
+        with self._lock:
+            self._failures = 0
+            self._opened_at = None
+            self._probing = False
+
+    def failure(self) -> None:
+        """A call found the backend unavailable."""
+        with self._lock:
+            self._failures += 1
+            if self._probing or self._failures >= self.threshold:
+                self._opened_at = self.clock()
+                self._probing = False
+
+
 class ChatterboxEngine(TTSEngine):
     """One Chatterbox model (original, Turbo or Nano) behind the inference worker."""
 
@@ -60,6 +136,10 @@ class ChatterboxEngine(TTSEngine):
         self.model = VARIANTS[name]
         # Tests inject an httpx transport; production leaves it None.
         self.transport: Optional[httpx.BaseTransport] = None
+        self.breaker = CircuitBreaker(
+            settings.TTS_WORKER_BREAKER_FAILURES,
+            settings.TTS_WORKER_BREAKER_COOLDOWN_SECONDS,
+        )
 
     def capabilities(self) -> EngineCapabilities:
         """24 kHz, English, neutral only (tags and intensity are not exposed yet)."""
@@ -87,7 +167,10 @@ class ChatterboxEngine(TTSEngine):
                 response = client.get(PATH_HEALTH)
             body = response.json() if response.status_code == 200 else {}
         except (httpx.HTTPError, ValueError):
-            return {"ready": False, "worker": {"reachable": False}}
+            return {
+                "ready": False,
+                "worker": {"reachable": False, "circuit": self.breaker.state},
+            }
         serving = body.get("model")
         ready = bool(body.get("ready")) and serving == self.model
         return {
@@ -96,6 +179,7 @@ class ChatterboxEngine(TTSEngine):
                 "reachable": True,
                 "model": serving,
                 "device": body.get("device"),
+                "circuit": self.breaker.state,
             },
         }
 
@@ -130,6 +214,34 @@ class ChatterboxEngine(TTSEngine):
     def _call_worker(
         self, text: str, reference: bytes, truncation_retries: int
     ) -> Tuple[np.ndarray, int, int]:
+        """Call the worker unless its circuit is open; track outages for the breaker.
+
+        An outage (unreachable, timeout, 5xx, refused token) counts towards opening the circuit;
+        a busy reply does not (the worker is up), and neither does a rejected request (the
+        request was bad, not the worker).
+        """
+        if not self.breaker.allow():
+            raise EngineUnavailableError(
+                "the inference worker is being skipped after repeated failures",
+                reason="circuit_open",
+            )
+        try:
+            result = self._post_synthesis(text, reference, truncation_retries)
+        except EngineBusyError:
+            self.breaker.success()  # it answered, so it is alive
+            raise
+        except EngineUnavailableError:
+            self.breaker.failure()
+            raise
+        except RuntimeError:
+            self.breaker.success()  # it answered; the request was the problem
+            raise
+        self.breaker.success()
+        return result
+
+    def _post_synthesis(
+        self, text: str, reference: bytes, truncation_retries: int
+    ) -> Tuple[np.ndarray, int, int]:
         """POST one synthesis to the worker; return (waveform, sample rate, truncated decodes)."""
         try:
             with self._client(settings.TTS_WORKER_TIMEOUT_SECONDS) as client:
@@ -153,6 +265,8 @@ class ChatterboxEngine(TTSEngine):
         if status in (401, 403):
             logger.error("The inference worker refused the service token (%d)", status)
             raise EngineUnavailableError("the inference worker refused the request")
+        if status == 503 and _is_busy(response):
+            raise EngineBusyError("the inference worker is busy")
         if status >= 500:
             raise EngineUnavailableError(f"the inference worker failed ({status})")
         if status != 200:

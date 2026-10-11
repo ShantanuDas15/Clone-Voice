@@ -47,6 +47,19 @@ def quality_gate_off_by_default(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def fresh_engines():
+    """Engines are cached singletons, and a worker engine carries circuit-breaker state.
+
+    Rebuild them for every test so one test's outage never leaks into the next.
+    """
+    from backend.services import tts_engine
+
+    tts_engine._build.cache_clear()
+    yield
+    tts_engine._build.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def no_real_email_by_default(monkeypatch):
     """Never let a test reach a real mail provider, whatever backend/.env says.
 
