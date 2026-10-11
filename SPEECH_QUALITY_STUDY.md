@@ -301,6 +301,22 @@ words, for two speakers).
 * The checks use the raw vocoder output; the S3.3 levelling and edge fades come after.
 * Every retry is a full synthesis, so a refused request costs about twice a normal one.
 
+### Retry in smaller chunks (S3.4b)
+
+Follow-up to the limit above. After a truncated decode the retry now splits the text into chunks half
+as long (150, then 75, 37, floor 20 characters) instead of repeating the same decode. Checked on the
+two texts that truncated, 6 speakers x 3 seeds each (36 full-pipeline runs, gate on, 2 attempts):
+
+| Text | Served first try | Served after the smaller-chunk retry | Refused |
+|---|---|---|---|
+| 22-word "committee" sentence | 15 | 3 | 0 |
+| 40 repeated words | 10 | 8 | 0 |
+
+Every request that needed a retry (11 of 36) recovered; none was refused. Not paired with the old behaviour
+on the same seeds, so this shows the new retry recovers these cases, not by how much it beats the old one.
+The first attempt still truncates for these texts about a third of the time, so those requests cost two
+syntheses of time.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

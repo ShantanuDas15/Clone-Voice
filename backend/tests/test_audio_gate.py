@@ -328,3 +328,68 @@ def test_a_refused_synthesis_is_a_502_with_a_failed_audit_row(
         .all()
     )
     assert [r.status for r in rows] == ["failed"]
+
+
+# --- retry after truncation uses smaller chunks (S3.4b) --------------------------
+
+
+def _recording_synth(truncate_when):
+    """A stand-in for ``synthesize_speech`` that records ``max_chars`` per call."""
+    calls = []
+
+    def fake(text, embedding, max_chars=None):
+        calls.append(max_chars)
+        tts_pipeline._decode_state.truncated = 1 if truncate_when(max_chars) else 0
+        return np.zeros((80, 50), np.float32)
+
+    return fake, calls
+
+
+def test_a_truncated_attempt_is_retried_in_smaller_chunks_and_recovers(gate_on):
+    synth, calls = _recording_synth(lambda max_chars: max_chars is None)
+    vocode, _ = _vocode_returning(_voiced(1.8), _voiced(1.8))
+    with patch.object(tts_pipeline, "synthesize_speech", synth), patch.object(
+        tts_pipeline, "vocode", vocode
+    ):
+        path, _ = _run()
+    assert calls == [None, settings.TTS_CHUNK_MAX_CHARS // 2]
+    assert os.path.exists(path)
+
+
+def test_a_failure_other_than_truncation_retries_with_the_same_chunking(gate_on):
+    synth, calls = _recording_synth(lambda max_chars: False)
+    vocode, _ = _vocode_returning(np.zeros(SR * 2, np.float32), _voiced(1.8))
+    with patch.object(tts_pipeline, "synthesize_speech", synth), patch.object(
+        tts_pipeline, "vocode", vocode
+    ):
+        _run()
+    assert calls == [None, None]
+
+
+def test_chunks_keep_halving_down_to_a_floor(gate_on, monkeypatch):
+    monkeypatch.setattr(settings, "TTS_QUALITY_MAX_ATTEMPTS", 5)
+    synth, calls = _recording_synth(lambda max_chars: True)
+    vocode, _ = _vocode_returning(*[_voiced(1.8)] * 5)
+    with patch.object(tts_pipeline, "synthesize_speech", synth), patch.object(
+        tts_pipeline, "vocode", vocode
+    ), pytest.raises(OutputQualityError):
+        _run()
+    assert calls == [None, 75, 37, 20, 20]
+
+
+def test_a_smaller_chunk_limit_decodes_more_chunks(gate_on):
+    text = "The committee reviewed the proposal carefully, and decided to postpone the vote."
+    decodes = []
+    real = tts_pipeline._synthesize_chunk
+
+    def spy(chunk, embedding):
+        decodes.append(chunk)
+        return real(chunk, embedding)
+
+    with patch.object(tts_pipeline, "_synthesize_chunk", spy):
+        tts_pipeline.synthesize_speech(text, np.ones(256, np.float32))
+        default_count = len(decodes)
+        decodes.clear()
+        tts_pipeline.synthesize_speech(text, np.ones(256, np.float32), 30)
+    assert default_count == 1 and len(decodes) > 1
+    assert all(len(d) <= 30 for d in decodes)
