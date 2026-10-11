@@ -51,6 +51,25 @@ ENGINE_FALLBACKS = Counter(
     ["primary", "fallback", "reason"],  # reason: unavailable | busy | circuit_open
     registry=registry,
 )
+# Real-time factor = seconds spent synthesizing / seconds of audio produced (lower is faster;
+# above 1 is slower than real time). Buckets span a fast GPU engine to a slow CPU vocoder.
+_RTF_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32)
+
+ENGINE_RTF = Histogram(
+    "clonevoice_engine_rtf",
+    "Real-time factor of one synthesis attempt, by the engine that ran it (S7.3a).",
+    ["engine"],
+    buckets=_RTF_BUCKETS,
+    registry=registry,
+)
+
+ENGINE_SYNTHESIS = Counter(
+    "clonevoice_engine_synthesis_total",
+    "Synthesis attempts by engine and outcome (S7.3a).",
+    ["engine", "outcome"],  # ok | gate_retried | gate_refused | unavailable
+    registry=registry,
+)
+
 INFERENCE_QUEUE_DEPTH = Gauge(
     "clonevoice_inference_queue_depth",
     "Requests currently waiting for the inference permit.",
