@@ -207,6 +207,14 @@ class Settings(BaseSettings):
     TTS_WORKER_URL: str = ""
     TTS_WORKER_TOKEN: str = ""
     TTS_WORKER_TIMEOUT_SECONDS: float = Field(default=25.0, gt=0.0, le=300.0)
+    # SPEECH_QUALITY_PLAN.md S7.4a: canary. This share of users (0-100, chosen by a stable hash of the
+    # user id, so a user always gets the same engine) is served by TTS_CANARY_ENGINE instead of
+    # TTS_ENGINE. 0 (default) is off. Rolling back is setting it to 0; the kill switch for the engine
+    # itself is TTS_ENGINE=sv2tts. Voice upload is not affected: profiles stay engine-neutral.
+    TTS_CANARY_ENGINE: Literal[
+        "sv2tts", "chatterbox", "chatterbox_turbo", "chatterbox_nano"
+    ] = "chatterbox"
+    TTS_CANARY_PERCENT: int = Field(default=0, ge=0, le=100)
     # SPEECH_QUALITY_PLAN.md S7.2b: add an inaudible watermark (AudioSeal) to every synthesized
     # WAV, so a clip can be traced to this service after it is re-encoded. Fail closed: if it
     # cannot be applied the request fails rather than serving unmarked audio. The 12-bit tag
@@ -375,7 +383,10 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def worker_engine_is_configured(self) -> "Settings":
         """Fail at startup on a worker engine with no usable, safe worker settings."""
-        if self.TTS_ENGINE == "sv2tts":
+        canary_on_worker = (
+            self.TTS_CANARY_PERCENT > 0 and self.TTS_CANARY_ENGINE != "sv2tts"
+        )
+        if self.TTS_ENGINE == "sv2tts" and not canary_on_worker:
             return self
         url = urlparse(self.TTS_WORKER_URL)
         if (
@@ -384,7 +395,8 @@ class Settings(BaseSettings):
             or url.scheme not in {"http", "https"}
         ):
             raise ValueError(
-                f"TTS_ENGINE={self.TTS_ENGINE} requires TTS_WORKER_URL (an http(s) URL)"
+                f"TTS_ENGINE={self.TTS_ENGINE} (canary {self.TTS_CANARY_ENGINE}, "
+                f"{self.TTS_CANARY_PERCENT}%) requires TTS_WORKER_URL (an http(s) URL)"
             )
         if url.scheme != "https" and url.hostname not in {
             "localhost",

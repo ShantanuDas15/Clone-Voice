@@ -10,6 +10,7 @@ WAV provenance metadata and erasure. What an engine owns: how a voice is capture
 text becomes a waveform.
 """
 
+import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import lru_cache
@@ -182,6 +183,21 @@ def _build(name: str) -> TTSEngine:
 def get_engine() -> TTSEngine:
     """Return the engine selected by ``TTS_ENGINE``."""
     return _build(settings.TTS_ENGINE)
+
+
+def canary_bucket(user_id: str) -> int:
+    """A stable 0-99 bucket for a user, so the same user is always in or out of a canary."""
+    return int.from_bytes(hashlib.sha256(user_id.encode()).digest()[:8], "big") % 100
+
+
+def get_engine_for_user(user_id: str) -> TTSEngine:
+    """The engine that serves ``user_id``: the canary engine for the canary share, else ``get_engine()``."""
+    if (
+        settings.TTS_CANARY_PERCENT > 0
+        and canary_bucket(user_id) < settings.TTS_CANARY_PERCENT
+    ):
+        return _build(settings.TTS_CANARY_ENGINE)
+    return get_engine()
 
 
 def get_fallback_engine(primary: TTSEngine) -> Optional[TTSEngine]:

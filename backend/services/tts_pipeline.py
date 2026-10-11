@@ -871,9 +871,10 @@ async def run_inference_pipeline(
             (synthesizer, vocoder), exceeded its configured timeout.
     """
     from backend.services.tts_engine import (EngineUnavailableError, TTSEngine,
-                                             get_engine, get_fallback_engine)
+                                             get_engine_for_user,
+                                             get_fallback_engine)
 
-    engine = get_engine()
+    engine = get_engine_for_user(user_id)
     if engine.needs_reference_audio:
         # Reads and trims the profile's stored sample: blocking, so off the event loop.
         conditioning = await asyncio.to_thread(
