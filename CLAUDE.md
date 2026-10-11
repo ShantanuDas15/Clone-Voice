@@ -121,7 +121,9 @@ backend/
 │   ├── voice.py               # /api/v1/voice/* (upload, profiles)
 │   └── synthesize.py          # /api/v1/synthesize (+ history, past-audio download)
 ├── services/
-│   ├── tts_pipeline.py        # SV2TTS inference (Encoder, Synthesizer, Vocoder)
+│   ├── tts_engine.py          # TTSEngine interface + registry (TTS_ENGINE); every engine implements it
+│   ├── sv2tts_engine.py       # The SV2TTS engine (adapter over tts_pipeline)
+│   ├── tts_pipeline.py        # SV2TTS inference (Encoder, Synthesizer, Vocoder), slot, quality gate, output
 │   └── audio_processing.py    # Librosa preprocessing (resample, trim, normalize)
 ├── models/
 │   └── database.py            # SQLAlchemy ORM models (User, VoiceProfile, Generation)

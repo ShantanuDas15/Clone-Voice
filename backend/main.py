@@ -20,20 +20,17 @@ from backend.api.terms import router as terms_router
 from backend.api.voice import router as voice_router
 from backend.core import metrics
 from backend.core.body_limit import BodySizeLimitMiddleware
-from backend.core.db_errors import register_db_error_handlers
 from backend.core.config import settings
 from backend.core.database import SessionLocal
+from backend.core.db_errors import register_db_error_handlers
 from backend.core.migrations import check_schema_current
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
 from backend.services.storage_cleanup import periodic_cleanup
-from backend.services.tts_pipeline import (
-    drain_inflight_inference,
-    get_model_health,
-    get_warmup_status,
-    load_models,
-    warmup_inference,
-)
+from backend.services.tts_engine import get_engine
+from backend.services.tts_pipeline import (drain_inflight_inference,
+                                           get_model_health, get_warmup_status,
+                                           load_models, warmup_inference)
 
 
 def configure_logging() -> None:
@@ -323,6 +320,18 @@ def liveness() -> dict:
     return {"status": "alive"}
 
 
+def _engine_summary() -> dict:
+    """Name, version and capabilities of the active speech engine, for the readiness payload."""
+    caps = get_engine().capabilities()
+    return {
+        "name": caps.name,
+        "version": caps.version,
+        "sample_rate": caps.sample_rate,
+        "max_chars": caps.max_chars,
+        "emotions": list(caps.emotions),
+    }
+
+
 @app.get("/health/ready")
 @app.get("/health")
 async def readiness() -> JSONResponse:
@@ -355,6 +364,7 @@ async def readiness() -> JSONResponse:
         "status": "ok" if ready else "degraded",
         "version": "1.0.0",
         "database": {"ok": database_ok},
+        "engine": _engine_summary(),
         "models": model_status,
         "warmup": warmup,
     }

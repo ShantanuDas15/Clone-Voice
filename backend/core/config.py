@@ -188,6 +188,9 @@ class Settings(BaseSettings):
     TTS_PAUSE_SECONDS: dict[str, float] = Field(
         default_factory=lambda: dict(DEFAULT_TTS_PAUSE_SECONDS)
     )
+    # SPEECH_QUALITY_PLAN.md S4.1: which speech engine serves requests. Only the original
+    # SV2TTS engine exists so far; a better one is added behind this setting.
+    TTS_ENGINE: Literal["sv2tts"] = "sv2tts"
     # SPEECH_QUALITY_PLAN.md S3.4: check each synthesis for truncation, silence, clipping
     # and implausible length; on a failure run it again, up to this many attempts in all
     # (each attempt is a full synthesis, so the worst-case latency scales with it), then

@@ -686,12 +686,6 @@ def _synthesize_counting_truncation(
     return mel, int(getattr(_decode_state, "truncated", 0))
 
 
-# After a truncated decode the retry splits the text into chunks this many times smaller,
-# never below the floor (a chunk of a few words always fits in the frame cap).
-_RETRY_CHUNK_DIVISOR = 2
-_MIN_RETRY_CHUNK_CHARS = 20
-
-
 # WaveRNN returns (frames - 1) * hop samples and fades the last 20 hops, so it
 # needs at least 21 frames.
 _VOCODER_MIN_FRAMES = 21
@@ -838,6 +832,10 @@ async def run_inference_pipeline(
         InferenceTimeoutError: The slot wait, or either forward-pass stage
             (synthesizer, vocoder), exceeded its configured timeout.
     """
+    from backend.services.tts_engine import get_engine
+
+    engine = get_engine()
+    conditioning = engine.conditioning_from_array(embedding)
     spoken_text = _clean_for_chunking(text)
     max_pause = max(settings.TTS_PAUSE_SECONDS.values())
     attempts = (
@@ -847,23 +845,27 @@ async def run_inference_pipeline(
         logger.debug(
             "Inference semaphore acquired — starting synthesizer forward pass."
         )
+
+        def run_stage(stage: str, fn: Callable[..., Any], *args: Any) -> Any:
+            """Run one engine stage under this slot's timeout and metrics."""
+            return slot.run(
+                fn,
+                *args,
+                timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+                stage=stage,
+            )
+
         try:
-            chunk_chars: Optional[int] = None
+            truncation_retries = 0
             for attempt in range(1, attempts + 1):
-                mel, truncated = await slot.run(
-                    _synthesize_counting_truncation,
+                result = await engine.synthesize(
                     text,
-                    embedding,
-                    *(() if chunk_chars is None else (chunk_chars,)),
-                    timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
-                    stage="synthesizer",
+                    conditioning,
+                    None,
+                    run_stage=run_stage,
+                    truncation_retries=truncation_retries,
                 )
-                wav = await slot.run(
-                    vocode,
-                    mel,
-                    timeout=settings.INFERENCE_CALL_TIMEOUT_SECONDS,
-                    stage="vocoder",
-                )
+                wav, truncated = result.waveform, result.truncated_decodes
                 if not settings.TTS_QUALITY_GATE_ENABLED:
                     break
                 verdict = await asyncio.to_thread(
@@ -894,12 +896,8 @@ async def run_inference_pipeline(
                     raise OutputQualityError(verdict.reasons)
                 if "truncated" in verdict.reasons:
                     # The same decode would truncate again (SPEECH_QUALITY_STUDY.md,
-                    # S3.4): retry in smaller chunks, which always fit the frame cap.
-                    chunk_chars = max(
-                        _MIN_RETRY_CHUNK_CHARS,
-                        (chunk_chars or settings.TTS_CHUNK_MAX_CHARS)
-                        // _RETRY_CHUNK_DIVISOR,
-                    )
+                    # S3.4): tell the engine, which decodes more conservatively.
+                    truncation_retries += 1
         except asyncio.TimeoutError:
             raise InferenceTimeoutError(
                 "Inference forward pass exceeded the per-stage timeout."

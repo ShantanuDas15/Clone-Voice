@@ -91,7 +91,7 @@ def test_upload_holds_no_transaction_during_embedding(
         seen["in_transaction"] = db_session.in_transaction()
         return np.ones(256, dtype=np.float32)
 
-    with patch("backend.api.voice.embed_speaker_async", fake_embed):
+    with patch("backend.services.tts_pipeline.embed_speaker_async", fake_embed):
         res = client.post(
             "/api/v1/voice/upload",
             headers=auth_headers,

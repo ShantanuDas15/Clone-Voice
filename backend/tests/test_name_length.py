@@ -63,7 +63,7 @@ def test_upload_rejects_out_of_bounds_name_before_saving(
     """Bad upload names — including whitespace-only — get 422 before any
     file is saved or inference runs (HARDENING_PLAN.md finding P2-L1)."""
     with patch("backend.api.voice.save_upload") as save, patch(
-        "backend.api.voice.embed_speaker_async"
+        "backend.services.tts_pipeline.embed_speaker_async"
     ) as embed:
         resp = _upload(client, auth_headers, name)
     assert resp.status_code == 422

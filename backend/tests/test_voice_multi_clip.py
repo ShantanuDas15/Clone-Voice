@@ -61,7 +61,7 @@ def _post(client, headers, embeddings=None, count=3, *, field="files", extra=Non
         return client.post(
             "/api/v1/voice/upload", headers=headers, data=data, files=files
         )
-    with patch("backend.api.voice.embed_speaker_async", side_effect=embeddings):
+    with patch("backend.services.tts_pipeline.embed_speaker_async", side_effect=embeddings):
         return client.post(
             "/api/v1/voice/upload", headers=headers, data=data, files=files
         )
@@ -133,7 +133,7 @@ def test_file_and_files_can_be_combined(client, auth_headers, db_session):
         ("files", ("b.wav", _wav(), "audio/wav")),
     ]
     with patch(
-        "backend.api.voice.embed_speaker_async",
+        "backend.services.tts_pipeline.embed_speaker_async",
         side_effect=[_unit(1, 0.1), _unit(1, -0.1)],
     ):
         response = client.post(
@@ -225,7 +225,7 @@ def test_one_bad_clip_leaves_no_profile_and_no_files(client, auth_headers, db_se
         ("files", ("c.wav", b"not audio at all", "audio/wav")),
     ]
     with patch(
-        "backend.api.voice.embed_speaker_async",
+        "backend.services.tts_pipeline.embed_speaker_async",
         side_effect=[_unit(1, 0.1), _unit(1, 0.2)],
     ):
         response = client.post(

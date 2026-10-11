@@ -149,7 +149,7 @@ def test_failed_profile_also_records_consent(
     """The audit trail must cover failed uploads too: the file was received
     under the same attestation, so the `failed` row keeps the timestamp."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.api.voice.embed_speaker_async", side_effect=RuntimeError("boom")
+        "backend.services.tts_pipeline.embed_speaker_async", side_effect=RuntimeError("boom")
     ):
         response = client.post(
             "/api/v1/voice/upload",
@@ -184,7 +184,7 @@ def test_failed_profile_also_records_terms_version(
 ):
     """A failed upload was received under the same terms, so it keeps them."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.api.voice.embed_speaker_async", side_effect=RuntimeError("boom")
+        "backend.services.tts_pipeline.embed_speaker_async", side_effect=RuntimeError("boom")
     ):
         client.post(
             "/api/v1/voice/upload",
@@ -307,7 +307,7 @@ def test_upload_embedding_failure_deletes_orphaned_file(
 ):
     """A failed embedding extraction must not leave the uploaded file on disk."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.api.voice.embed_speaker_async", side_effect=RuntimeError("boom")
+        "backend.services.tts_pipeline.embed_speaker_async", side_effect=RuntimeError("boom")
     ):
         wav_data = create_dummy_wav()
         files = {"file": ("fail.wav", wav_data, "audio/wav")}
@@ -332,7 +332,7 @@ def test_upload_queue_full_returns_429_and_deletes_orphaned_file(
     """HARDENING_PLAN.md H6: a full inference queue during embedding
     extraction maps to 429 and still cleans up the orphaned upload."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.api.voice.embed_speaker_async",
+        "backend.services.tts_pipeline.embed_speaker_async",
         side_effect=InferenceQueueFullError("simulated full queue"),
     ):
         wav_data = create_dummy_wav()
@@ -358,7 +358,7 @@ def test_upload_timeout_returns_503_and_deletes_orphaned_file(
     """HARDENING_PLAN.md H6: an embedding-extraction timeout maps to 503
     and still cleans up the orphaned upload."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.api.voice.embed_speaker_async",
+        "backend.services.tts_pipeline.embed_speaker_async",
         side_effect=InferenceTimeoutError("simulated inference timeout"),
     ):
         wav_data = create_dummy_wav()
@@ -642,7 +642,7 @@ def test_upload_never_persists_blank_embedding_as_ready(
     """A zero/NaN/empty embedding is a 422: no ready profile, no files kept."""
     upload_dir = tmp_path / "uploads"
     with patch("backend.core.config.settings.UPLOAD_DIR", str(upload_dir)), patch(
-        "backend.api.voice.embed_speaker_async", return_value=bad_embedding
+        "backend.services.tts_pipeline.embed_speaker_async", return_value=bad_embedding
     ):
         response = client.post(
             "/api/v1/voice/upload",
