@@ -12,6 +12,11 @@ from typing import List, Sequence
 
 import numpy as np
 
+# The scheme every profile's stored embedding is made with (SPEECH_QUALITY_PLAN.md S4.5a): the
+# SV2TTS speaker encoder, a 256-d unit vector. Change it only together with a way to re-derive
+# old profiles; a profile with another value is refused at synthesis instead of mis-fed.
+EMBEDDING_VERSION = "sv2tts-1"
+
 # A clip scoring below this against the others is probably a different speaker (SPEECH_QUALITY_STUDY.md,
 # S2.1a: 95.8% of other-speaker clips fell below it, 1.7% of true clips did). A warning, never a control.
 CLIP_AGREEMENT_WARN = 0.75

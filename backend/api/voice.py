@@ -35,6 +35,7 @@ from backend.services.tts_engine import get_engine
 from backend.services.tts_pipeline import (InferenceQueueFullError,
                                            InferenceTimeoutError)
 from backend.services.voice_embedding import (CLIP_AGREEMENT_WARN,
+                                              EMBEDDING_VERSION,
                                               aggregate_embeddings,
                                               clip_agreement, find_outliers)
 
@@ -204,6 +205,7 @@ def _build_profile(
         name=name,
         audio_sample_path=clips[0].audio_path,
         embedding_path=profile_embedding_path,
+        embedding_version=EMBEDDING_VERSION,
         status="ready",
         consent_confirmed_at=consent_confirmed_at,
         terms_version=settings.TERMS_VERSION,

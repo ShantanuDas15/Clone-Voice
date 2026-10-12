@@ -675,6 +675,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "embedding_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Version"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -716,6 +727,17 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "embedding_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Version"
           },
           "id": {
             "format": "uuid",

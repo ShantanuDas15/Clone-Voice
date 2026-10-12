@@ -43,6 +43,9 @@ class VoiceProfile(Base):
         nullable=False,
     )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+    # SPEECH_QUALITY_PLAN.md S4.5a: the embedding scheme ``embedding_path`` was made with (for
+    # example "sv2tts-1"). NULL on rows from before it was recorded (all made by SV2TTS).
+    embedding_version = Column(String(50), nullable=True)
     # Enrolment clips of a multi-clip profile (S2.1b); empty for older profiles.
     samples = relationship(
         "VoiceProfileSample",

@@ -31,6 +31,7 @@ from backend.services.tts_pipeline import (InferenceQueueFullError,
                                            InferenceTimeoutError,
                                            OutputQualityError, free_gpu_memory,
                                            run_inference_pipeline)
+from backend.services.voice_embedding import EMBEDDING_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +183,14 @@ async def synthesize(
         raise HTTPException(
             status_code=409,
             detail="Voice profile is not ready for synthesis",
+        )
+
+    if profile.embedding_version not in (None, EMBEDDING_VERSION):
+        # Made by an embedding scheme this service no longer (or does not yet) speak with.
+        raise HTTPException(
+            status_code=409,
+            detail="This voice profile was made with an older voice model; "
+            "please upload the sample again.",
         )
 
     # Copy what inference needs into plain locals; the profile row's already-
