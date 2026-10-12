@@ -12,7 +12,8 @@ Chatterbox's ``exaggeration`` is one intensity control that mostly moves loudnes
 * Turbo and Nano ignore ``exaggeration``, and SV2TTS has no such control, so they get no controls.
 
 These numbers are starting points taken from a small study (six adult speakers, one seed), not a
-tuned model. Nothing calls this yet; S5.3 applies it per sentence.
+tuned model. ``build_style`` packs both into the ``SynthesisStyle`` an engine takes; the pipeline
+does not call it yet (S5.3 applies it per sentence).
 """
 
 from dataclasses import dataclass
@@ -53,4 +54,16 @@ def engine_controls(engine_name: str, analysis: Analysis) -> EngineControls:
     )
     return EngineControls(
         exaggeration=round(max(EXAGGERATION_MIN, min(EXAGGERATION_MAX, value)), 3)
+    )
+
+
+def build_style(
+    engine_name: str, supported: Tuple[str, ...], analysis: Analysis
+) -> SynthesisStyle:
+    """The full style for one sentence: its resolved emotion plus the engine's intensity control."""
+    style = resolve_style(analysis, supported)
+    return SynthesisStyle(
+        style.emotion,
+        style.intensity,
+        engine_controls(engine_name, analysis).exaggeration,
     )

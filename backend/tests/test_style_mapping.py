@@ -4,8 +4,8 @@ import pytest
 
 from backend.services.style_mapping import (EXAGGERATION_DEFAULT,
                                             EXAGGERATION_MAX, EXAGGERATION_MIN,
-                                            EngineControls, engine_controls,
-                                            resolve_style)
+                                            EngineControls, build_style,
+                                            engine_controls, resolve_style)
 from backend.services.text_analysis import EMOTIONS, analyze
 from backend.services.tts_engine import NEUTRAL, SynthesisStyle
 
@@ -60,3 +60,20 @@ def test_exaggeration_stays_inside_the_measured_safe_range(text):
 )
 def test_engines_without_the_control_get_none(engine):
     assert engine_controls(engine, analyze("I hate this!!")) == EngineControls()
+
+
+def test_build_style_carries_the_emotion_and_the_engine_control():
+    calm = analyze("The report is on the table.")
+    assert build_style("chatterbox", (NEUTRAL,), calm) == SynthesisStyle(
+        NEUTRAL, 0.0, EXAGGERATION_DEFAULT
+    )
+    loud = analyze("I hate this!!")
+    style = build_style("chatterbox", (NEUTRAL,), loud)
+    assert style.emotion == NEUTRAL and style.exaggeration > EXAGGERATION_DEFAULT
+
+
+def test_build_style_leaves_the_control_unset_for_an_engine_without_it():
+    for name in ("sv2tts", "chatterbox_turbo", "chatterbox_nano"):
+        assert (
+            build_style(name, (NEUTRAL,), analyze("I hate this!!")).exaggeration is None
+        )

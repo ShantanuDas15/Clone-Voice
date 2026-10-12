@@ -21,20 +21,12 @@ from fastapi.testclient import TestClient
 
 from backend.core.config import Settings, settings
 from backend.services import audio_processing, tts_engine, tts_pipeline
-from backend.services.chatterbox_engine import (
-    MAX_CHARS,
-    SAMPLE_RATE,
-    VARIANTS,
-    ChatterboxEngine,
-)
-from backend.services.tts_engine import (
-    EngineUnavailableError,
-    SynthesisStyle,
-    UnsupportedStyleError,
-    VoiceConditioning,
-    WrongEngineError,
-    get_engine,
-)
+from backend.services.chatterbox_engine import (MAX_CHARS, SAMPLE_RATE,
+                                                VARIANTS, ChatterboxEngine)
+from backend.services.tts_engine import (EngineUnavailableError,
+                                         SynthesisStyle, UnsupportedStyleError,
+                                         VoiceConditioning, WrongEngineError,
+                                         get_engine)
 from tts_worker.app import create_app
 
 SR = 16000
@@ -600,3 +592,60 @@ def test_readiness_names_the_worker_without_failing_when_it_is_down(
 
 def test_readiness_shows_a_live_worker(client, worker):
     assert client.get("/health/ready").json()["engine"]["worker"]["model"] == "nano"
+
+
+# --- the exaggeration control (S5.2b) ----------------------------------------
+
+
+class _Controlled(_Model):
+    """A worker model that accepts and records the optional control."""
+
+    def synthesize(self, text, reference_wav, truncation_retries, exaggeration=None):
+        self.exaggeration = exaggeration
+        return super().synthesize(text, reference_wav, truncation_retries)
+
+
+def test_the_original_engine_sends_the_style_exaggeration(monkeypatch):
+    model = _Controlled()
+    model.model = "original"
+    server = _Server(model)
+    try:
+        monkeypatch.setattr(settings, "TTS_WORKER_URL", server.url)
+        monkeypatch.setattr(settings, "TTS_WORKER_TOKEN", TOKEN)
+        engine = ChatterboxEngine("chatterbox")
+        _synth(engine, style=SynthesisStyle(exaggeration=0.8))
+        assert model.exaggeration == 0.8
+        _synth(engine, style=SynthesisStyle())
+        assert model.exaggeration is None
+        _synth(engine, style=None)
+        assert model.exaggeration is None
+    finally:
+        server.stop()
+
+
+def test_turbo_and_nano_engines_do_not_send_it(monkeypatch):
+    model = _Controlled()
+    server = _Server(model)
+    try:
+        monkeypatch.setattr(settings, "TTS_WORKER_URL", server.url)
+        monkeypatch.setattr(settings, "TTS_WORKER_TOKEN", TOKEN)
+        engine = ChatterboxEngine("chatterbox_nano")
+        _synth(engine, style=SynthesisStyle(exaggeration=0.8))
+        assert model.exaggeration is None
+    finally:
+        server.stop()
+
+
+def test_an_invalid_value_is_a_rejection_not_an_outage(monkeypatch):
+    model = _Controlled()
+    model.model = "original"
+    server = _Server(model)
+    try:
+        monkeypatch.setattr(settings, "TTS_WORKER_URL", server.url)
+        monkeypatch.setattr(settings, "TTS_WORKER_TOKEN", TOKEN)
+        engine = ChatterboxEngine("chatterbox")
+        with pytest.raises(RuntimeError, match="rejected"):
+            _synth(engine, style=SynthesisStyle(exaggeration=5.0))
+        assert engine.breaker.state == "closed"
+    finally:
+        server.stop()

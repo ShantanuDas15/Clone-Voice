@@ -22,18 +22,12 @@ import soundfile as sf
 
 from backend.core.config import settings
 from backend.services.audio_processing import load_reference_audio
-from backend.services.tts_engine import (
-    NEUTRAL,
-    EngineBusyError,
-    EngineCapabilities,
-    EngineUnavailableError,
-    StageRunner,
-    SynthesisResult,
-    SynthesisStyle,
-    TTSEngine,
-    VoiceConditioning,
-    WrongEngineError,
-)
+from backend.services.tts_engine import (NEUTRAL, EngineBusyError,
+                                         EngineCapabilities,
+                                         EngineUnavailableError, StageRunner,
+                                         SynthesisResult, SynthesisStyle,
+                                         TTSEngine, VoiceConditioning,
+                                         WrongEngineError)
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +136,7 @@ class ChatterboxEngine(TTSEngine):
         )
 
     def capabilities(self) -> EngineCapabilities:
-        """24 kHz, English, neutral only (tags and intensity are not exposed yet)."""
+        """24 kHz, English, neutral only (no labelled emotion; intensity is ``exaggeration``)."""
         return EngineCapabilities(
             name=self.name,
             version=self.version,
@@ -212,7 +206,11 @@ class ChatterboxEngine(TTSEngine):
         return self.conditioning_from_array(sv2tts.embedding)
 
     def _call_worker(
-        self, text: str, reference: bytes, truncation_retries: int
+        self,
+        text: str,
+        reference: bytes,
+        truncation_retries: int,
+        exaggeration: Optional[float] = None,
     ) -> Tuple[np.ndarray, int, int]:
         """Call the worker unless its circuit is open; track outages for the breaker.
 
@@ -226,7 +224,9 @@ class ChatterboxEngine(TTSEngine):
                 reason="circuit_open",
             )
         try:
-            result = self._post_synthesis(text, reference, truncation_retries)
+            result = self._post_synthesis(
+                text, reference, truncation_retries, exaggeration
+            )
         except EngineBusyError:
             self.breaker.success()  # it answered, so it is alive
             raise
@@ -240,18 +240,25 @@ class ChatterboxEngine(TTSEngine):
         return result
 
     def _post_synthesis(
-        self, text: str, reference: bytes, truncation_retries: int
+        self,
+        text: str,
+        reference: bytes,
+        truncation_retries: int,
+        exaggeration: Optional[float] = None,
     ) -> Tuple[np.ndarray, int, int]:
         """POST one synthesis to the worker; return (waveform, sample rate, truncated decodes)."""
+        form = {
+            "text": text,
+            "model": self.model,
+            "truncation_retries": str(truncation_retries),
+        }
+        if exaggeration is not None:
+            form["exaggeration"] = repr(float(exaggeration))
         try:
             with self._client(settings.TTS_WORKER_TIMEOUT_SECONDS) as client:
                 response = client.post(
                     PATH_SYNTHESIZE,
-                    data={
-                        "text": text,
-                        "model": self.model,
-                        "truncation_retries": str(truncation_retries),
-                    },
+                    data=form,
                     files={"reference": ("reference.wav", reference, "audio/wav")},
                 )
         except httpx.TimeoutException:
@@ -296,11 +303,16 @@ class ChatterboxEngine(TTSEngine):
         self.check_request(conditioning, style)
         if not conditioning.reference_audio:
             raise WrongEngineError("this voice has no reference audio")
+        # Only the original model has the control; the others would ignore it, so don't send it.
+        exaggeration = (
+            style.exaggeration if style and self.model == "original" else None
+        )
         waveform, rate, truncated = await run_stage(
             "worker",
             self._call_worker,
             text,
             conditioning.reference_audio,
             truncation_retries,
+            exaggeration,
         )
         return SynthesisResult(waveform, rate, truncated)

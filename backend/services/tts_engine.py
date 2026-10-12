@@ -56,10 +56,15 @@ class VoiceConditioning:
 
 @dataclass(frozen=True)
 class SynthesisStyle:
-    """How to deliver the text. Every engine today is neutral only (S5 adds the rest)."""
+    """How to deliver the text. Every engine today is neutral only (S5 adds the rest).
+
+    ``exaggeration`` is the original Chatterbox's delivery-intensity control; ``None`` keeps the
+    engine's default, and an engine without the control ignores it.
+    """
 
     emotion: str = NEUTRAL
     intensity: float = 0.0
+    exaggeration: Optional[float] = None
 
 
 @dataclass(frozen=True)

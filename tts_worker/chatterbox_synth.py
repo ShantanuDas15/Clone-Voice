@@ -8,7 +8,7 @@ import logging
 import os
 import tempfile
 import threading
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -41,13 +41,21 @@ class ChatterboxSynthesizer:
         self._lock = threading.Lock()
 
     def synthesize(
-        self, text: str, reference_wav: bytes, truncation_retries: int
+        self,
+        text: str,
+        reference_wav: bytes,
+        truncation_retries: int,
+        exaggeration: Optional[float] = None,
     ) -> Tuple[np.ndarray, int]:
         """Clone the reference voice for ``text``.
 
         ``truncation_retries`` is accepted for protocol compatibility; Chatterbox has no
-        frame cap to truncate against, so it is unused.
+        frame cap to truncate against, so it is unused. ``exaggeration`` reaches only the
+        original model: Turbo and Nano have no such control and ignore it.
         """
+        options = {}
+        if exaggeration is not None and self.model == "original":
+            options["exaggeration"] = exaggeration
         # The model library reads the reference from a path; the file lives only for this call.
         fd, path = tempfile.mkstemp(suffix=".wav")
         try:
@@ -58,7 +66,7 @@ class ChatterboxSynthesizer:
                     self._tts.prepare_conditionals(path)
                 except Exception as error:
                     raise ValueError("the reference audio could not be used") from error
-                wav = self._tts.generate(text)
+                wav = self._tts.generate(text, **options)
         finally:
             try:
                 os.remove(path)

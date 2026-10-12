@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import types
+from unittest.mock import patch
 
 import httpx
 import numpy as np
@@ -342,6 +343,72 @@ def test_the_adapter_removes_the_temp_file_even_when_the_model_fails(
     with pytest.raises(ValueError):
         synth.synthesize("Hi.", _wav_bytes(), 0)
     assert list(tmp_path.iterdir()) == []
+
+
+# --- the exaggeration control (S5.2b) ----------------------------------------
+
+
+class _Recording(FakeSynthesizer):
+    """Accepts the optional control and records it."""
+
+    def synthesize(self, text, reference_wav, truncation_retries, exaggeration=None):
+        self.exaggeration = exaggeration
+        return super().synthesize(text, reference_wav, truncation_retries)
+
+
+def test_exaggeration_reaches_the_model_only_when_sent():
+    synth = _Recording()
+    client = TestClient(create_app(synth, TOKEN))
+    assert _post(client).status_code == 200 and synth.exaggeration is None
+    assert _post(client, exaggeration="0.75").status_code == 200
+    assert synth.exaggeration == 0.75
+
+
+def test_a_model_without_the_parameter_still_works_when_none_is_sent(client, synth):
+    assert _post(client).status_code == 200  # FakeSynthesizer takes three arguments
+
+
+@pytest.mark.parametrize("value", ["-0.1", "2.5", "nan", "inf"])
+def test_an_out_of_range_exaggeration_is_a_422_and_never_reaches_the_model(value):
+    synth = _Recording()
+    client = TestClient(create_app(synth, TOKEN))
+    assert _post(client, exaggeration=value).status_code == 422
+    assert synth.calls == []
+
+
+def test_the_bounds_are_accepted():
+    synth = _Recording()
+    client = TestClient(create_app(synth, TOKEN))
+    for value in ("0", "2"):
+        assert _post(client, exaggeration=value).status_code == 200
+
+
+def test_the_original_model_receives_the_value(fake_chatterbox):
+    calls = []
+
+    def generate(self, text, **options):
+        calls.append(options)
+        return _FakeTensor(np.full(2400, 0.1, np.float32))
+
+    synth = fake_chatterbox("original", "cpu")
+    with patch.object(_FakeModel, "generate", generate):
+        synth.synthesize("Hi.", _wav_bytes(), 0, exaggeration=0.8)
+        synth.synthesize("Hi.", _wav_bytes(), 0, exaggeration=None)
+    assert calls == [{"exaggeration": 0.8}, {}]
+
+
+def test_turbo_and_nano_never_receive_it(fake_chatterbox):
+    calls = []
+
+    def generate(self, text, **options):
+        calls.append(options)
+        return _FakeTensor(np.full(2400, 0.1, np.float32))
+
+    for model in ("turbo", "nano"):
+        synth = fake_chatterbox(model, "cpu")
+        with patch.object(_FakeModel, "generate", generate):
+            synth.synthesize("Hi.", _wav_bytes(), 0, exaggeration=0.8)
+    assert calls == [{}, {}]
 
 
 # --- the container definition (static: Docker is not run here) ---------------
