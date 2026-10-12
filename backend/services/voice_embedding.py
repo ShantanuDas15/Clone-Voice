@@ -8,7 +8,7 @@ clip's embedding is a noisy estimate. The mean of several, re-normalised, is a s
 one, and it is the same operation resemblyzer applies across the windows of a single clip.
 """
 
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 
 import numpy as np
 
@@ -75,3 +75,13 @@ def find_outliers(embeddings: Sequence[np.ndarray], min_agreement: float) -> Lis
         _as_unit_matrix(embeddings)  # still validate the input
         return []
     return [i for i, s in enumerate(clip_agreement(embeddings)) if s < min_agreement]
+
+
+def is_usable_embedding(embedding: Optional[np.ndarray]) -> bool:
+    """True only for a finite, non-zero embedding (a blank one must never be stored)."""
+    return (
+        embedding is not None
+        and embedding.size > 0
+        and bool(np.all(np.isfinite(embedding)))
+        and bool(np.any(embedding != 0))
+    )

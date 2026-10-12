@@ -37,7 +37,8 @@ from backend.services.tts_pipeline import (InferenceQueueFullError,
 from backend.services.voice_embedding import (CLIP_AGREEMENT_WARN,
                                               EMBEDDING_VERSION,
                                               aggregate_embeddings,
-                                              clip_agreement, find_outliers)
+                                              clip_agreement, find_outliers,
+                                              is_usable_embedding)
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +77,7 @@ async def _assess_quality_quietly(file_path: str) -> Optional[QualityOut]:
 
 def _is_usable_embedding(embedding: np.ndarray) -> bool:
     """Return True only for a finite, non-zero embedding (never persist a blank one)."""
-    return (
-        embedding is not None
-        and embedding.size > 0
-        and bool(np.all(np.isfinite(embedding)))
-        and bool(np.any(embedding != 0))
-    )
+    return is_usable_embedding(embedding)
 
 
 async def _cleanup_failed_upload(
