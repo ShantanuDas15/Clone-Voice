@@ -190,4 +190,9 @@ async def synthesize_styled(
         len(planned),
         [item.style.exaggeration for item in planned],
     )
-    return SynthesisResult(np.concatenate(parts), rate, truncated)
+    return SynthesisResult(
+        np.concatenate(parts),
+        rate,
+        truncated,
+        tuple(item.emotion for item in planned),
+    )

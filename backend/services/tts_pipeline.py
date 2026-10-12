@@ -830,6 +830,7 @@ class InferenceResult(tuple):
         engine_version: str,
         engine_fallback_from: Optional[str] = None,
         style_applied: bool = False,
+        emotions_used: tuple = (),
     ) -> "InferenceResult":
         """Build the pair and attach the engine facts."""
         self = super().__new__(cls, (path, duration))
@@ -838,6 +839,8 @@ class InferenceResult(tuple):
         self.engine_fallback_from = engine_fallback_from
         # True when the audio was spoken sentence by sentence with a style (S5.3a/S5.4a).
         self.style_applied = style_applied
+        # The emotion label of each sentence on the styled path (empty otherwise).
+        self.emotions_used = tuple(emotions_used)
         return self
 
 
@@ -900,6 +903,7 @@ async def run_inference_pipeline(
     )
     served_by, fallback_from = engine, None
     style_applied = False
+    emotions_used: tuple = ()
     styled_enabled = styled_synthesis.enabled_for(user_id)
     async with _acquire_inference_slot() as slot:
         logger.debug(
@@ -919,7 +923,7 @@ async def run_inference_pipeline(
             which: "TTSEngine", voice: Any
         ) -> tuple[np.ndarray, int]:
             """Synthesize with ``which``, gating each attempt and retrying a bad one."""
-            nonlocal style_applied
+            nonlocal style_applied, emotions_used
             truncation_retries = 0
             wav, rate = np.zeros(0, np.float32), settings.VOCODER_SAMPLE_RATE
             for attempt in range(1, attempts + 1):
@@ -948,6 +952,7 @@ async def run_inference_pipeline(
                     metrics.ENGINE_SYNTHESIS.labels(which.name, "unavailable").inc()
                     raise
                 wav, rate = result.waveform, result.sample_rate
+                emotions_used = result.sentence_emotions
                 if len(wav) > 0 and rate > 0:
                     metrics.ENGINE_RTF.labels(which.name).observe(
                         (time.perf_counter() - started) / (len(wav) / rate)
@@ -1031,6 +1036,7 @@ async def run_inference_pipeline(
         served_by.version,
         fallback_from,
         style_applied,
+        emotions_used,
     )
 
 
