@@ -36,7 +36,7 @@ from backend.services.text_chunking import Segment, split_into_segments
 from backend.services.text_normalization import normalize_text
 from backend.services.tts_engine import (StageRunner, SynthesisResult,
                                          SynthesisStyle, TTSEngine,
-                                         VoiceConditioning)
+                                         VoiceConditioning, canary_bucket)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,20 @@ class StyledSegment:
 
     segment: Segment
     style: SynthesisStyle
+
+
+EMOTION_CANARY_SALT = "emotion-control:"
+
+
+def enabled_for(user_id: str) -> bool:
+    """True if this user gets sentence-by-sentence styling: everyone with the flag, else the canary."""
+    if settings.EMOTION_CONTROL_ENABLED:
+        return True
+    return (
+        settings.EMOTION_CONTROL_PERCENT > 0
+        and canary_bucket(user_id, EMOTION_CANARY_SALT)
+        < settings.EMOTION_CONTROL_PERCENT
+    )
 
 
 def applies(engine: TTSEngine) -> bool:

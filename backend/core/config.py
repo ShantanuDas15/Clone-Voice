@@ -220,6 +220,10 @@ class Settings(BaseSettings):
     # analysis, instead of one call for the whole text. Off by default: it costs one worker call
     # per sentence. Engines without such a control are unaffected.
     EMOTION_CONTROL_ENABLED: bool = False
+    # SPEECH_QUALITY_PLAN.md S7.4b: canary for the above. While EMOTION_CONTROL_ENABLED is false,
+    # this share of users (0-100, a stable hash of the user id, independent of the engine canary)
+    # gets it anyway; raising the percentage only adds users. 0 (default) is off.
+    EMOTION_CONTROL_PERCENT: int = Field(default=0, ge=0, le=100)
     # SPEECH_QUALITY_PLAN.md S7.2b: add an inaudible watermark (AudioSeal) to every synthesized
     # WAV, so a clip can be traced to this service after it is re-encoded. Fail closed: if it
     # cannot be applied the request fails rather than serving unmarked audio. The 12-bit tag

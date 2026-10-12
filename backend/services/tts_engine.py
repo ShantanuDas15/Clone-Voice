@@ -190,9 +190,14 @@ def get_engine() -> TTSEngine:
     return _build(settings.TTS_ENGINE)
 
 
-def canary_bucket(user_id: str) -> int:
-    """A stable 0-99 bucket for a user, so the same user is always in or out of a canary."""
-    return int.from_bytes(hashlib.sha256(user_id.encode()).digest()[:8], "big") % 100
+def canary_bucket(user_id: str, salt: str = "") -> int:
+    """A stable 0-99 bucket for a user, so the same user is always in or out of a canary.
+
+    A different ``salt`` gives an independent bucketing (the engine canary uses none), so two
+    canaries do not select the same users.
+    """
+    digest = hashlib.sha256((salt + user_id).encode()).digest()
+    return int.from_bytes(digest[:8], "big") % 100
 
 
 def get_engine_for_user(user_id: str) -> TTSEngine:

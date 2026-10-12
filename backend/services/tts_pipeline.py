@@ -898,6 +898,7 @@ async def run_inference_pipeline(
     )
     served_by, fallback_from = engine, None
     style_applied = False
+    styled_enabled = styled_synthesis.enabled_for(user_id)
     async with _acquire_inference_slot() as slot:
         logger.debug(
             "Inference semaphore acquired — starting synthesizer forward pass."
@@ -922,9 +923,7 @@ async def run_inference_pipeline(
             for attempt in range(1, attempts + 1):
                 started = time.perf_counter()
                 try:
-                    if settings.EMOTION_CONTROL_ENABLED and styled_synthesis.applies(
-                        which
-                    ):
+                    if styled_enabled and styled_synthesis.applies(which):
                         style_applied = True
                         result = await styled_synthesis.synthesize_styled(
                             which,
