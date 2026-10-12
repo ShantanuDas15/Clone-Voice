@@ -14,6 +14,8 @@ class VoiceProfileOut(BaseModel):
     consent_confirmed_at: datetime
     terms_version: str
     created_at: datetime
+    # The embedding scheme the profile was made with; None on profiles from before it was recorded.
+    embedding_version: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
