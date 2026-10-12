@@ -23,6 +23,7 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
+from backend.services import style_markup
 from backend.services.text_analysis import StyleOverride
 from backend.services.tts_engine import (EngineUnavailableError,
                                          get_engine_for_user)
@@ -92,9 +93,9 @@ def _engine_headers(generation: Generation) -> dict:
     return headers
 
 
-def _style_headers(override: Optional[StyleOverride], result: object) -> dict:
+def _style_headers(requested: bool, result: object) -> dict:
     """Say whether a requested emotion was applied; nothing when none was requested."""
-    if override is None:
+    if not requested:
         return {}
     applied = getattr(result, "style_applied", False)
     return {"X-Voice-Style": "applied" if applied else "ignored"}
@@ -187,6 +188,8 @@ async def synthesize(
         else {}
     )
     override = _style_override(req)
+    # Inline tags count as asking for a style even when no request-level emotion was sent.
+    styled_requested = override is not None or style_markup.has_markup(req.text)
     if override:
         pipeline_extra["style_override"] = override
 
@@ -336,7 +339,7 @@ async def synthesize(
         emotion=override.emotion if override else None,
         intensity=override.intensity if override else None,
         style_applied=(
-            bool(getattr(result, "style_applied", False)) if override else None
+            bool(getattr(result, "style_applied", False)) if styled_requested else None
         ),
     )
     try:
@@ -363,7 +366,7 @@ async def synthesize(
         filename=f"synthesized_{generation.id}.wav",
         headers={
             **_engine_headers(generation),
-            **_style_headers(override, result),
+            **_style_headers(styled_requested, result),
         },
     )
 

@@ -21,7 +21,7 @@ for them, so they keep the one-call path.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 import numpy as np
@@ -29,11 +29,13 @@ import numpy as np
 from backend.core import metrics
 from backend.core.config import settings
 from backend.services.style_mapping import EXAGGERATION_ENGINES, build_style
+from backend.services.style_markup import parse, strip
 from backend.services.sv2tts.synthesizer.utils.cleaners import \
     expand_abbreviations
 from backend.services.text_analysis import (Analysis, StyleOverride, analyze,
                                             apply_override)
-from backend.services.text_chunking import Segment, split_into_segments
+from backend.services.text_chunking import (Boundary, Segment,
+                                            split_into_segments)
 from backend.services.text_normalization import normalize_text
 from backend.services.tts_engine import (StageRunner, SynthesisResult,
                                          SynthesisStyle, TTSEngine,
@@ -51,6 +53,8 @@ class StyledSegment:
     # What the analysis (or the user) called this sentence, before the engine's limits turned it
     # into a style; this is what the emotion metric counts.
     emotion: str = "neutral"
+    # True when the emotion was asked for (the request or an inline tag), not detected.
+    requested: bool = False
 
 
 EMOTION_CANARY_SALT = "emotion-control:"
@@ -95,16 +99,29 @@ def plan(
     limit = max_chars or settings.TTS_CHUNK_MAX_CHARS
     emotions = engine.capabilities().emotions
     planned = []
-    for segment in split_into_segments(speakable(text), limit):
-        analysis = _analysis(segment, override)
-        planned.append(
-            StyledSegment(
-                segment,
-                build_style(engine.name, emotions, analysis),
-                analysis.emotion,
+    for run in parse(text):
+        # An inline tag wins over the request-level emotion for its own text.
+        chosen = StyleOverride(run.emotion) if run.emotion else override
+        segments = split_into_segments(speakable(run.text), limit)
+        if segments and not _ends_a_sentence(segments[-1].text):
+            # A tag cut the sentence here, not punctuation: join with a word-sized gap.
+            segments[-1] = replace(segments[-1], boundary=Boundary.WORD)
+        for segment in segments:
+            analysis = _analysis(segment, chosen)
+            planned.append(
+                StyledSegment(
+                    segment,
+                    build_style(engine.name, emotions, analysis),
+                    analysis.emotion,
+                    chosen is not None,
+                )
             )
-        )
     return planned
+
+
+def _ends_a_sentence(text: str) -> bool:
+    """True if the text ends with sentence or clause punctuation."""
+    return text.rstrip().endswith((".", "!", "?", "…", ";", ":", ","))
 
 
 def _analysis(segment: Segment, override: Optional[StyleOverride]) -> Analysis:
@@ -130,13 +147,16 @@ async def synthesize_styled(
 ) -> SynthesisResult:
     """Synthesize each segment with its own style and join them with typed pauses.
 
+    The text may carry inline emotion tags (``style_markup``); each tagged stretch is delivered
+    in its tag's emotion.
+
     Truncated decodes add up across segments, so the quality gate sees them all. If the text has
     no segments (blank after cleaning) it is sent whole, as the one-call path would.
     """
     planned = plan(text, engine, override=override)
     if not planned:
         return await engine.synthesize(
-            text,
+            strip(text),
             conditioning,
             None,
             run_stage=run_stage,
@@ -163,7 +183,7 @@ async def synthesize_styled(
         parts.append(np.asarray(result.waveform, np.float32))
         truncated += result.truncated_decodes
         metrics.SENTENCES_STYLED.labels(
-            item.emotion, "requested" if override else "detected"
+            item.emotion, "requested" if item.requested else "detected"
         ).inc()
     logger.debug(
         "Styled synthesis: %d segments, exaggeration %s",

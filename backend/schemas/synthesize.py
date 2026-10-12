@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 from unidecode import unidecode
 
+from backend.services import style_markup
 from backend.services.sv2tts.synthesizer.utils.symbols import \
     symbols as _sv2tts_symbols
 from backend.services.text_normalization import clean_text
@@ -71,7 +72,11 @@ class SynthesizeRequest(BaseModel):
         """Reject text containing characters the SV2TTS symbol set cannot
         represent, even after the real cleaner pipeline's transliteration
         and digit expansion (see `_unsupported_characters`)."""
-        unsupported = _unsupported_characters(v)
+        try:
+            style_markup.parse(v)
+        except style_markup.MarkupError as error:
+            raise ValueError(f"Emotion tags are not well formed: {error}") from None
+        unsupported = _unsupported_characters(style_markup.strip(v))
         if unsupported:
             raise ValueError(
                 "Text contains characters unsupported by the SV2TTS symbol "
