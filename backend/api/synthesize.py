@@ -333,6 +333,11 @@ async def synthesize(
         engine=getattr(result, "engine", None),
         engine_version=getattr(result, "engine_version", None),
         engine_fallback_from=getattr(result, "engine_fallback_from", None),
+        emotion=override.emotion if override else None,
+        intensity=override.intensity if override else None,
+        style_applied=(
+            bool(getattr(result, "style_applied", False)) if override else None
+        ),
     )
     try:
         await asyncio.to_thread(_persist_generation, db, generation)
@@ -417,6 +422,9 @@ def get_history(
                 created_at=gen.created_at,
                 engine=gen.engine,
                 engine_fallback_from=gen.engine_fallback_from,
+                emotion=gen.emotion,
+                intensity=gen.intensity,
+                style_applied=gen.style_applied,
             )
         )
 

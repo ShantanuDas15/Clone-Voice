@@ -1,6 +1,7 @@
 import uuid
 
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import (JSON, Boolean, Column, DateTime, Float, ForeignKey,
+                        String, Text)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.types import Uuid
@@ -34,6 +35,11 @@ class Generation(Base):
     engine = Column(String(50), nullable=True)
     engine_version = Column(String(50), nullable=True)
     engine_fallback_from = Column(String(50), nullable=True)
+    # SPEECH_QUALITY_PLAN.md S7.1b: the delivery the user asked for. NULL = none requested (auto)
+    # or the row predates this; style_applied says whether the engine used it.
+    emotion = Column(String(20), nullable=True)
+    intensity = Column(Float, nullable=True)
+    style_applied = Column(Boolean, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

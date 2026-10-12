@@ -96,5 +96,9 @@ class GenerationOut(BaseModel):
     # engine was unavailable and the backup voice engine served the request. None on old rows.
     engine: Optional[str] = None
     engine_fallback_from: Optional[str] = None
+    # The emotion the user asked for (None = auto), its strength, and whether the engine applied it.
+    emotion: Optional[str] = None
+    intensity: Optional[float] = None
+    style_applied: Optional[bool] = None
 
     model_config = {"from_attributes": True}
