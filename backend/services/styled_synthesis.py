@@ -26,6 +26,7 @@ from typing import Optional
 
 import numpy as np
 
+from backend.core import metrics
 from backend.core.config import settings
 from backend.services.style_mapping import EXAGGERATION_ENGINES, build_style
 from backend.services.sv2tts.synthesizer.utils.cleaners import \
@@ -47,6 +48,9 @@ class StyledSegment:
 
     segment: Segment
     style: SynthesisStyle
+    # What the analysis (or the user) called this sentence, before the engine's limits turned it
+    # into a style; this is what the emotion metric counts.
+    emotion: str = "neutral"
 
 
 EMOTION_CANARY_SALT = "emotion-control:"
@@ -90,13 +94,17 @@ def plan(
     """
     limit = max_chars or settings.TTS_CHUNK_MAX_CHARS
     emotions = engine.capabilities().emotions
-    return [
-        StyledSegment(
-            segment,
-            build_style(engine.name, emotions, _analysis(segment, override)),
+    planned = []
+    for segment in split_into_segments(speakable(text), limit):
+        analysis = _analysis(segment, override)
+        planned.append(
+            StyledSegment(
+                segment,
+                build_style(engine.name, emotions, analysis),
+                analysis.emotion,
+            )
         )
-        for segment in split_into_segments(speakable(text), limit)
-    ]
+    return planned
 
 
 def _analysis(segment: Segment, override: Optional[StyleOverride]) -> Analysis:
@@ -154,6 +162,9 @@ async def synthesize_styled(
             parts.append(_pause(planned[index - 1].segment.boundary.value, rate))
         parts.append(np.asarray(result.waveform, np.float32))
         truncated += result.truncated_decodes
+        metrics.SENTENCES_STYLED.labels(
+            item.emotion, "requested" if override else "detected"
+        ).inc()
     logger.debug(
         "Styled synthesis: %d segments, exaggeration %s",
         len(planned),

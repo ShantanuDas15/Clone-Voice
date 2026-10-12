@@ -7,10 +7,12 @@ import numpy as np
 import pytest
 import soundfile as sf
 
+from backend.core import metrics
 from backend.core.config import Settings, settings
 from backend.services import styled_synthesis, tts_pipeline
 from backend.services.chatterbox_engine import ChatterboxEngine
 from backend.services.sv2tts_engine import Sv2ttsEngine
+from backend.services.text_analysis import StyleOverride
 from backend.services.tts_engine import (SynthesisResult, SynthesisStyle,
                                          VoiceConditioning)
 from backend.tests.test_chatterbox_engine import (EMB, TOKEN, _Model, _Server,
@@ -270,3 +272,46 @@ def test_sv2tts_is_never_split_even_with_the_flag_on(monkeypatch):
     )
     assert not seen
     os.remove(result[0])
+
+
+# --- the emotion metric (S7.3b) ---------------------------------------------------
+
+
+def _count(emotion, source):
+    value = metrics.registry.get_sample_value(
+        "clonevoice_sentences_styled_total", {"emotion": emotion, "source": source}
+    )
+    return value or 0.0
+
+
+def test_each_sentence_is_counted_by_its_detected_emotion():
+    neutral, angry = _count("neutral", "detected"), _count("angry", "detected")
+    _run(_Recorder(), "The meeting is at noon. I hate this!!")
+    assert _count("neutral", "detected") == neutral + 1
+    assert _count("angry", "detected") == angry + 1
+
+
+def test_a_requested_emotion_is_counted_as_requested():
+    sad, detected = _count("sad", "requested"), _count("neutral", "detected")
+    asyncio.run(
+        styled_synthesis.synthesize_styled(
+            _Recorder(),
+            "It is fine. All good.",
+            _voice(),
+            run_stage=_direct,
+            override=StyleOverride("sad"),
+        )
+    )
+    assert _count("sad", "requested") == sad + 1  # one merged statement segment
+    assert _count("neutral", "detected") == detected
+
+
+def test_a_failed_sentence_is_not_counted():
+    class Failing(_Recorder):
+        async def synthesize(self, text, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    before = _count("neutral", "detected")
+    with pytest.raises(RuntimeError):
+        _run(Failing(), "It is fine.")
+    assert _count("neutral", "detected") == before
