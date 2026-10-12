@@ -11,7 +11,7 @@ cue is ``neutral``; this module never guesses beyond its evidence.
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from backend.services.text_chunking import Boundary, Segment, classify_ending
@@ -115,6 +115,50 @@ class Analysis:
     emphasis_words: tuple[str, ...]
     exclamations: int
     cues: tuple[str, ...]  # human-readable reasons, for logs and tests
+
+
+@dataclass(frozen=True)
+class StyleOverride:
+    """A delivery the user asked for, replacing what the analysis would have chosen.
+
+    ``emotion`` is one of ``EMOTIONS``; ``intensity`` (0 to 1) is how strongly, or ``None`` for
+    the default strength.
+    """
+
+    emotion: str
+    intensity: Optional[float] = None
+
+
+DEFAULT_OVERRIDE_INTENSITY = 0.7
+
+
+def apply_override(analysis: Analysis, override: StyleOverride) -> Analysis:
+    """The analysis with the user's emotion and strength in place of the detected ones.
+
+    Arousal and valence follow the same formulas ``analyze`` uses, so an explicit ``angry``
+    sounds like a detected one. Cues and emphasis words stay: they describe the text.
+    """
+    emotion = override.emotion
+    if emotion == NEUTRAL:
+        intensity = 0.0
+    elif override.intensity is None:
+        intensity = DEFAULT_OVERRIDE_INTENSITY
+    else:
+        intensity = _clamp(override.intensity)
+    arousal = _clamp(
+        NEUTRAL_AROUSAL
+        + 0.12 * min(analysis.exclamations, 3)
+        + (0.15 if analysis.emphasis_words else 0.0)
+        + _AROUSAL_SHIFT[emotion] * max(intensity, 0.5 if emotion != NEUTRAL else 0.0)
+    )
+    return replace(
+        analysis,
+        emotion=emotion,
+        intensity=round(intensity, 3),
+        arousal=round(arousal, 3),
+        valence=round(_clamp(_VALENCE[emotion] * intensity, -1.0, 1.0), 3),
+        cues=analysis.cues + (f"requested: {emotion}",),
+    )
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:

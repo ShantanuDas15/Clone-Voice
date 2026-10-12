@@ -23,6 +23,7 @@ from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
+from backend.services.text_analysis import StyleOverride
 from backend.services.tts_engine import (EngineUnavailableError,
                                          get_engine_for_user)
 from backend.services.tts_pipeline import (InferenceQueueFullError,
@@ -74,6 +75,13 @@ def _remove_quietly(path: str) -> None:
         logger.exception("Failed to remove orphaned output: %s", path)
 
 
+def _style_override(req: SynthesizeRequest) -> Optional[StyleOverride]:
+    """The user's requested delivery, or None for ``auto``."""
+    if req.emotion == "auto":
+        return None
+    return StyleOverride(req.emotion, req.intensity)
+
+
 def _engine_headers(generation: Generation) -> dict:
     """Response headers saying which engine spoke, and whether it was the backup."""
     headers = {}
@@ -82,6 +90,14 @@ def _engine_headers(generation: Generation) -> dict:
     if generation.engine_fallback_from:
         headers["X-Voice-Engine-Fallback"] = generation.engine_fallback_from
     return headers
+
+
+def _style_headers(override: Optional[StyleOverride], result: object) -> dict:
+    """Say whether a requested emotion was applied; nothing when none was requested."""
+    if override is None:
+        return {}
+    applied = getattr(result, "style_applied", False)
+    return {"X-Voice-Style": "applied" if applied else "ignored"}
 
 
 def _persist_generation(db: Session, generation: Generation) -> None:
@@ -170,6 +186,9 @@ async def synthesize(
         if get_engine_for_user(str(current_user.id)).needs_reference_audio
         else {}
     )
+    override = _style_override(req)
+    if override:
+        pipeline_extra["style_override"] = override
 
     try:
         embedding = await asyncio.to_thread(np.load, embedding_path)
@@ -337,7 +356,10 @@ async def synthesize(
         out_path,
         media_type="audio/wav",
         filename=f"synthesized_{generation.id}.wav",
-        headers=_engine_headers(generation),
+        headers={
+            **_engine_headers(generation),
+            **_style_headers(override, result),
+        },
     )
 
 

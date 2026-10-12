@@ -30,7 +30,8 @@ from backend.core.config import settings
 from backend.services.style_mapping import EXAGGERATION_ENGINES, build_style
 from backend.services.sv2tts.synthesizer.utils.cleaners import \
     expand_abbreviations
-from backend.services.text_analysis import analyze
+from backend.services.text_analysis import (Analysis, StyleOverride, analyze,
+                                            apply_override)
 from backend.services.text_chunking import Segment, split_into_segments
 from backend.services.text_normalization import normalize_text
 from backend.services.tts_engine import (StageRunner, SynthesisResult,
@@ -63,18 +64,31 @@ def speakable(text: str) -> str:
 
 
 def plan(
-    text: str, engine: TTSEngine, max_chars: Optional[int] = None
+    text: str,
+    engine: TTSEngine,
+    max_chars: Optional[int] = None,
+    override: Optional[StyleOverride] = None,
 ) -> list[StyledSegment]:
-    """Split the text into segments and choose each one's style; ``[]`` for blank text."""
+    """Split the text into segments and choose each one's style; ``[]`` for blank text.
+
+    An ``override`` (the user's emotion and strength) replaces the detected emotion of every
+    segment; the text's own cues (exclamation marks, capitals) still add to the energy.
+    """
     limit = max_chars or settings.TTS_CHUNK_MAX_CHARS
     emotions = engine.capabilities().emotions
     return [
         StyledSegment(
             segment,
-            build_style(engine.name, emotions, analyze(segment.text, segment.boundary)),
+            build_style(engine.name, emotions, _analysis(segment, override)),
         )
         for segment in split_into_segments(speakable(text), limit)
     ]
+
+
+def _analysis(segment: Segment, override: Optional[StyleOverride]) -> Analysis:
+    """The segment's analysis, with the user's request applied if there is one."""
+    analysis = analyze(segment.text, segment.boundary)
+    return apply_override(analysis, override) if override else analysis
 
 
 def _pause(boundary_value: str, sample_rate: int) -> np.ndarray:
@@ -90,13 +104,14 @@ async def synthesize_styled(
     *,
     run_stage: StageRunner,
     truncation_retries: int = 0,
+    override: Optional[StyleOverride] = None,
 ) -> SynthesisResult:
     """Synthesize each segment with its own style and join them with typed pauses.
 
     Truncated decodes add up across segments, so the quality gate sees them all. If the text has
     no segments (blank after cleaning) it is sent whole, as the one-call path would.
     """
-    planned = plan(text, engine)
+    planned = plan(text, engine, override=override)
     if not planned:
         return await engine.synthesize(
             text,

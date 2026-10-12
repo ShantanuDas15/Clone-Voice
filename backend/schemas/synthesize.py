@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from unidecode import unidecode
 
 from backend.services.sv2tts.synthesizer.utils.symbols import \
@@ -50,6 +50,20 @@ def _unsupported_characters(text: str) -> List[str]:
 class SynthesizeRequest(BaseModel):
     voice_profile_id: UUID
     text: str = Field(..., min_length=1, max_length=500)
+    # SPEECH_QUALITY_PLAN.md S5.4a: how to deliver the text. "auto" (the default) leaves it to the
+    # text analysis. A named emotion replaces the detected one for every sentence; intensity
+    # (0 to 1) is how strongly, and only makes sense with a named emotion other than neutral.
+    emotion: Literal[
+        "auto", "neutral", "happy", "sad", "angry", "fearful", "surprised"
+    ] = "auto"
+    intensity: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def intensity_needs_an_emotion(self) -> "SynthesizeRequest":
+        """Reject an intensity with nothing to apply it to (auto or neutral)."""
+        if self.intensity is not None and self.emotion in ("auto", "neutral"):
+            raise ValueError("intensity needs an emotion other than auto or neutral")
+        return self
 
     @field_validator("text")
     @classmethod
