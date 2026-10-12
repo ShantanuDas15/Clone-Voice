@@ -243,3 +243,51 @@ def test_malformed_tags_are_a_422(client, auth, profile):  # noqa: F811
     )
     assert response.status_code == 422
     assert "never closed" in response.text
+
+
+# --- the emotion of each sentence (S5.3b) -----------------------------------------------
+
+
+def test_the_styled_result_lists_each_sentence_s_emotion():
+    result = asyncio.run(
+        styled_synthesis.synthesize_styled(
+            _Recorder(),
+            "The meeting is at noon. I hate this!! [sad]Oh.[/sad]",
+            _voice(),
+            run_stage=_direct,
+        )
+    )
+    assert result.sentence_emotions == ("neutral", "angry", "sad")
+
+
+def test_the_pipeline_reports_the_emotions_only_when_it_styled(monkeypatch, tmp_path):
+    _, styled = _pipeline(monkeypatch, tmp_path, True, "Fine. I hate this!!")
+    assert styled.emotions_used == ("neutral", "angry")
+    _, plain = _pipeline(monkeypatch, tmp_path, False, "Fine. I hate this!!")
+    assert plain.emotions_used == ()
+
+
+def test_the_api_header_lists_the_emotions_for_an_auto_request(
+    client, auth, profile, monkeypatch  # noqa: F811
+):
+    from backend.api import synthesize as api
+    from backend.services.tts_pipeline import InferenceResult
+
+    real = api.run_inference_pipeline
+
+    async def styled(*args, **kwargs):
+        r = await real(*args, **kwargs)
+        return InferenceResult(
+            r[0], r[1], r.engine, r.engine_version, None, True, ("neutral", "angry")
+        )
+
+    monkeypatch.setattr(api, "run_inference_pipeline", styled)
+    response = _post(client, auth, profile)
+    assert response.headers["X-Voice-Emotions"] == "neutral,angry"
+    assert "X-Voice-Style" not in response.headers  # nothing was requested
+
+
+def test_no_emotions_header_when_the_engine_did_not_split(
+    client, auth, profile
+):  # noqa: F811
+    assert "X-Voice-Emotions" not in _post(client, auth, profile).headers

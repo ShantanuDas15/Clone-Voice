@@ -251,6 +251,7 @@ app.add_middleware(
         "X-Voice-Engine",
         "X-Voice-Engine-Fallback",
         "X-Voice-Style",
+        "X-Voice-Emotions",
     ],
 )
 

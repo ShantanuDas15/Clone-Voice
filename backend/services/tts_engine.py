@@ -75,6 +75,9 @@ class SynthesisResult:
     sample_rate: int
     # How many decodes were cut off by the model's length cap (fed to the quality gate).
     truncated_decodes: int = 0
+    # The emotion label of each sentence, in order, when the engine spoke sentence by sentence
+    # (S5.3b); empty otherwise. A label, not a promise about what the audio sounds like.
+    sentence_emotions: Tuple[str, ...] = ()
 
 
 class EngineUnavailableError(RuntimeError):

@@ -94,11 +94,21 @@ def _engine_headers(generation: Generation) -> dict:
 
 
 def _style_headers(requested: bool, result: object) -> dict:
-    """Say whether a requested emotion was applied; nothing when none was requested."""
-    if not requested:
-        return {}
-    applied = getattr(result, "style_applied", False)
-    return {"X-Voice-Style": "applied" if applied else "ignored"}
+    """Style headers: whether a requested emotion was applied, and the emotion of each sentence.
+
+    ``X-Voice-Style`` is sent only when an emotion was requested. ``X-Voice-Emotions`` is sent
+    whenever the engine spoke sentence by sentence (also for ``auto``, where it shows what the
+    text analysis detected): one label per sentence, in order, from the six fixed emotion names,
+    never any text.
+    """
+    headers = {}
+    if requested:
+        applied = getattr(result, "style_applied", False)
+        headers["X-Voice-Style"] = "applied" if applied else "ignored"
+    emotions = getattr(result, "emotions_used", ())
+    if emotions:
+        headers["X-Voice-Emotions"] = ",".join(emotions)
+    return headers
 
 
 def _persist_generation(db: Session, generation: Generation) -> None:
