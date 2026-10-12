@@ -36,6 +36,8 @@ class EngineCapabilities:
     sample_rate: int
     max_chars: int
     emotions: Tuple[str, ...]
+    # Sound-event tags the engine makes from the text ([laugh], ...); it is never sent others.
+    nonverbal_tags: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

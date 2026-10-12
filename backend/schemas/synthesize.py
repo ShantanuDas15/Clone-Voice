@@ -76,7 +76,10 @@ class SynthesizeRequest(BaseModel):
             style_markup.parse(v)
         except style_markup.MarkupError as error:
             raise ValueError(f"Emotion tags are not well formed: {error}") from None
-        unsupported = _unsupported_characters(style_markup.strip(v))
+        spoken = style_markup.bare(v)
+        if not spoken.strip():
+            raise ValueError("Text has nothing to say once its tags are removed")
+        unsupported = _unsupported_characters(spoken)
         if unsupported:
             raise ValueError(
                 "Text contains characters unsupported by the SV2TTS symbol "

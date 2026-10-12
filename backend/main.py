@@ -335,6 +335,7 @@ def _engine_summary() -> dict:
         "sample_rate": caps.sample_rate,
         "max_chars": caps.max_chars,
         "emotions": list(caps.emotions),
+        "nonverbal_tags": list(caps.nonverbal_tags),
     }
     if engine.needs_reference_audio:
         # Informational only: a worker that is down must not take the whole app out of service.

@@ -60,8 +60,8 @@ def test_malformed_tags_are_an_error(text):
 
 
 def test_other_brackets_are_not_markup():
-    assert parse("see [laugh] there") == [Run("see [laugh] there", None)]
-    assert not style_markup.has_markup("[laugh]")
+    assert parse("see [giggle] there") == [Run("see [giggle] there", None)]
+    assert not style_markup.has_markup("[laugh]")  # a sound tag is not an emotion tag
 
 
 # --- the request ------------------------------------------------------------------
@@ -75,7 +75,7 @@ def test_a_tagged_text_is_a_valid_request():
 
 
 @pytest.mark.parametrize(
-    "text", ["[sad]open", "x[/sad]", "[sad]a[/angry]", "[laugh] ha"]
+    "text", ["[sad]open", "x[/sad]", "[sad]a[/angry]", "[giggle] ha"]
 )
 def test_bad_tags_and_other_brackets_are_rejected(text):
     with pytest.raises(ValidationError):
@@ -291,3 +291,85 @@ def test_no_emotions_header_when_the_engine_did_not_split(
     client, auth, profile
 ):  # noqa: F811
     assert "X-Voice-Emotions" not in _post(client, auth, profile).headers
+
+
+# --- sound-event tags (S6.2a) ----------------------------------------------------------
+
+from backend.services.chatterbox_engine import ChatterboxEngine  # noqa: E402
+
+
+def test_only_turbo_and_nano_declare_the_sound_tags():
+    assert ChatterboxEngine("chatterbox_turbo").capabilities().nonverbal_tags == (
+        "laugh",
+        "chuckle",
+        "cough",
+    )
+    assert ChatterboxEngine("chatterbox_nano").capabilities().nonverbal_tags
+    assert not ChatterboxEngine("chatterbox").capabilities().nonverbal_tags
+
+
+def test_prepare_keeps_only_the_supported_sound_tags_and_drops_emotion_tags():
+    text = "Ha [LAUGH] ok [cough] [sad]no[/sad]"
+    assert style_markup.prepare(text, ("laugh",)) == "Ha [laugh] ok no"
+    assert style_markup.prepare(text, ()) == "Ha ok no"
+    assert style_markup.bare(text) == "Ha ok no"
+
+
+def test_text_without_a_removed_tag_is_untouched():
+    assert style_markup.prepare("a  b   c", ("laugh",)) == "a  b   c"
+
+
+def test_a_sound_tag_is_a_valid_request_but_a_text_of_only_tags_is_not():
+    req = SynthesizeRequest(voice_profile_id=PROFILE, text="Well [chuckle] fine.")
+    assert req.text == "Well [chuckle] fine."
+    with pytest.raises(ValidationError):
+        SynthesizeRequest(voice_profile_id=PROFILE, text="[laugh]")
+    with pytest.raises(ValidationError):
+        SynthesizeRequest(voice_profile_id=PROFILE, text="[sad][laugh][/sad]")
+
+
+def test_the_styled_path_keeps_a_supported_tag_and_drops_an_unsupported_one():
+    turbo = _Recorder("chatterbox_turbo")
+    asyncio.run(
+        styled_synthesis.synthesize_styled(
+            turbo, "Oh [laugh] really? [cough] Yes.", _voice(), run_stage=_direct
+        )
+    )
+    assert "[laugh]" in " ".join(c[0] for c in turbo.calls)
+    original = _Recorder("chatterbox")
+    asyncio.run(
+        styled_synthesis.synthesize_styled(
+            original, "Oh [laugh] really?", _voice(), run_stage=_direct
+        )
+    )
+    assert "[" not in " ".join(c[0] for c in original.calls)
+
+
+def test_the_one_call_path_sends_the_tag_to_a_supporting_worker_only(
+    monkeypatch, tmp_path
+):
+    for engine, expected in (
+        ("chatterbox_nano", "Ha [laugh] ok."),
+        ("chatterbox", "Ha ok."),
+    ):
+        model = _OriginalModel()
+        model.model = "nano" if engine.endswith("nano") else "original"
+        model.output = _tone(1.0, rate=24000)
+        server = _Server(model)
+        monkeypatch.setattr(settings, "TTS_ENGINE", engine)
+        monkeypatch.setattr(settings, "TTS_WORKER_URL", server.url)
+        monkeypatch.setattr(settings, "TTS_WORKER_TOKEN", TOKEN)
+        monkeypatch.setattr(settings, "EMOTION_CONTROL_ENABLED", False)
+        monkeypatch.setattr(settings, "WATERMARK_ENABLED", False)
+        ref = tmp_path / "ref.wav"
+        sf.write(str(ref), _tone(6.0), 16000)
+        try:
+            result = asyncio.run(
+                tts_pipeline.run_inference_pipeline(
+                    "Ha [laugh] ok.", EMB, "tags", reference_audio_path=str(ref)
+                )
+            )
+        finally:
+            server.stop()
+        os.remove(result[0])
+        assert [c[0] for c in model.calls] == [expected], engine

@@ -11,17 +11,13 @@ from fastapi.testclient import TestClient
 from backend.core.config import Settings, settings
 from backend.schemas.synthesize import SynthesizeRequest
 from backend.services import tts_engine, tts_pipeline
-from backend.services.sv2tts_engine import MAX_CHARS, Sv2ttsEngine, retry_chunk_chars
-from backend.services.tts_engine import (
-    EngineCapabilities,
-    SynthesisResult,
-    SynthesisStyle,
-    TTSEngine,
-    UnsupportedStyleError,
-    VoiceConditioning,
-    WrongEngineError,
-    get_engine,
-)
+from backend.services.sv2tts_engine import (MAX_CHARS, Sv2ttsEngine,
+                                            retry_chunk_chars)
+from backend.services.tts_engine import (EngineCapabilities, SynthesisResult,
+                                         SynthesisStyle, TTSEngine,
+                                         UnsupportedStyleError,
+                                         VoiceConditioning, WrongEngineError,
+                                         get_engine)
 
 SR = 16000
 EMB = np.ones(256, np.float32) / 16.0
@@ -276,5 +272,6 @@ def test_readiness_reports_the_active_engine(client: TestClient):
         "sample_rate": settings.VOCODER_SAMPLE_RATE,
         "max_chars": 500,
         "emotions": ["neutral"],
+        "nonverbal_tags": [],
     }
     assert "models" in body  # the existing fields are unchanged
