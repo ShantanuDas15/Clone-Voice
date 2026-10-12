@@ -215,6 +215,11 @@ class Settings(BaseSettings):
         "sv2tts", "chatterbox", "chatterbox_turbo", "chatterbox_nano"
     ] = "chatterbox"
     TTS_CANARY_PERCENT: int = Field(default=0, ge=0, le=100)
+    # SPEECH_QUALITY_PLAN.md S5.3a: speak an engine that has a delivery control (the original
+    # Chatterbox's exaggeration) sentence by sentence, each with its own style from the text
+    # analysis, instead of one call for the whole text. Off by default: it costs one worker call
+    # per sentence. Engines without such a control are unaffected.
+    EMOTION_CONTROL_ENABLED: bool = False
     # SPEECH_QUALITY_PLAN.md S7.2b: add an inaudible watermark (AudioSeal) to every synthesized
     # WAV, so a clip can be traced to this service after it is re-encoded. Fail closed: if it
     # cannot be applied the request fails rather than serving unmarked audio. The 12-bit tag

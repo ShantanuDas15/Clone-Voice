@@ -16,6 +16,7 @@ import torch
 from backend.core import metrics
 from backend.core.config import settings
 from backend.core.cpu_limits import resolve_thread_count
+from backend.services import styled_synthesis
 from backend.services.audio_gate import check_output
 from backend.services.audio_polish import polish_waveform
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
@@ -911,13 +912,24 @@ async def run_inference_pipeline(
             for attempt in range(1, attempts + 1):
                 started = time.perf_counter()
                 try:
-                    result = await which.synthesize(
-                        text,
-                        voice,
-                        None,
-                        run_stage=run_stage,
-                        truncation_retries=truncation_retries,
-                    )
+                    if settings.EMOTION_CONTROL_ENABLED and styled_synthesis.applies(
+                        which
+                    ):
+                        result = await styled_synthesis.synthesize_styled(
+                            which,
+                            text,
+                            voice,
+                            run_stage=run_stage,
+                            truncation_retries=truncation_retries,
+                        )
+                    else:
+                        result = await which.synthesize(
+                            text,
+                            voice,
+                            None,
+                            run_stage=run_stage,
+                            truncation_retries=truncation_retries,
+                        )
                 except EngineUnavailableError:
                     metrics.ENGINE_SYNTHESIS.labels(which.name, "unavailable").inc()
                     raise
