@@ -895,8 +895,7 @@ async def run_inference_pipeline(
     else:
         conditioning = engine.conditioning_from_array(embedding)
     # Inline emotion tags are only for the per-sentence path; every other path speaks the bare text.
-    plain_text = style_markup.strip(text)
-    spoken_text = _clean_for_chunking(plain_text)
+    spoken_text = _clean_for_chunking(style_markup.bare(text))
     max_pause = max(settings.TTS_PAUSE_SECONDS.values())
     attempts = (
         settings.TTS_QUALITY_MAX_ATTEMPTS if settings.TTS_QUALITY_GATE_ENABLED else 1
@@ -942,7 +941,9 @@ async def run_inference_pipeline(
                     else:
                         style_applied = False
                         result = await which.synthesize(
-                            plain_text,
+                            style_markup.prepare(
+                                text, which.capabilities().nonverbal_tags
+                            ),
                             voice,
                             None,
                             run_stage=run_stage,

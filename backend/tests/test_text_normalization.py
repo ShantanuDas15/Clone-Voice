@@ -10,8 +10,10 @@ from pydantic import ValidationError
 
 from backend.schemas.synthesize import SynthesizeRequest
 from backend.services import tts_pipeline
-from backend.services.sv2tts.synthesizer.hparams import hparams as synth_hparams
-from backend.services.text_normalization import clean_text, normalize_text, spell
+from backend.services.sv2tts.synthesizer.hparams import \
+    hparams as synth_hparams
+from backend.services.text_normalization import (clean_text, normalize_text,
+                                                 spell)
 
 # --- spelled letters ---------------------------------------------------------
 
@@ -249,7 +251,7 @@ def test_validator_accepts_what_the_pipeline_can_say(text):
     "text,bad",
     [
         ("hello \U0001f600 world", "\U0001f600"),
-        ("[laugh] ok", "["),
+        ("[giggle] ok", "["),
         ("Turn left on {HH AW1}.", "{"),
         ("hello\x00world", "\x00"),
         ("a_b", "_"),

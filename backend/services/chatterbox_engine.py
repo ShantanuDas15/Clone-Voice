@@ -46,6 +46,9 @@ VARIANTS = {
 }
 SAMPLE_RATE = 24000
 MAX_CHARS = 500
+# Sound-event tags the Turbo and Nano models make from the text (SPEECH_QUALITY_STUDY.md,
+# Paralinguistic tags); the original model does not.
+NONVERBAL = ("laugh", "chuckle", "cough")
 HEALTH_TIMEOUT_SECONDS = 2.0
 
 
@@ -143,6 +146,7 @@ class ChatterboxEngine(TTSEngine):
             sample_rate=SAMPLE_RATE,
             max_chars=MAX_CHARS,
             emotions=(NEUTRAL,),
+            nonverbal_tags=NONVERBAL if self.model in ("turbo", "nano") else (),
         )
 
     def _client(self, timeout: float) -> httpx.Client:

@@ -29,7 +29,7 @@ import numpy as np
 from backend.core import metrics
 from backend.core.config import settings
 from backend.services.style_mapping import EXAGGERATION_ENGINES, build_style
-from backend.services.style_markup import parse, strip
+from backend.services.style_markup import parse, prepare, strip_nonverbal
 from backend.services.sv2tts.synthesizer.utils.cleaners import \
     expand_abbreviations
 from backend.services.text_analysis import (Analysis, StyleOverride, analyze,
@@ -102,7 +102,8 @@ def plan(
     for run in parse(text):
         # An inline tag wins over the request-level emotion for its own text.
         chosen = StyleOverride(run.emotion) if run.emotion else override
-        segments = split_into_segments(speakable(run.text), limit)
+        run_text = strip_nonverbal(run.text, engine.capabilities().nonverbal_tags)
+        segments = split_into_segments(speakable(run_text), limit)
         if segments and not _ends_a_sentence(segments[-1].text):
             # A tag cut the sentence here, not punctuation: join with a word-sized gap.
             segments[-1] = replace(segments[-1], boundary=Boundary.WORD)
@@ -156,7 +157,7 @@ async def synthesize_styled(
     planned = plan(text, engine, override=override)
     if not planned:
         return await engine.synthesize(
-            strip(text),
+            prepare(text, engine.capabilities().nonverbal_tags),
             conditioning,
             None,
             run_stage=run_stage,
