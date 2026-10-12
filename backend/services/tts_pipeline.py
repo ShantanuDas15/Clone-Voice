@@ -29,6 +29,7 @@ from backend.services.sv2tts.synthesizer.utils.symbols import \
 from backend.services.sv2tts.synthesizer.utils.text import text_to_sequence
 from backend.services.sv2tts.vocoder import hparams as vocoder_hparams
 from backend.services.sv2tts.vocoder.models.fatchord_version import WaveRNN
+from backend.services.text_analysis import StyleOverride
 from backend.services.text_chunking import Boundary, split_into_segments
 from backend.services.text_normalization import clean_text
 
@@ -828,12 +829,15 @@ class InferenceResult(tuple):
         engine: str,
         engine_version: str,
         engine_fallback_from: Optional[str] = None,
+        style_applied: bool = False,
     ) -> "InferenceResult":
         """Build the pair and attach the engine facts."""
         self = super().__new__(cls, (path, duration))
         self.engine = engine
         self.engine_version = engine_version
         self.engine_fallback_from = engine_fallback_from
+        # True when the audio was spoken sentence by sentence with a style (S5.3a/S5.4a).
+        self.style_applied = style_applied
         return self
 
 
@@ -842,6 +846,7 @@ async def run_inference_pipeline(
     embedding: np.ndarray,
     user_id: str,
     reference_audio_path: Optional[str] = None,
+    style_override: Optional[StyleOverride] = None,
 ) -> "InferenceResult":
     """Run the full TTS inference pipeline serialised by the inference semaphore.
 
@@ -861,6 +866,9 @@ async def run_inference_pipeline(
         text: Input text to synthesise.
         embedding: 256-dim speaker embedding produced by the encoder.
         user_id: Owner of this generation; used for output directory routing.
+        style_override: The emotion and strength the user asked for. Applied only when
+            ``EMOTION_CONTROL_ENABLED`` is on and the serving engine has a delivery control;
+            otherwise ignored, and ``InferenceResult.style_applied`` says so.
 
     Returns:
         An ``InferenceResult``: (absolute output WAV path, duration in seconds), which also
@@ -889,6 +897,7 @@ async def run_inference_pipeline(
         settings.TTS_QUALITY_MAX_ATTEMPTS if settings.TTS_QUALITY_GATE_ENABLED else 1
     )
     served_by, fallback_from = engine, None
+    style_applied = False
     async with _acquire_inference_slot() as slot:
         logger.debug(
             "Inference semaphore acquired — starting synthesizer forward pass."
@@ -907,6 +916,7 @@ async def run_inference_pipeline(
             which: "TTSEngine", voice: Any
         ) -> tuple[np.ndarray, int]:
             """Synthesize with ``which``, gating each attempt and retrying a bad one."""
+            nonlocal style_applied
             truncation_retries = 0
             wav, rate = np.zeros(0, np.float32), settings.VOCODER_SAMPLE_RATE
             for attempt in range(1, attempts + 1):
@@ -915,14 +925,17 @@ async def run_inference_pipeline(
                     if settings.EMOTION_CONTROL_ENABLED and styled_synthesis.applies(
                         which
                     ):
+                        style_applied = True
                         result = await styled_synthesis.synthesize_styled(
                             which,
                             text,
                             voice,
                             run_stage=run_stage,
                             truncation_retries=truncation_retries,
+                            override=style_override,
                         )
                     else:
+                        style_applied = False
                         result = await which.synthesize(
                             text,
                             voice,
@@ -1011,7 +1024,12 @@ async def run_inference_pipeline(
             finish_and_save, wav, sample_rate, user_id, served_by.name
         )
     return InferenceResult(
-        out_path, duration, served_by.name, served_by.version, fallback_from
+        out_path,
+        duration,
+        served_by.name,
+        served_by.version,
+        fallback_from,
+        style_applied,
     )
 
 

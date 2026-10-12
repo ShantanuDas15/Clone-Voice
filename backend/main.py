@@ -250,6 +250,7 @@ app.add_middleware(
         "X-Total-Count",
         "X-Voice-Engine",
         "X-Voice-Engine-Fallback",
+        "X-Voice-Style",
     ],
 )
 

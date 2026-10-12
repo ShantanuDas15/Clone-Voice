@@ -393,6 +393,33 @@
       },
       "SynthesizeRequest": {
         "properties": {
+          "emotion": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "neutral",
+              "happy",
+              "sad",
+              "angry",
+              "fearful",
+              "surprised"
+            ],
+            "title": "Emotion",
+            "type": "string"
+          },
+          "intensity": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intensity"
+          },
           "text": {
             "maxLength": 500,
             "minLength": 1,
