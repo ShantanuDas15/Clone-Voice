@@ -22,7 +22,7 @@ The application talks to it through `backend/services/chatterbox_engine.py`. The
 | Request | Reply |
 |---|---|
 | `GET /health` (no token) | `{"ready", "model", "device", "sample_rate"}` |
-| `POST /v1/synthesize`, `Authorization: Bearer <token>`, multipart form: `text`, `model`, `truncation_retries`, `reference` (WAV) | `200 audio/wav` (32-bit float) with `X-Sample-Rate`, `X-Truncated-Decodes`, `X-Model` |
+| `POST /v1/synthesize`, `Authorization: Bearer <token>`, multipart form: `text`, `model`, `truncation_retries`, optional `exaggeration` (0 to 2; the original model only, others ignore it), `reference` (WAV) | `200 audio/wav` (32-bit float) with `X-Sample-Rate`, `X-Truncated-Decodes`, `X-Model` |
 
 Errors: `401` bad token (checked before the body is read), `409` the worker serves another model,
 `413` too large (reference over 2 MB), `422` bad text or reference, `503` busy, `500` model failure.

@@ -12,7 +12,8 @@ Protocol (version in the path), mirrored by ``backend/services/chatterbox_engine
 
 * ``GET  /health``           unauthenticated: ``{"ready", "model", "device", "sample_rate"}``
 * ``POST /v1/synthesize``    ``Authorization: Bearer <token>``; multipart form with ``text``,
-  ``model`` (must equal the model served), ``truncation_retries`` and a ``reference`` WAV file.
+  ``model`` (must equal the model served), ``truncation_retries``, an optional ``exaggeration``
+  (0 to 2, the original Chatterbox's delivery intensity; other models ignore it) and a ``reference`` WAV file.
   Replies ``audio/wav`` (32-bit float) with ``X-Sample-Rate``, ``X-Truncated-Decodes``, ``X-Model``.
   401 bad token, 409 wrong model, 413 too large, 422 bad input, 503 busy (with ``Retry-After``).
 """
@@ -21,7 +22,8 @@ import asyncio
 import hmac
 import io
 import logging
-from typing import Protocol, Tuple
+import math
+from typing import Optional, Protocol, Tuple
 
 import numpy as np
 import soundfile as sf
@@ -43,6 +45,7 @@ MAX_REFERENCE_BYTES = 2_000_000
 MAX_BODY_BYTES = MAX_REFERENCE_BYTES + 64 * 1024
 MAX_WAITING = 2
 MIN_TOKEN_CHARS = 32
+EXAGGERATION_MAX = 2.0
 
 
 class Synthesizer(Protocol):
@@ -53,9 +56,16 @@ class Synthesizer(Protocol):
     sample_rate: int
 
     def synthesize(
-        self, text: str, reference_wav: bytes, truncation_retries: int
+        self,
+        text: str,
+        reference_wav: bytes,
+        truncation_retries: int,
+        exaggeration: Optional[float] = None,
     ) -> Tuple[np.ndarray, int]:
         """Return a mono float32 waveform and its sample rate.
+
+        ``exaggeration`` is passed only when the request carried one; a model without the control
+        ignores it.
 
         Raise ``ValueError`` for input the model cannot use (for example a reference with no speech).
         """
@@ -112,6 +122,7 @@ def create_app(
         text: str = Form(...),
         model: str = Form(...),
         truncation_retries: int = Form(0),
+        exaggeration: Optional[float] = Form(None),
         reference: UploadFile = File(...),
     ) -> Response:
         """Synthesize ``text`` in the voice of ``reference``."""
@@ -121,6 +132,12 @@ def create_app(
             )
         if not text.strip() or len(text) > MAX_TEXT_CHARS:
             raise HTTPException(422, f"text must be 1 to {MAX_TEXT_CHARS} characters")
+        if exaggeration is not None and not (
+            math.isfinite(exaggeration) and 0.0 <= exaggeration <= EXAGGERATION_MAX
+        ):
+            raise HTTPException(
+                422, f"exaggeration must be between 0 and {EXAGGERATION_MAX}"
+            )
         audio = await reference.read(MAX_REFERENCE_BYTES + 1)
         if len(audio) > MAX_REFERENCE_BYTES:
             raise HTTPException(413, "reference audio too large")
@@ -135,8 +152,15 @@ def create_app(
         try:
             async with lock:
                 try:
+                    controls = (
+                        {} if exaggeration is None else {"exaggeration": exaggeration}
+                    )
                     waveform, rate = await run_in_threadpool(
-                        synthesizer.synthesize, text, audio, max(0, truncation_retries)
+                        synthesizer.synthesize,
+                        text,
+                        audio,
+                        max(0, truncation_retries),
+                        **controls,
                     )
                 except ValueError as error:
                     raise HTTPException(422, str(error)) from None
