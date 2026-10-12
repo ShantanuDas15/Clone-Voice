@@ -70,6 +70,17 @@ ENGINE_SYNTHESIS = Counter(
     registry=registry,
 )
 
+SENTENCES_STYLED = Counter(
+    "clonevoice_sentences_styled_total",
+    "Sentences spoken with a per-sentence style, by the emotion the text analysis detected or the "
+    "user requested (S7.3b). Labels only, never text. The engine may deliver less than the label.",
+    [
+        "emotion",
+        "source",
+    ],  # emotion: neutral|happy|sad|angry|fearful|surprised; source: detected|requested
+    registry=registry,
+)
+
 INFERENCE_QUEUE_DEPTH = Gauge(
     "clonevoice_inference_queue_depth",
     "Requests currently waiting for the inference permit.",
