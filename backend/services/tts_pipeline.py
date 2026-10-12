@@ -16,7 +16,7 @@ import torch
 from backend.core import metrics
 from backend.core.config import settings
 from backend.core.cpu_limits import resolve_thread_count
-from backend.services import styled_synthesis
+from backend.services import style_markup, styled_synthesis
 from backend.services.audio_gate import check_output
 from backend.services.audio_polish import polish_waveform
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
@@ -891,7 +891,9 @@ async def run_inference_pipeline(
         )
     else:
         conditioning = engine.conditioning_from_array(embedding)
-    spoken_text = _clean_for_chunking(text)
+    # Inline emotion tags are only for the per-sentence path; every other path speaks the bare text.
+    plain_text = style_markup.strip(text)
+    spoken_text = _clean_for_chunking(plain_text)
     max_pause = max(settings.TTS_PAUSE_SECONDS.values())
     attempts = (
         settings.TTS_QUALITY_MAX_ATTEMPTS if settings.TTS_QUALITY_GATE_ENABLED else 1
@@ -936,7 +938,7 @@ async def run_inference_pipeline(
                     else:
                         style_applied = False
                         result = await which.synthesize(
-                            text,
+                            plain_text,
                             voice,
                             None,
                             run_stage=run_stage,
