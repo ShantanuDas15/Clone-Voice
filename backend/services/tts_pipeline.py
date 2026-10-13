@@ -686,10 +686,19 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
 
 
 def _synthesize_counting_truncation(
-    text: str, embedding: np.ndarray, max_chars: Optional[int] = None
+    text: str,
+    embedding: np.ndarray,
+    max_chars: Optional[int] = None,
+    seed: Optional[int] = None,
 ) -> tuple[np.ndarray, int]:
-    """Run ``synthesize_speech`` and also return how many decodes hit the frame cap."""
+    """Run ``synthesize_speech`` and also return how many decodes hit the frame cap.
+
+    A ``seed`` fixes the sampling before the decode. Inference is serialised by the semaphore, so
+    nothing else draws from the generator until the vocoder stage that follows has run.
+    """
     _decode_state.truncated = 0
+    if seed is not None:
+        torch.manual_seed(seed)
     if max_chars is None:
         mel = synthesize_speech(text, embedding)
     else:
@@ -840,6 +849,7 @@ class InferenceResult(tuple):
         engine_fallback_from: Optional[str] = None,
         style_applied: bool = False,
         emotions_used: tuple = (),
+        seed_applied: bool = False,
     ) -> "InferenceResult":
         """Build the pair and attach the engine facts."""
         self = super().__new__(cls, (path, duration))
@@ -850,6 +860,8 @@ class InferenceResult(tuple):
         self.style_applied = style_applied
         # The emotion label of each sentence on the styled path (empty otherwise).
         self.emotions_used = tuple(emotions_used)
+        # True when the request's seed was handed to the engine that spoke (S7.1c).
+        self.seed_applied = seed_applied
         return self
 
 
@@ -859,6 +871,7 @@ async def run_inference_pipeline(
     user_id: str,
     reference_audio_path: Optional[str] = None,
     style_override: Optional[StyleOverride] = None,
+    seed: Optional[int] = None,
 ) -> "InferenceResult":
     """Run the full TTS inference pipeline serialised by the inference semaphore.
 
@@ -878,6 +891,8 @@ async def run_inference_pipeline(
         text: Input text to synthesise.
         embedding: 256-dim speaker embedding produced by the encoder.
         user_id: Owner of this generation; used for output directory routing.
+        seed: Makes an engine that samples randomly (SV2TTS) repeatable: attempt ``k`` uses
+            ``seed + k``, extra best-of-N candidates ``seed + 1000 + i``. Ignored by other engines.
         style_override: The emotion and strength the user asked for. Applied only when
             ``EMOTION_CONTROL_ENABLED`` is on and the serving engine has a delivery control;
             otherwise ignored, and ``InferenceResult.style_applied`` says so.
@@ -911,6 +926,7 @@ async def run_inference_pipeline(
     )
     served_by, fallback_from = engine, None
     style_applied = False
+    seed_applied = False
     emotions_used: tuple = ()
     styled_enabled = styled_synthesis.enabled_for(user_id)
     async with _acquire_inference_slot() as slot:
@@ -927,11 +943,22 @@ async def run_inference_pipeline(
                 stage=stage,
             )
 
+        def seed_for(which: "TTSEngine", offset: int) -> Optional[int]:
+            """The seed for one call, or None when none was asked for or the engine ignores it."""
+            if seed is None or not which.capabilities().seedable:
+                return None
+            return seed + offset
+
+        def seed_args(which: "TTSEngine", offset: int) -> dict:
+            """Keyword arguments carrying the seed; empty keeps every other call unchanged."""
+            value = seed_for(which, offset)
+            return {} if value is None else {"seed": value}
+
         async def synthesize_checked(
             which: "TTSEngine", voice: Any
         ) -> tuple[np.ndarray, int]:
             """Synthesize with ``which``, gating each attempt and retrying a bad one."""
-            nonlocal style_applied, emotions_used
+            nonlocal style_applied, emotions_used, seed_applied
             truncation_retries = 0
             wav, rate = np.zeros(0, np.float32), settings.VOCODER_SAMPLE_RATE
             for attempt in range(1, attempts + 1):
@@ -949,6 +976,7 @@ async def run_inference_pipeline(
                         )
                     else:
                         style_applied = False
+                        seed_applied = seed_for(which, attempt - 1) is not None
                         result = await which.synthesize(
                             style_markup.prepare(
                                 text, which.capabilities().nonverbal_tags
@@ -957,6 +985,7 @@ async def run_inference_pipeline(
                             None,
                             run_stage=run_stage,
                             truncation_retries=truncation_retries,
+                            **seed_args(which, attempt - 1),
                         )
                 except EngineUnavailableError:
                     metrics.ENGINE_SYNTHESIS.labels(which.name, "unavailable").inc()
@@ -1028,13 +1057,14 @@ async def run_inference_pipeline(
                 return wav, rate
             candidates = [(wav, rate)]
             try:
-                for _ in range(extra):
+                for i in range(extra):
                     result = await which.synthesize(
                         style_markup.prepare(text, which.capabilities().nonverbal_tags),
                         voice,
                         None,
                         run_stage=run_stage,
                         truncation_retries=truncation_retries,
+                        **seed_args(which, 1000 + i),
                     )
                     if settings.TTS_QUALITY_GATE_ENABLED:
                         verdict = await asyncio.to_thread(
@@ -1120,6 +1150,7 @@ async def run_inference_pipeline(
         fallback_from,
         style_applied,
         emotions_used,
+        seed_applied,
     )
 
 

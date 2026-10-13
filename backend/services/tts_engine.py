@@ -38,6 +38,8 @@ class EngineCapabilities:
     emotions: Tuple[str, ...]
     # Sound-event tags the engine makes from the text ([laugh], ...); it is never sent others.
     nonverbal_tags: Tuple[str, ...] = ()
+    # True when ``synthesize`` accepts a ``seed`` that makes its sampling repeatable.
+    seedable: bool = False
 
 
 @dataclass(frozen=True)

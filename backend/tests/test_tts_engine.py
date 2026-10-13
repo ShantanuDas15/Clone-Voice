@@ -70,6 +70,7 @@ def test_capabilities_describe_a_neutral_16khz_engine():
         sample_rate=settings.VOCODER_SAMPLE_RATE,
         max_chars=MAX_CHARS,
         emotions=("neutral",),
+        seedable=True,
     )
 
 
