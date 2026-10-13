@@ -70,6 +70,13 @@ ENGINE_SYNTHESIS = Counter(
     registry=registry,
 )
 
+BEST_OF_N = Counter(
+    "clonevoice_best_of_n_total",
+    "Best-of-N candidates by outcome (S2.5a).",
+    ["outcome"],  # selected_first | selected_other | gate_failed | unscored | timed_out
+    registry=registry,
+)
+
 SENTENCES_STYLED = Counter(
     "clonevoice_sentences_styled_total",
     "Sentences spoken with a per-sentence style, by the emotion the text analysis detected or the "

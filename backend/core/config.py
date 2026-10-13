@@ -246,6 +246,11 @@ class Settings(BaseSettings):
     # refuse rather than serve broken audio.
     TTS_QUALITY_GATE_ENABLED: bool = True
     TTS_QUALITY_MAX_ATTEMPTS: int = Field(default=2, ge=1, le=5)
+    # SPEECH_QUALITY_PLAN.md S2.5: synthesize this many candidates with the SV2TTS engine and serve
+    # the one whose voice is closest to the profile (speaker encoder cosine). 1 = off. Each extra
+    # candidate is a full synthesis plus one encoder pass, so latency grows about N-fold: leave it
+    # at 1 on a CPU deployment unless the real-time budget allows it.
+    TTS_BEST_OF_N: int = Field(default=1, ge=1, le=4)
     # Level every synthesized WAV to OUTPUT_TARGET_LUFS (BS.1770 integrated loudness),
     # never past OUTPUT_PEAK_CEILING_DBFS (true peak), with DC removed and 10 ms edge
     # fades (SPEECH_QUALITY_PLAN.md S3.3). Off = the raw vocoder output, clipped to +-1.
