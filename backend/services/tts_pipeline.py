@@ -19,6 +19,8 @@ from backend.core.cpu_limits import resolve_thread_count
 from backend.services import style_markup, styled_synthesis
 from backend.services.audio_gate import check_output
 from backend.services.audio_polish import polish_waveform
+from backend.services.candidate_selection import (UNSCORABLE, pick_best,
+                                                  speaker_similarity)
 from backend.services.sv2tts.checksum import load_manifest, verify_checksum
 from backend.services.sv2tts.synthesizer.hparams import \
     hparams as synth_hparams
@@ -558,6 +560,13 @@ def embed_speaker(audio: np.ndarray) -> np.ndarray:
         _free_gpu_memory()
 
 
+def _embed_candidate(waveform: np.ndarray) -> np.ndarray:
+    """Embed a synthesized candidate the way an upload is embedded (S2.5a)."""
+    from backend.services.audio_processing import raise_to_encoder_level
+
+    return embed_speaker(raise_to_encoder_level(np.asarray(waveform, np.float32)))
+
+
 def _clean_for_chunking(text: str) -> str:
     """Normalise and clean the text so chunk limits count decoded symbols.
 
@@ -995,7 +1004,80 @@ async def run_inference_pipeline(
                     # The same decode would truncate again (SPEECH_QUALITY_STUDY.md,
                     # S3.4): tell the engine, which decodes more conservatively.
                     truncation_retries += 1
-            return wav, rate
+            return await best_of_candidates(which, voice, wav, rate, truncation_retries)
+
+        async def best_of_candidates(
+            which: "TTSEngine",
+            voice: Any,
+            wav: np.ndarray,
+            rate: int,
+            truncation_retries: int,
+        ) -> tuple[np.ndarray, int]:
+            """S2.5a: of N passing SV2TTS candidates, return the one closest to the profile.
+
+            ``wav`` already passed the gate. Extra candidates that fail it are dropped; if every
+            extra fails, a timeout cuts the search short, or none can be scored, ``wav`` is served.
+            """
+            extra = settings.TTS_BEST_OF_N - 1
+            if (
+                extra <= 0
+                or which.name != "sv2tts"
+                or voice.embedding is None
+                or style_applied
+            ):
+                return wav, rate
+            candidates = [(wav, rate)]
+            try:
+                for _ in range(extra):
+                    result = await which.synthesize(
+                        style_markup.prepare(text, which.capabilities().nonverbal_tags),
+                        voice,
+                        None,
+                        run_stage=run_stage,
+                        truncation_retries=truncation_retries,
+                    )
+                    if settings.TTS_QUALITY_GATE_ENABLED:
+                        verdict = await asyncio.to_thread(
+                            check_output,
+                            result.waveform,
+                            result.sample_rate,
+                            spoken_text,
+                            result.truncated_decodes,
+                            max_pause,
+                        )
+                        if not verdict.passed:
+                            metrics.BEST_OF_N.labels("gate_failed").inc()
+                            continue
+                    candidates.append((result.waveform, result.sample_rate))
+                if len(candidates) == 1:
+                    return wav, rate
+                scores = [
+                    speaker_similarity(
+                        voice.embedding,
+                        await run_stage("encoder", _embed_candidate, w),
+                    )
+                    for w, _ in candidates
+                ]
+            except asyncio.TimeoutError:
+                metrics.BEST_OF_N.labels("timed_out").inc()
+                logger.warning(
+                    "Best-of-N timed out: serving the first passing candidate"
+                )
+                return wav, rate
+            best = pick_best(scores)
+            if max(scores) == UNSCORABLE:
+                metrics.BEST_OF_N.labels("unscored").inc()
+            else:
+                metrics.BEST_OF_N.labels(
+                    "selected_first" if best == 0 else "selected_other"
+                ).inc()
+            logger.debug(
+                "Best-of-%d: picked candidate %d (similarity %s)",
+                len(candidates),
+                best,
+                ", ".join(f"{x:.3f}" for x in scores),
+            )
+            return candidates[best]
 
         try:
             try:
