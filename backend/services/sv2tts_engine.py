@@ -6,6 +6,7 @@ test doubles that patch ``tts_pipeline.vocode`` and friends keep working. Moving
 behind the interface is S4.3's job, when a second engine makes it worth doing.
 """
 
+from functools import partial
 from typing import Optional
 
 import numpy as np
@@ -51,6 +52,7 @@ class Sv2ttsEngine(TTSEngine):
             sample_rate=settings.VOCODER_SAMPLE_RATE,
             max_chars=MAX_CHARS,
             emotions=(NEUTRAL,),
+            seedable=True,
         )
 
     def health(self, expected_device: Optional[str] = None) -> dict:
@@ -74,13 +76,20 @@ class Sv2ttsEngine(TTSEngine):
         *,
         run_stage: StageRunner,
         truncation_retries: int = 0,
+        seed: Optional[int] = None,
     ) -> SynthesisResult:
         """Synthesize mel frames, then vocode them, each as its own timed stage."""
         self.check_request(conditioning, style)
         chunk_chars = retry_chunk_chars(truncation_retries)
+        # Only a seeded request changes the call, so existing doubles of the stage still match.
+        stage_fn = (
+            pipeline._synthesize_counting_truncation
+            if seed is None
+            else partial(pipeline._synthesize_counting_truncation, seed=seed)
+        )
         mel, truncated = await run_stage(
             "synthesizer",
-            pipeline._synthesize_counting_truncation,
+            stage_fn,
             text,
             conditioning.embedding,
             *(() if chunk_chars is None else (chunk_chars,)),

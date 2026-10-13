@@ -58,6 +58,9 @@ class SynthesizeRequest(BaseModel):
         "auto", "neutral", "happy", "sad", "angry", "fearful", "surprised"
     ] = "auto"
     intensity: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # SPEECH_QUALITY_PLAN.md S7.1c: a number that makes the same request give the same audio, for an
+    # engine that samples randomly (SV2TTS). Other engines ignore it; the response says which.
+    seed: Optional[int] = Field(default=None, ge=0, le=2**31 - 1)
 
     @model_validator(mode="after")
     def intensity_needs_an_emotion(self) -> "SynthesizeRequest":

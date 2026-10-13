@@ -112,6 +112,14 @@ def _style_headers(requested: bool, result: object) -> dict:
     return headers
 
 
+def _seed_headers(seed: Optional[int], result: object) -> dict:
+    """``X-Voice-Seed`` says whether a requested seed reached the engine that spoke."""
+    if seed is None:
+        return {}
+    applied = getattr(result, "seed_applied", False)
+    return {"X-Voice-Seed": "applied" if applied else "ignored"}
+
+
 def _persist_generation(db: Session, generation: Generation) -> None:
     """Add, commit, and refresh a completed generation row (run off the event loop)."""
     db.add(generation)
@@ -211,6 +219,8 @@ async def synthesize(
     styled_requested = override is not None or style_markup.has_markup(req.text)
     if override:
         pipeline_extra["style_override"] = override
+    if req.seed is not None:
+        pipeline_extra["seed"] = req.seed
 
     try:
         embedding = await asyncio.to_thread(np.load, embedding_path)
@@ -386,6 +396,7 @@ async def synthesize(
         headers={
             **_engine_headers(generation),
             **_style_headers(styled_requested, result),
+            **_seed_headers(req.seed, result),
         },
     )
 
