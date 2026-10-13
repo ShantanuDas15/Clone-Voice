@@ -598,3 +598,64 @@ def test_evaluate_degradations_scores_every_case_and_pairs_the_seeds(
         assert -1.0 <= row[f"emb_secs_{name}"] <= 1.0
     assert seeds[:2] == seeds[2:]  # each case synthesizes with the same seeds as clean
     assert sorted(p.name for p in work.iterdir()) == ["spk_clean.wav", "spk_quiet.wav"]
+
+
+# --- best-of-N comparison (S2.5a) --------------------------------------------
+
+
+def test_paired_change_reports_mean_interval_and_count():
+    rows = [
+        {"a": 1.0, "b": 2.0},
+        {"a": 1.0, "b": 1.5},
+        {"a": 2.0, "b": 1.0},
+        {"a": None},
+    ]
+    out = es.paired_change(rows, "a", "b")
+    assert out["n"] == 3 and out["improved"] == 2
+    assert out["mean"] == pytest.approx(1.0 / 6)
+    assert out["ci_low"] <= out["mean"] <= out["ci_high"]
+    assert es.paired_change([], "a", "b")["n"] == 0
+
+
+def test_evaluate_best_of_pairs_the_runs_and_restores_the_setting(
+    tmp_path, monkeypatch
+):
+    from backend.core.config import settings
+
+    seen = []
+
+    def fake_synth(text, embedding, speaker, seed):
+        seen.append((seed, settings.TTS_BEST_OF_N))
+        return tone(180.0, 185.0, 1.0, amp=0.1)
+
+    monkeypatch.setattr(es, "_synthesize", fake_synth)
+    before = settings.TTS_BEST_OF_N
+    row = es.evaluate_best_of(
+        _LevelEncoder(),
+        _LevelEncoder(),
+        "spk",
+        _speaker_files(tmp_path),
+        "grp",
+        2,
+        1234,
+        3,
+        ["One", "Two"],
+    )
+    assert settings.TTS_BEST_OF_N == before
+    # per sentence: the same seed at N=1, then at N=3
+    assert seen[0][0] == seen[1][0] and (seen[0][1], seen[1][1]) == (1, 3)
+    assert len(seen) == 4
+    for key in ("secs_single", "secs_best", "ecapa_single", "ecapa_best"):
+        assert -1.0 <= row[key] <= 1.0
+    assert row["f0_error_single"] is not None and row["f0_error_best"] is not None
+
+
+def test_evaluate_best_of_needs_two_candidates_and_works_without_an_independent_encoder(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(es, "_synthesize", lambda *a: tone(180.0, 185.0, 1.0, amp=0.1))
+    files = _speaker_files(tmp_path)
+    with pytest.raises(ValueError):
+        es.evaluate_best_of(_LevelEncoder(), None, "s", files, "g", 0, 1, 1, ["One"])
+    row = es.evaluate_best_of(_LevelEncoder(), None, "s", files, "g", 0, 1, 2, ["One"])
+    assert "ecapa_best" not in row and "secs_best" in row

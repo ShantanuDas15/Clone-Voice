@@ -312,6 +312,25 @@ def bootstrap_ci(
     return float(x.mean()), float(low), float(high)
 
 
+def paired_change(
+    rows: Sequence[Mapping[str, object]], before: str, after: str
+) -> Dict[str, object]:
+    """Mean per-speaker change ``after - before`` with an interval and the count that rose."""
+    deltas = [
+        float(r[after]) - float(r[before])
+        for r in rows
+        if r.get(before) is not None and r.get(after) is not None
+    ]
+    mean, low, high = bootstrap_ci(deltas)
+    return {
+        "n": len(deltas),
+        "mean": mean,
+        "ci_low": low,
+        "ci_high": high,
+        "improved": int(sum(d > 0 for d in deltas)),
+    }
+
+
 def group_report(
     rows: Sequence[Mapping[str, object]],
     metric: str,
@@ -560,6 +579,68 @@ def evaluate_enrollment(
     return row
 
 
+def evaluate_best_of(
+    encoder,
+    independent,
+    speaker: str,
+    files: Sequence[str],
+    group: str,
+    index: int,
+    seed: int,
+    candidates: int,
+    sentences: Sequence[str],
+) -> Dict[str, object]:
+    """Compare serving one candidate with serving the best of ``candidates`` (S2.5a).
+
+    Runs the production pipeline twice per sentence with the same seed: ``TTS_BEST_OF_N`` at 1,
+    then at ``candidates``. The first candidate is the same in both runs, so the pair isolates
+    what the selection adds. Clones are scored against the speaker's held-out real speech with
+    the model's own encoder and, when given, an independent one (``independent``).
+    """
+    from backend.core.config import settings
+
+    if candidates < 2:
+        raise ValueError("best-of-N needs at least 2 candidates")
+    embedding = reference_embedding(encoder, files[0])
+    real = [librosa.load(p, sr=SAMPLE_RATE)[0] for p in files[1:]]
+    encoders = {"secs": encoder}
+    if independent is not None:
+        encoders["ecapa"] = independent
+    targets = {
+        name: np.mean(
+            [e.embed_utterance(np.asarray(y, np.float32)) for y in real], axis=0
+        )
+        for name, e in encoders.items()
+    }
+    real_f0 = np.concatenate([f0_track(y) for y in real])
+    scores: Dict[str, List[float]] = {
+        f"{m}_{v}": [] for m in (*encoders, "f0") for v in ("single", "best")
+    }
+    original = settings.TTS_BEST_OF_N
+    try:
+        for k, sentence in enumerate(sentences):
+            for variant, count in (("single", 1), ("best", candidates)):
+                settings.TTS_BEST_OF_N = count
+                clone = _synthesize(
+                    sentence + ".", embedding, speaker, seed + 1000 * index + k
+                )
+                for name, e in encoders.items():
+                    scores[f"{name}_{variant}"].append(
+                        secs(e.embed_utterance(clone), targets[name])
+                    )
+                error = f0_error_semitones(real_f0, f0_track(clone))
+                if error is not None:
+                    scores[f"f0_{variant}"].append(error)
+    finally:
+        settings.TTS_BEST_OF_N = original
+    row: Dict[str, object] = {"speaker": speaker, "group": group}
+    for key, values in scores.items():
+        row[key if key.startswith("secs") else key.replace("f0", "f0_error")] = _mean(
+            values
+        )
+    return row
+
+
 def degradation_cases() -> Dict[str, Callable[[np.ndarray], np.ndarray]]:
     """Recording defects to apply to a clean reference clip, by name."""
     from backend.evaluate_preprocessing import add_noise, gain, telephone_band
@@ -700,6 +781,48 @@ def _run_enrollment_study(args, dataset, groups, stems, encoder) -> int:
     return 0
 
 
+def _run_best_of_study(args, dataset, groups, stems, encoder) -> int:
+    """Run ``evaluate_best_of`` over the chosen speakers and write the report."""
+    independent = None
+    if args.independent_encoder == "ecapa":
+        from backend.score_engine_outputs import make_ecapa_encoder
+
+        independent = make_ecapa_encoder()
+    chosen = select_speakers(dataset, groups, args.speakers)
+    rows = []
+    for n, speaker in enumerate(chosen):
+        rows.append(
+            evaluate_best_of(
+                encoder,
+                independent,
+                speaker,
+                dataset[speaker],
+                groups.get(speaker, "ungrouped"),
+                n,
+                args.seed,
+                args.best_of,
+                stems[:4],
+            )
+        )
+        logger.info("scored speaker %d/%d (%s)", n + 1, len(chosen), speaker)
+    names = ["secs", "f0_error"] + (["ecapa"] if independent else [])
+    metrics = [f"{m}_{v}" for m in names for v in ("single", "best")]
+    report = {
+        "judge": "resemblyzer (same encoder as the model: not independent)"
+        + (" and ECAPA-TDNN (independent)" if independent else ""),
+        "candidates": args.best_of,
+        "speakers": len(rows),
+        "rows": rows,
+        "per_group": {m: group_report(rows, m) for m in metrics},
+        "paired_change": {
+            m: paired_change(rows, f"{m}_single", f"{m}_best") for m in names
+        },
+    }
+    args.out.write_text(json.dumps(report, indent=2))
+    print(json.dumps({"paired_change": report["paired_change"]}, indent=2))
+    return 0
+
+
 def _run_degradation_study(args, dataset, groups, stems, encoder) -> int:
     """Run ``evaluate_degradations`` over the chosen speakers and write the report."""
     import tempfile
@@ -764,6 +887,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="faster-whisper model for word error rate, or 'none' to skip it",
     )
     parser.add_argument(
+        "--best-of",
+        type=int,
+        default=0,
+        metavar="N",
+        help="compare serving one candidate with the best of N (S2.5a), then stop",
+    )
+    parser.add_argument(
+        "--independent-encoder",
+        choices=("none", "ecapa"),
+        default="none",
+        help="also score with an independent speaker encoder (needs speechbrain)",
+    )
+    parser.add_argument(
         "--enroll-compare",
         type=int,
         default=0,
@@ -799,6 +935,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.degrade_compare:
         return _run_degradation_study(args, dataset, groups, stems, encoder)
+    if args.best_of:
+        return _run_best_of_study(args, dataset, groups, stems, encoder)
     if args.enroll_compare:
         return _run_enrollment_study(args, dataset, groups, stems, encoder)
     paragraphs = load_stimuli(args.sentences, "paragraphs")[: args.paragraphs]

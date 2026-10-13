@@ -629,6 +629,24 @@ Voice-group fairness (low-pitch against high-pitch speakers, mean similarity):
 * The new tools need `speechbrain`, `torch` and a network download of the UTMOS weights (about 390 MB); they are not
   in `requirements-dev.txt`, for the same reason `faster-whisper` is not.
 
+## Best-of-N candidate selection (S2.5, 2026-10-13)
+
+`python -m backend.evaluate_synthesis --best-of 3`: the production pipeline with `TTS_BEST_OF_N` 1 against 3, same seed
+per sentence (so the first candidate is identical and the pair isolates the selection). 12 LibriSpeech test-clean speakers
+(7 high-F0, 5 low-F0), 4 sentences each, scored against the speaker's held-out real clips.
+
+| Metric | N=1 | N=3 | Paired change (95% CI) | Speakers improved |
+|---|---|---|---|---|
+| Speaker similarity, resemblyzer | high 0.724, low 0.753 | high 0.743, low 0.776 | **+0.021** (+0.013 to +0.028) | 11 of 12 |
+| Median-style F0 error (semitones, lower is better) | high 5.4, low 1.9 | high 5.1, low 2.0 | -0.14 (-1.11 to +0.83), no effect | error fell for 8 of 12 |
+
+* The similarity gain is real but small, and is **judged by the encoder that does the selecting**, so it is flattered: the
+  selection optimises that very score. An independent encoder (ECAPA) could not be installed in this environment
+  (`torchaudio` has no build matching `torch 2.13`), so the gain on an independent judge is unmeasured.
+* Pitch error does not move, in line with the S2.1a finding: the pitch weakness belongs to the model.
+* Cost: about 2.9 times the latency at N=3 (6.2 s to 17.9 s for one sentence on this CPU).
+* Twelve adult speakers, one seed, no listening test.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
