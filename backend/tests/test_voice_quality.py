@@ -65,6 +65,7 @@ def test_a_clean_upload_reports_a_good_rating_and_its_measures(client, auth_head
         "clipping_ratio",
         "high_band_db",
         "level_dbfs",
+        "decay_drop_db",
     }
     assert quality["measures"]["voiced_seconds"] > 5
 

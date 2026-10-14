@@ -647,6 +647,29 @@ per sentence (so the first candidate is identical and the pair isolates the sele
 * Cost: about 2.9 times the latency at N=3 (6.2 s to 17.9 s for one sentence on this CPU).
 * Twelve adult speakers, one seed, no listening test.
 
+## Room reverb and the upload hint (S2.2b, 2026-10-14)
+
+`evaluate_synthesis --degrade-compare` gained simulated room reverb (decaying-noise impulse
+response, direct path plus a -6 dB tail; `add_reverb`). 10 LibriSpeech test-clean speakers, one
+seed, clone similarity on the model's own encoder (resemblyzer), change against the clean clip:
+
+| Defect | Change | Speakers worse |
+|---|---:|:---:|
+| reverb RT60 0.3 s / 0.6 s / 1.0 s | -0.037 / -0.056 / -0.053 | 8 / 8 / 7 of 10 |
+| noise 20 / 10 / 5 dB (same run) | -0.049 / -0.084 / -0.102 | 9 of 10 each |
+| telephone band; clipping x8 | -0.021; -0.068 | 7; 9 of 10 |
+
+Reverb costs as much as the noise-20 dB and mild-clipping cases that already carry a warning, so it
+gets a warning. The measure (`decay_drop_db`) is the 90th percentile of how far the level falls in
+80 ms from frames near the loud speech level: dry speech falls 20+ dB at word ends, a room fills the
+gap. On 240 clean clips (5th percentile 12.8 dB) the warning level of 12.5 dB flags 4.6%; simulated
+rooms: RT60 0.2 s 5.8%, 0.3 s 17.5%, 0.4 s 31%, 0.6 s 80%, 1.0 s 99%. Noise also lowers it (10 dB SNR
+flags 69%), which is why noise is hinted separately and is the likelier fix.
+
+Limits: the room is simulated (a real recording room differs), mild reverb (RT60 under 0.4 s) is mostly
+missed, thresholds were chosen and checked on the same corpus, and clone similarity is judged by the
+model's own encoder.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

@@ -176,6 +176,7 @@ def test_the_response_reports_the_lowest_rated_clip_as_quality(client, auth_head
                 clipping_ratio=0,
                 high_band_db=0,
                 level_dbfs=0,
+                decay_drop_db=30,
             ),
         )
 

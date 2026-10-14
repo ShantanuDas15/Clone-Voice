@@ -225,6 +225,43 @@ def test_the_thresholds_sit_where_the_calibration_put_them():
     assert (aq.CLIP_WARN_RATIO, aq.CLIP_POOR_RATIO) == (0.001, 0.02)
     assert aq.BAND_LIMITED_DB == -45.0
     assert aq.SHORT_VOICED_SECONDS == 10.0
+    assert aq.REVERB_WARN_DROP_DB == 12.5
+
+
+def with_reverb(y, rt60, seed=0):
+    """Convolve with a decaying-noise room response (direct path plus a -6 dB tail)."""
+    rng = np.random.default_rng(seed)
+    n = int(rt60 * SR * 1.2)
+    tail = rng.standard_normal(n) * 10.0 ** (-3.0 * np.arange(n) / SR / rt60)
+    tail[0] = 0.0
+    tail *= 0.5 / np.sqrt(np.sum(tail**2))
+    tail[0] = 1.0
+    out = np.convolve(y, tail)[: len(y)]
+    return (out * np.max(np.abs(y)) / np.max(np.abs(out))).astype(np.float32)
+
+
+def test_a_dry_clip_falls_fast_and_a_reverberant_one_does_not():
+    dry = broadband()
+    assert aq.decay_drop_db(dry) > 25.0
+    assert aq.decay_drop_db(with_reverb(dry, 0.8)) < aq.REVERB_WARN_DROP_DB
+
+
+def test_reverb_is_a_warning_never_poor():
+    report = aq.assess_quality(with_reverb(broadband(), 1.0))
+    assert "reverberant" in codes(report)
+    assert report.rating == "fair"
+    assert "reverberant" not in codes(aq.assess_quality(broadband()))
+
+
+def test_decay_drop_is_level_independent_and_defined_for_degenerate_input():
+    y = with_reverb(broadband(), 0.5)
+    assert aq.decay_drop_db(y * 0.1) == pytest.approx(aq.decay_drop_db(y), abs=0.5)
+    for bad in (
+        np.zeros(0, np.float32),
+        np.zeros(SR, np.float32),
+        np.ones(100, np.float32),
+    ):
+        assert aq.decay_drop_db(bad) == aq.DECAY_CAP_DB
 
 
 def test_every_hint_has_a_code_a_known_severity_and_a_message():
