@@ -176,6 +176,7 @@ backend/
 | `GET` | `/api/v1/voice/profiles` | ✅ | List user's voice profiles |
 | `POST` | `/api/v1/voice/profiles/{profile_id}/samples` | ✅ | Add clips (`file`/`files`, + `consent_confirmed=true`) to an existing profile; the embedding is re-derived over all clips |
 | `DELETE` | `/api/v1/voice/profiles/{profile_id}` | ✅ | Soft-delete a voice profile |
+| `DELETE` | `/api/v1/voice/profiles/{profile_id}/samples/{position}` | ✅ | Remove one clip (not the last) and re-derive the embedding from the rest |
 | `POST` | `/api/v1/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output (`X-Voice-Engine`, and `X-Voice-Engine-Fallback` when the backup engine served it) |
 | `GET` | `/api/v1/synthesize/history` | ✅ | List user's generated audio history (`limit`/`offset`, `X-Total-Count`) |
 | `GET` | `/api/v1/synthesize/{generation_id}/audio` | ✅ | Download a past generation's WAV (404 / 410 expired) |
