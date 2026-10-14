@@ -287,6 +287,10 @@
             "title": "Clipping Ratio",
             "type": "number"
           },
+          "decay_drop_db": {
+            "title": "Decay Drop Db",
+            "type": "number"
+          },
           "high_band_db": {
             "title": "High Band Db",
             "type": "number"
@@ -309,7 +313,8 @@
           "snr_db",
           "clipping_ratio",
           "high_band_db",
-          "level_dbfs"
+          "level_dbfs",
+          "decay_drop_db"
         ],
         "title": "QualityMeasuresOut",
         "type": "object"

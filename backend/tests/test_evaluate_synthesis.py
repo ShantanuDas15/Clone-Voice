@@ -562,6 +562,7 @@ def test_degradation_cases_include_an_untouched_clean_copy_and_each_defect():
     assert {"clean", "noise_10db", "telephone", "clipped_x8", "quiet_x0.03"} <= set(
         cases
     )
+    assert {"reverb_0.3s", "reverb_0.6s", "reverb_1.0s"} <= set(cases)
     y = tone(200.0, seconds=1.0)
     assert np.array_equal(cases["clean"](y), y)
     assert np.max(np.abs(cases["clipped_x8"](y))) == pytest.approx(1.0)

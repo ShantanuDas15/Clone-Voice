@@ -36,6 +36,7 @@ class QualityMeasuresOut(BaseModel):
     clipping_ratio: float
     high_band_db: float
     level_dbfs: float
+    decay_drop_db: float
 
 
 class QualityOut(BaseModel):
@@ -61,6 +62,7 @@ class QualityOut(BaseModel):
                 clipping_ratio=round(m.clipping_ratio, 5),
                 high_band_db=round(m.high_band_db, 1),
                 level_dbfs=round(m.level_dbfs, 1),
+                decay_drop_db=round(m.decay_drop_db, 1),
             ),
         )
 

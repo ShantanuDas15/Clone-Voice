@@ -643,7 +643,8 @@ def evaluate_best_of(
 
 def degradation_cases() -> Dict[str, Callable[[np.ndarray], np.ndarray]]:
     """Recording defects to apply to a clean reference clip, by name."""
-    from backend.evaluate_preprocessing import add_noise, gain, telephone_band
+    from backend.evaluate_preprocessing import (add_noise, add_reverb, gain,
+                                                telephone_band)
 
     return {
         "clean": lambda y: y,
@@ -651,6 +652,9 @@ def degradation_cases() -> Dict[str, Callable[[np.ndarray], np.ndarray]]:
         "noise_10db": lambda y: add_noise(y, 10.0),
         "noise_5db": lambda y: add_noise(y, 5.0),
         "telephone": telephone_band,
+        "reverb_0.3s": lambda y: add_reverb(y, 0.3),
+        "reverb_0.6s": lambda y: add_reverb(y, 0.6),
+        "reverb_1.0s": lambda y: add_reverb(y, 1.0),
         "clipped_x3": lambda y: gain(y, 3.0),
         "clipped_x8": lambda y: gain(y, 8.0),
         "quiet_x0.03": lambda y: gain(y, 0.03),

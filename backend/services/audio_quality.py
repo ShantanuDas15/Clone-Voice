@@ -23,6 +23,10 @@ SNR_CAP_DB = 60.0
 # Samples at or beyond this fraction of full scale count towards clipping when they run on.
 CLIP_LEVEL = 0.99
 HIGH_BAND_HZ = 4000
+# Reverb: how far the level can fall in DECAY_FRAMES after a loud frame (see decay_drop_db).
+DECAY_FRAMES = 8  # 80 ms
+DECAY_LOUD_MARGIN_DB = 6.0
+DECAY_CAP_DB = 60.0
 
 
 # --- Thresholds ----------------------------------------------------------------
@@ -33,6 +37,7 @@ HIGH_BAND_HZ = 4000
 #   noise at 20 / 10 / 5 dB SNR   -0.064 / -0.100 / -0.129   (every speaker worse)
 #   clipping, 0.3% / 6% of samples -0.038 / -0.124
 #   telephone band                 -0.038
+#   room reverb RT60 0.3 / 0.6 / 1.0 s  -0.037 / -0.056 / -0.053  (10 speakers, simulated room)
 #   a very quiet recording         -0.001  (the upload path already levels it: no hint)
 #
 # A clean recording had SNR >= 19.5 dB (5.8% below 25), clipping <= 0.13% and energy above
@@ -45,6 +50,10 @@ CLIP_WARN_RATIO = (
 CLIP_POOR_RATIO = 0.02
 BAND_LIMITED_DB = -45.0  # clean >= -33.5; simulated phone band <= -83
 SOURCE_BAND_LIMITED_HZ = 8000  # an 8 kHz (or lower) original has nothing above 4 kHz
+# Fall in 80 ms below this = reverberant. Clean clips: 5th percentile 12.8, 4.6% below 12.5
+# (240 clips); simulated rooms below it: RT60 0.3 s 17.5%, 0.6 s 80%, 1.0 s 99%. A warning only, as the cost
+# (-0.04 to -0.06) matches the noise and clipping warnings, not the poor tier.
+REVERB_WARN_DROP_DB = 12.5
 # The product asks for 10 to 30 s of speech. This is guidance, not a measured effect.
 SHORT_VOICED_SECONDS = 10.0
 
@@ -77,6 +86,7 @@ class QualityMeasures:
     clipping_ratio: float
     high_band_db: float
     level_dbfs: float
+    decay_drop_db: float = DECAY_CAP_DB
 
 
 def _frame_rms(y: np.ndarray) -> np.ndarray:
@@ -140,6 +150,28 @@ def high_band_db(y: np.ndarray, sr: int = SAMPLE_RATE) -> float:
     return float(max(10.0 * np.log10(max(high, 1e-20) / low), -120.0))
 
 
+def decay_drop_db(y: np.ndarray) -> float:
+    """Reverb proxy: the fast level fall (dB in 80 ms) that dry speech reaches and a room hides.
+
+    Dry speech falls by 20 dB or more within 80 ms where a word ends; in a reverberant room
+    the tail of the sound fills the gap, so the fall is shallow. Taken over every frame
+    within 6 dB of the loud speech level, as the 90th percentile of the fall, so one
+    clean-ending word is enough and the clip need not have long pauses. A clip too short to
+    judge, or one with no measurable fall, returns ``DECAY_CAP_DB`` (no evidence of reverb).
+    """
+    y = np.asarray(y, dtype=np.float32)
+    rms = _frame_rms(y).astype(np.float64)
+    if len(rms) < DECAY_FRAMES + 20 or rms.max() <= 0.0:
+        return DECAY_CAP_DB
+    level = 20.0 * np.log10(np.maximum(rms, 1e-6))
+    loud = level[:-DECAY_FRAMES] >= np.percentile(level, 90) - DECAY_LOUD_MARGIN_DB
+    starts = np.where(loud)[0]
+    if len(starts) == 0:
+        return DECAY_CAP_DB
+    fall = level[starts] - level[starts + DECAY_FRAMES]
+    return float(min(np.percentile(fall, 90), DECAY_CAP_DB))
+
+
 def level_dbfs(y: np.ndarray) -> float:
     """RMS level of the louder half of the frames in dBFS, floored at -120."""
     rms = _frame_rms(np.asarray(y, dtype=np.float32))
@@ -154,7 +186,7 @@ def measure_quality(y: np.ndarray, sr: int = SAMPLE_RATE) -> QualityMeasures:
     """Measure one clip (mono float audio at ``sr``)."""
     y = np.asarray(y, dtype=np.float32)
     if len(y) == 0:
-        return QualityMeasures(0.0, 0.0, 0.0, 0.0, -120.0, -120.0)
+        return QualityMeasures(0.0, 0.0, 0.0, 0.0, -120.0, -120.0, DECAY_CAP_DB)
     trimmed, _ = librosa.effects.trim(y, top_db=30)
     return QualityMeasures(
         duration_seconds=len(y) / sr,
@@ -163,6 +195,7 @@ def measure_quality(y: np.ndarray, sr: int = SAMPLE_RATE) -> QualityMeasures:
         clipping_ratio=clipping_ratio(y),
         high_band_db=high_band_db(y, sr),
         level_dbfs=level_dbfs(y),
+        decay_drop_db=decay_drop_db(y),
     )
 
 
@@ -195,6 +228,12 @@ _BAND_LIMITED = QualityHint(
     "This sounds like a phone call or a low-quality recording. A recording made with a "
     "microphone in a quiet room gives a closer voice.",
 )
+_REVERB = QualityHint(
+    "reverberant",
+    "warning",
+    "There is a lot of echo in the room. Record in a smaller, softer space (curtains, "
+    "carpet, a wardrobe of clothes) or move the microphone closer to your mouth.",
+)
 _SHORT = QualityHint(
     "short",
     "warning",
@@ -226,6 +265,8 @@ def assess_quality(
         source_sample_rate is not None and source_sample_rate <= SOURCE_BAND_LIMITED_HZ
     ):
         hints.append(_BAND_LIMITED)
+    if measures.decay_drop_db < REVERB_WARN_DROP_DB:
+        hints.append(_REVERB)
     if measures.voiced_seconds < SHORT_VOICED_SECONDS:
         hints.append(_SHORT)
     if any(h.severity == "poor" for h in hints):

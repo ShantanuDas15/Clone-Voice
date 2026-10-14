@@ -38,6 +38,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 import librosa
 import numpy as np
 import soundfile as sf
+from scipy.signal import fftconvolve
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,28 @@ def add_noise(y: np.ndarray, snr_db: float, seed: int = 0) -> np.ndarray:
     return np.clip(y + scale * noise, -1.0, 1.0).astype(np.float32)
 
 
+def add_reverb(y: np.ndarray, rt60: float, seed: int = 0) -> np.ndarray:
+    """Simulate a reverberant room: convolve with a decaying-noise impulse response.
+
+    The response is a direct path (1.0) plus an exponentially decaying noise tail at -6 dB
+    that falls by 60 dB after ``rt60`` seconds. The level of the input is kept.
+    """
+    if rt60 <= 0.0:
+        raise ValueError("rt60 must be positive")
+    rng = np.random.default_rng(seed)
+    n = int(rt60 * SAMPLE_RATE * 1.2)
+    t = np.arange(n) / SAMPLE_RATE
+    tail = rng.standard_normal(n) * 10.0 ** (-3.0 * t / rt60)
+    tail[0] = 0.0
+    tail *= 0.5 / np.sqrt(np.sum(tail**2))
+    tail[0] = 1.0
+    out = fftconvolve(y, tail)[: len(y)]
+    peak = float(np.max(np.abs(out))) if len(out) else 0.0
+    if peak > 0.0:
+        out = out * (float(np.max(np.abs(y))) / peak)
+    return out.astype(np.float32)
+
+
 def telephone_band(y: np.ndarray) -> np.ndarray:
     """Band-limit to 4 kHz by a round trip through 8 kHz."""
     low = librosa.resample(y, orig_sr=SAMPLE_RATE, target_sr=8000)
@@ -184,7 +207,8 @@ def _pipelines() -> Dict[str, Callable[[str], np.ndarray]]:
     turns a loud clip down, so applied after peak normalisation it changes
     nothing; the level variants therefore start from the un-normalised audio.
     """
-    from resemblyzer.audio import normalize_volume, preprocess_wav, trim_long_silences
+    from resemblyzer.audio import (normalize_volume, preprocess_wav,
+                                   trim_long_silences)
     from resemblyzer.hparams import audio_norm_target_dBFS as target
 
     from backend.services.audio_processing import preprocess_audio

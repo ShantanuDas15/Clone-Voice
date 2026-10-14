@@ -141,6 +141,23 @@ def test_add_noise_hits_the_requested_snr():
     assert measured == pytest.approx(15.0, abs=0.5)
 
 
+def test_add_reverb_keeps_length_and_peak_and_smears_an_impulse():
+    y = np.zeros(8000, dtype=np.float32)
+    y[100] = 0.5
+    out = ep.add_reverb(y, 0.3)
+    assert len(out) == len(y) and out.dtype == np.float32
+    assert np.max(np.abs(out)) == pytest.approx(0.5, rel=1e-4)
+    assert np.count_nonzero(np.abs(out[200:]) > 1e-4) > 1000  # a tail, not one sample
+
+
+def test_add_reverb_is_deterministic_and_rejects_a_bad_time():
+    y = np.random.default_rng(0).standard_normal(4000).astype(np.float32) * 0.1
+    assert np.array_equal(ep.add_reverb(y, 0.4), ep.add_reverb(y, 0.4))
+    with pytest.raises(ValueError):
+        ep.add_reverb(y, 0.0)
+    assert ep.add_reverb(np.zeros(100, np.float32), 0.3).shape == (100,)
+
+
 def test_telephone_band_removes_energy_above_4khz_and_keeps_length():
     y = (_tone(freq=1000.0) + _tone(freq=6000.0)).astype(np.float32)
     out = ep.telephone_band(y)
