@@ -7,19 +7,6 @@ from pydantic import BaseModel
 from backend.services.audio_quality import QualityReport
 
 
-class VoiceProfileOut(BaseModel):
-    id: UUID
-    name: str
-    status: str
-    consent_confirmed_at: datetime
-    terms_version: str
-    created_at: datetime
-    # The embedding scheme the profile was made with; None on profiles from before it was recorded.
-    embedding_version: Optional[str] = None
-
-    model_config = {"from_attributes": True}
-
-
 class QualityHintOut(BaseModel):
     """One thing the user can fix in their recording."""
 
@@ -78,12 +65,26 @@ class SampleOut(BaseModel):
     quality: Optional[QualityOut] = None
 
 
+class VoiceProfileOut(BaseModel):
+    id: UUID
+    name: str
+    status: str
+    consent_confirmed_at: datetime
+    terms_version: str
+    created_at: datetime
+    # The embedding scheme the profile was made with; None on profiles from before it was recorded.
+    embedding_version: Optional[str] = None
+    # One entry per enrolment clip, in order; empty for a profile from before clips were stored.
+    samples: List[SampleOut] = []
+
+    model_config = {"from_attributes": True}
+
+
 class VoiceProfileUploadOut(VoiceProfileOut):
     """The upload response: the profile, plus recording-quality reports when they could be made.
 
     ``quality`` is the report of the lowest-rated clip (the one most worth re-recording);
-    ``samples`` has one entry per uploaded clip, in upload order.
+    ``samples`` (inherited) has one entry per clip, in order.
     """
 
     quality: Optional[QualityOut] = None
-    samples: List[SampleOut] = []

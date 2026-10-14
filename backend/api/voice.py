@@ -12,7 +12,7 @@ import numpy as np
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
                      UploadFile, status)
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -273,6 +273,39 @@ def _check_terms(consent_confirmed: bool, terms_version: Optional[str]) -> None:
         )
 
 
+def _quality_json(quality: Optional[QualityOut]) -> Optional[dict]:
+    """The quality report as the JSON stored on a sample row, or None when there is none."""
+    return quality.model_dump() if quality is not None else None
+
+
+def _samples_out(rows: List[VoiceProfileSample]) -> List[SampleOut]:
+    """Per-clip response entries from stored rows (flagging uses the upload's rule: 3+ clips)."""
+    many = len(rows) >= 3
+    return [
+        SampleOut(
+            position=row.position,
+            agreement=round(row.agreement, 4),
+            mismatch=many and row.agreement < CLIP_AGREEMENT_WARN,
+            quality=QualityOut.model_validate(row.quality) if row.quality else None,
+        )
+        for row in rows
+    ]
+
+
+def _profile_out(profile: VoiceProfile) -> VoiceProfileOut:
+    """A profile with its clips, built from the stored rows."""
+    return VoiceProfileOut(
+        id=profile.id,
+        name=profile.name,
+        status=profile.status,
+        consent_confirmed_at=profile.consent_confirmed_at,
+        terms_version=profile.terms_version,
+        created_at=profile.created_at,
+        embedding_version=profile.embedding_version,
+        samples=_samples_out(list(profile.samples)),
+    )
+
+
 def _build_profile(
     user_id: uuid.UUID,
     name: str,
@@ -297,6 +330,7 @@ def _build_profile(
                 audio_path=clip.audio_path,
                 embedding_path=clip.embedding_path,
                 agreement=agreement[i],
+                quality=_quality_json(clip.quality),
             )
             for i, clip in enumerate(clips)
         ],
@@ -402,15 +436,7 @@ async def upload_audio(
         terms_version=profile.terms_version,
         created_at=profile.created_at,
         quality=worst,
-        samples=[
-            SampleOut(
-                position=i,
-                agreement=round(agreement[i], 4),
-                mismatch=i in mismatched,
-                quality=reports[i],
-            )
-            for i in range(len(clips))
-        ],
+        samples=_samples_out(list(profile.samples)),
     )
 
 
@@ -516,6 +542,7 @@ def _attach_clips(
                 audio_path=clip.audio_path,
                 embedding_path=clip.embedding_path,
                 agreement=0.0,
+                quality=_quality_json(clip.quality),
             )
         )
     for sample, score in zip(profile.samples, agreement):
@@ -545,7 +572,7 @@ async def add_samples(
 
     The profile embedding becomes the mean over every clip, old and new (SPEECH_QUALITY_PLAN.md
     S2.1c). If any new clip fails, none is kept and the profile is unchanged. The response lists
-    every clip, with recording-quality reports for the newly added ones only.
+    every clip with its stored recording-quality report.
     """
     try:
         pid = uuid.UUID(profile_id)
@@ -614,7 +641,6 @@ async def add_samples(
     rated = [c.quality for c in clips if c.quality is not None]
     worst = max(rated, key=lambda q: _RATING_ORDER[q.rating]) if rated else None
     profile = await asyncio.to_thread(_reload_profile, db, pid)
-    new_reports = {existing.clip_count + i: c.quality for i, c in enumerate(clips)}
     return VoiceProfileUploadOut(
         id=profile.id,
         name=profile.name,
@@ -624,15 +650,7 @@ async def add_samples(
         created_at=profile.created_at,
         embedding_version=profile.embedding_version,
         quality=worst,
-        samples=[
-            SampleOut(
-                position=i,
-                agreement=round(agreement[i], 4),
-                mismatch=i in mismatched,
-                quality=new_reports.get(i),
-            )
-            for i in range(len(embeddings))
-        ],
+        samples=_samples_out(list(profile.samples)),
     )
 
 
@@ -756,9 +774,6 @@ async def remove_sample(
     logger.info(
         "Clip %d removed from profile %s by user_id=%s", position, pid, current_user.id
     )
-    rows = list(profile.samples)
-    embeddings = [np.load(row.embedding_path) for row in rows]
-    mismatched = set(find_outliers(embeddings, CLIP_AGREEMENT_WARN))
     return VoiceProfileUploadOut(
         id=profile.id,
         name=profile.name,
@@ -767,14 +782,7 @@ async def remove_sample(
         terms_version=profile.terms_version,
         created_at=profile.created_at,
         embedding_version=profile.embedding_version,
-        samples=[
-            SampleOut(
-                position=row.position,
-                agreement=round(row.agreement, 4),
-                mismatch=i in mismatched,
-            )
-            for i, row in enumerate(rows)
-        ],
+        samples=_samples_out(list(profile.samples)),
     )
 
 
@@ -791,13 +799,14 @@ def get_profiles(
         .filter(
             VoiceProfile.user_id == current_user.id, VoiceProfile.deleted_at == None
         )
+        .options(selectinload(VoiceProfile.samples))
         .order_by(VoiceProfile.created_at.desc())
         .all()
     )
     logger.debug(
         "Listed %d voice profiles for user_id=%s", len(profiles), current_user.id
     )
-    return profiles
+    return [_profile_out(profile) for profile in profiles]
 
 
 @router.delete("/profiles/{profile_id}")

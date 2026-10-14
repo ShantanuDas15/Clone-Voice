@@ -1,7 +1,7 @@
 import uuid
 
-from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, Text,
-                        UniqueConstraint)
+from sqlalchemy import (JSON, Column, DateTime, Float, ForeignKey, Integer,
+                        Text, UniqueConstraint)
 from sqlalchemy.sql import func
 from sqlalchemy.types import Uuid
 
@@ -37,6 +37,8 @@ class VoiceProfileSample(Base):
     embedding_path = Column(Text, nullable=False)
     # Cosine of this clip with the mean of the others (1.0 for a lone clip).
     agreement = Column(Float, nullable=False)
+    # The clip's recording-quality report (S2.2c) as JSON; NULL when not stored or not measurable.
+    quality = Column(JSON, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

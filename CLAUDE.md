@@ -173,7 +173,7 @@ backend/
 | `GET` | `/api/v1/auth/google`, `/google/callback` | ❌ | Google OAuth |
 | `GET` | `/api/v1/terms` | ❌ | Current voice-consent terms (version, text) |
 | `POST` | `/api/v1/voice/upload` | ✅ | Upload one audio sample (`file`) or several clips of one speaker (`files`, up to `VOICE_MAX_SAMPLES`), + `consent_confirmed=true` → new voice profile |
-| `GET` | `/api/v1/voice/profiles` | ✅ | List user's voice profiles |
+| `GET` | `/api/v1/voice/profiles` | ✅ | List user's voice profiles, each with its clips (agreement, mismatch flag, stored recording-quality report) |
 | `POST` | `/api/v1/voice/profiles/{profile_id}/samples` | ✅ | Add clips (`file`/`files`, + `consent_confirmed=true`) to an existing profile; the embedding is re-derived over all clips |
 | `DELETE` | `/api/v1/voice/profiles/{profile_id}` | ✅ | Soft-delete a voice profile |
 | `DELETE` | `/api/v1/voice/profiles/{profile_id}/samples/{position}` | ✅ | Remove one clip (not the last) and re-derive the embedding from the rest |
