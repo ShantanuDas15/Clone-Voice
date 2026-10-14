@@ -257,6 +257,10 @@ class Settings(BaseSettings):
     OUTPUT_NORMALIZE_ENABLED: bool = True
     OUTPUT_TARGET_LUFS: float = Field(default=-18.0, ge=-40.0, le=-6.0)
     OUTPUT_PEAK_CEILING_DBFS: float = Field(default=-1.0, ge=-12.0, le=0.0)
+    # SPEECH_QUALITY_PLAN.md S3.3b: speech peaks stop the gain far below the target, so a
+    # look-ahead limiter may trim peaks by up to this many dB to let the level reach it
+    # (0 = off: the gain stops at the ceiling, as before).
+    OUTPUT_LIMITER_MAX_REDUCTION_DB: float = Field(default=6.0, ge=0.0, le=12.0)
     # HARDENING_PLAN.md finding M6: on shutdown, wait up to this long for
     # in-flight forward passes (worker threads) to finish before exiting.
     INFERENCE_SHUTDOWN_DRAIN_TIMEOUT_SECONDS: float = 30.0

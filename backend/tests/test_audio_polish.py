@@ -11,13 +11,9 @@ from pydantic import ValidationError
 
 from backend.core.config import Settings, settings
 from backend.services import tts_pipeline
-from backend.services.audio_polish import (
-    MAX_GAIN_DB,
-    apply_edge_fades,
-    integrated_loudness,
-    polish_waveform,
-    true_peak,
-)
+from backend.services.audio_polish import (MAX_GAIN_DB, apply_edge_fades,
+                                           integrated_loudness, limit_peaks,
+                                           polish_waveform, true_peak)
 
 SR = 16000
 
@@ -171,6 +167,80 @@ def test_polish_one_sample():
     assert out.shape == (1,)
 
 
+# --- limiter (S3.3b) --------------------------------------------------------------
+
+
+def _peaky_speechlike() -> np.ndarray:
+    """A quiet tone with a few short isolated spikes (high crest factor)."""
+    wav = _sine(500, 0.05, seconds=4.0)
+    for position in (SR, 2 * SR, 3 * SR):
+        wav[position : position + 8] = 0.4
+    return wav
+
+
+def test_limit_peaks_holds_the_ceiling_and_leaves_quiet_parts_alone():
+    """Every sample ends under the ceiling; samples far from a peak are untouched."""
+    wav = _peaky_speechlike()
+    out = limit_peaks(wav, SR, 0.2)
+    assert np.max(np.abs(out)) <= 0.2 + 1e-6
+    assert np.array_equal(out[: SR // 2], wav[: SR // 2])  # before the first spike
+    assert out.dtype == np.float32
+
+
+def test_limit_peaks_is_a_noop_under_the_ceiling():
+    """A signal that already fits is returned as is."""
+    wav = _sine(500, 0.2)
+    assert limit_peaks(wav, SR, 0.5) is wav
+
+
+def test_limit_peaks_rejects_a_bad_ceiling():
+    """A zero or negative ceiling is a programming error."""
+    with pytest.raises(ValueError):
+        limit_peaks(_sine(500, 0.2), SR, 0.0)
+
+
+def test_limit_peaks_empty_and_one_sample():
+    """Edge sizes do not crash."""
+    assert limit_peaks(np.zeros(0, dtype=np.float32), SR, 0.5).size == 0
+    one = limit_peaks(np.array([0.9], dtype=np.float32), SR, 0.5)
+    assert abs(one[0]) <= 0.5 + 1e-6
+
+
+def test_limiter_lets_a_peaky_signal_reach_the_target():
+    """Without the limiter the spikes cap the level; with it the target is reached."""
+    wav = _peaky_speechlike()
+    _, plain = polish_waveform(wav, SR, -18.0, -1.0)
+    out, limited = polish_waveform(wav, SR, -18.0, -1.0, limiter_max_reduction_db=12.0)
+    assert plain.peak_limited and plain.output_lufs < -20.0
+    assert limited.output_lufs == pytest.approx(-18.0, abs=0.5)
+    assert limited.limiter_reduction_db > 0.0
+    assert true_peak(out) <= 10 ** (-1.0 / 20) + 1e-3
+
+
+def test_limiter_allowance_bounds_the_reduction():
+    """A small allowance stops short of the target instead of squashing the spikes."""
+    wav = _peaky_speechlike()
+    _, report = polish_waveform(wav, SR, -18.0, -1.0, limiter_max_reduction_db=1.0)
+    assert report.peak_limited
+    assert report.limiter_reduction_db <= 1.0 + 0.1
+    assert report.output_lufs < -18.5
+
+
+def test_limiter_is_idle_when_nothing_peaks():
+    """A clean tone needs no limiting even with the allowance on."""
+    _, report = polish_waveform(
+        _sine(500, 0.05), SR, -18.0, -1.0, limiter_max_reduction_db=6.0
+    )
+    assert report.limiter_reduction_db == 0.0
+    assert not report.peak_limited
+
+
+def test_negative_limiter_allowance_is_refused():
+    """A negative allowance is a programming error."""
+    with pytest.raises(ValueError):
+        polish_waveform(_sine(500, 0.1), SR, -18.0, -1.0, limiter_max_reduction_db=-1.0)
+
+
 # --- settings --------------------------------------------------------------------
 
 
@@ -179,6 +249,7 @@ def test_defaults_match_the_plan():
     assert settings.OUTPUT_NORMALIZE_ENABLED is True
     assert settings.OUTPUT_TARGET_LUFS == -18.0
     assert settings.OUTPUT_PEAK_CEILING_DBFS == -1.0
+    assert settings.OUTPUT_LIMITER_MAX_REDUCTION_DB == 6.0
 
 
 @pytest.mark.parametrize(
@@ -188,6 +259,8 @@ def test_defaults_match_the_plan():
         ("OUTPUT_TARGET_LUFS", -70.0),
         ("OUTPUT_PEAK_CEILING_DBFS", 3.0),
         ("OUTPUT_PEAK_CEILING_DBFS", -30.0),
+        ("OUTPUT_LIMITER_MAX_REDUCTION_DB", -1.0),
+        ("OUTPUT_LIMITER_MAX_REDUCTION_DB", 30.0),
     ],
 )
 def test_out_of_range_settings_are_refused(field, value):

@@ -825,6 +825,7 @@ def finish_and_save(
             sample_rate,
             settings.OUTPUT_TARGET_LUFS,
             settings.OUTPUT_PEAK_CEILING_DBFS,
+            settings.OUTPUT_LIMITER_MAX_REDUCTION_DB,
         )
     if settings.WATERMARK_ENABLED:
         from backend.services.watermark import get_watermarker
