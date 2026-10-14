@@ -1,6 +1,58 @@
 {
   "components": {
     "schemas": {
+      "Body_add_samples_api_v1_voice_profiles__profile_id__samples_post": {
+        "properties": {
+          "consent_confirmed": {
+            "title": "Consent Confirmed",
+            "type": "boolean"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "contentMediaType": "application/octet-stream",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "terms_version": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Version"
+          }
+        },
+        "required": [
+          "consent_confirmed"
+        ],
+        "title": "Body_add_samples_api_v1_voice_profiles__profile_id__samples_post",
+        "type": "object"
+      },
       "Body_upload_audio_api_v1_voice_upload_post": {
         "properties": {
           "consent_confirmed": {
@@ -1510,6 +1562,64 @@
           }
         ],
         "summary": "Delete Profile",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/api/v1/voice/profiles/{profile_id}/samples": {
+      "post": {
+        "description": "Add clips of the same speaker to an existing profile and re-derive its embedding.\n\nThe profile embedding becomes the mean over every clip, old and new (SPEECH_QUALITY_PLAN.md\nS2.1c). If any new clip fails, none is kept and the profile is unchanged. The response lists\nevery clip, with recording-quality reports for the newly added ones only.",
+        "operationId": "add_samples_api_v1_voice_profiles__profile_id__samples_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_add_samples_api_v1_voice_profiles__profile_id__samples_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfileUploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Add Samples",
         "tags": [
           "voice"
         ]

@@ -174,6 +174,7 @@ backend/
 | `GET` | `/api/v1/terms` | ❌ | Current voice-consent terms (version, text) |
 | `POST` | `/api/v1/voice/upload` | ✅ | Upload one audio sample (`file`) or several clips of one speaker (`files`, up to `VOICE_MAX_SAMPLES`), + `consent_confirmed=true` → new voice profile |
 | `GET` | `/api/v1/voice/profiles` | ✅ | List user's voice profiles |
+| `POST` | `/api/v1/voice/profiles/{profile_id}/samples` | ✅ | Add clips (`file`/`files`, + `consent_confirmed=true`) to an existing profile; the embedding is re-derived over all clips |
 | `DELETE` | `/api/v1/voice/profiles/{profile_id}` | ✅ | Soft-delete a voice profile |
 | `POST` | `/api/v1/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output (`X-Voice-Engine`, and `X-Voice-Engine-Fallback` when the backup engine served it) |
 | `GET` | `/api/v1/synthesize/history` | ✅ | List user's generated audio history (`limit`/`offset`, `X-Total-Count`) |
