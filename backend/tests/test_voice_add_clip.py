@@ -341,3 +341,140 @@ def test_it_requires_authentication(client):
         files=_clips(1),
     )
     assert response.status_code == 401
+
+
+# --- removing a clip (S2.1d) ------------------------------------------------
+
+
+def _remove(client, headers, profile_id, position):
+    return client.delete(
+        f"/api/v1/voice/profiles/{profile_id}/samples/{position}", headers=headers
+    )
+
+
+def test_removing_a_clip_re_derives_the_mean_and_renumbers(
+    client, auth_headers, db_session
+):
+    emb = [_unit(1, 0.2), _unit(1, -0.2), _unit(1, 0.0), _unit(1, 0.1)]
+    pid = _create(client, auth_headers, emb)
+    profile = _profile(db_session)
+    old_aggregate = profile.embedding_path
+    gone = profile.samples[1]
+    gone_files = [gone.audio_path, gone.embedding_path]
+
+    response = _remove(client, auth_headers, pid, 1)
+
+    assert response.status_code == 200, response.text
+    assert [s["position"] for s in response.json()["samples"]] == [0, 1, 2]
+    profile = _profile(db_session)
+    assert [s.position for s in profile.samples] == [0, 1, 2]
+    kept = [emb[0], emb[2], emb[3]]
+    expected = sum(kept) / np.linalg.norm(sum(kept))
+    assert np.allclose(np.load(profile.embedding_path), expected, atol=1e-6)
+    assert not any(os.path.exists(p) for p in gone_files + [old_aggregate])
+    assert db_session.query(VoiceProfileSample).count() == 3
+
+
+def test_down_to_one_clip_the_profile_uses_that_clips_own_embedding(
+    client, auth_headers, db_session
+):
+    pid = _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1)])
+    old_aggregate = _profile(db_session).embedding_path
+    assert _remove(client, auth_headers, pid, 0).status_code == 200
+    profile = _profile(db_session)
+    only = profile.samples[0]
+    assert only.position == 0 and only.agreement == 1.0
+    assert profile.embedding_path == only.embedding_path
+    assert profile.audio_sample_path == only.audio_path
+    assert os.path.exists(only.embedding_path)
+    assert not os.path.exists(old_aggregate)
+
+
+def test_removing_an_outlier_clears_the_mismatch_and_synthesis_still_resolves(
+    client, auth_headers, db_session
+):
+    pid = _create(
+        client,
+        auth_headers,
+        [_unit(1, 0.0), _unit(1, 0.05), _unit(1, -0.05), _unit(0, 1)],
+    )
+    response = _remove(client, auth_headers, pid, 3)
+    assert response.status_code == 200
+    assert not any(s["mismatch"] for s in response.json()["samples"])
+
+
+def test_removing_then_adding_keeps_positions_contiguous(
+    client, auth_headers, db_session
+):
+    pid = _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1), _unit(1, 0.2)])
+    _remove(client, auth_headers, pid, 0)
+    assert _add(client, auth_headers, pid, [_unit(1, 0.0)]).status_code == 201
+    assert [s.position for s in _profile(db_session).samples] == [0, 1, 2]
+
+
+def test_the_last_clip_cannot_be_removed(client, auth_headers, db_session):
+    pid = _create(client, auth_headers, [_unit(1, 0.0)])
+    before = _tree_files(settings.UPLOAD_DIR)
+    assert _remove(client, auth_headers, pid, 0).status_code == 409
+    assert _tree_files(settings.UPLOAD_DIR) == before
+
+
+def test_a_profile_from_before_sample_rows_cannot_lose_its_only_clip(
+    client, auth_headers, db_session
+):
+    pid = _create(client, auth_headers, [_unit(1, 0.0)])
+    profile = _profile(db_session)
+    for row in list(profile.samples):
+        db_session.delete(row)
+    db_session.commit()
+    assert _remove(client, auth_headers, pid, 0).status_code == 409
+
+
+def test_an_unknown_position_is_a_404_and_changes_nothing(
+    client, auth_headers, db_session
+):
+    pid = _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1)])
+    before = _tree_files(settings.UPLOAD_DIR)
+    assert _remove(client, auth_headers, pid, 7).status_code == 404
+    assert _remove(client, auth_headers, pid, -1).status_code == 404
+    assert _tree_files(settings.UPLOAD_DIR) == before
+    assert len(_profile(db_session).samples) == 2
+
+
+def test_a_database_failure_while_removing_deletes_no_file(
+    client, auth_headers, db_session
+):
+    """Files go only after the commit: a failed commit leaves every one on disk.
+
+    (The shared test session sits in one outer transaction, so a real rollback would also
+    undo the fixture's rows; it is stubbed here and the rows are not asserted.)
+    """
+    pid = _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1), _unit(1, 0.2)])
+    before = _tree_files(settings.UPLOAD_DIR)
+    with patch(
+        "sqlalchemy.orm.Session.commit",
+        side_effect=OperationalError("x", {}, Exception("boom")),
+    ), patch("sqlalchemy.orm.Session.rollback") as rollback:
+        response = _remove(client, auth_headers, pid, 1)
+    assert rollback.called
+    assert response.status_code in (500, 503)
+    assert (
+        _tree_files(settings.UPLOAD_DIR) == before
+    )  # nothing deleted, new aggregate gone
+
+
+def test_removal_is_owner_only_and_validates_the_id(client, auth_headers, db_session):
+    pid = _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1)])
+    other = _login(client, "intruder2@example.com")
+    assert _remove(client, other, pid, 0).status_code == 404
+    assert _remove(client, auth_headers, "nope", 0).status_code == 400
+    assert len(_profile(db_session).samples) == 2
+    client.delete(f"/api/v1/voice/profiles/{pid}", headers=auth_headers)
+    assert _remove(client, auth_headers, pid, 0).status_code == 404
+
+
+def test_removal_requires_authentication(client):
+    response = client.delete(
+        "/api/v1/voice/profiles/00000000-0000-0000-0000-000000000000/samples/0"
+    )
+    assert response.status_code == 401

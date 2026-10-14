@@ -641,6 +641,143 @@ def _reload_profile(db: Session, profile_id: uuid.UUID) -> VoiceProfile:
     return db.query(VoiceProfile).filter(VoiceProfile.id == profile_id).one()
 
 
+def _remove_sample(
+    db: Session, user_id: uuid.UUID, profile_id: uuid.UUID, position: int
+) -> tuple:
+    """Drop one clip, re-derive the embedding over the rest; return (profile, files to remove).
+
+    Raises 404/409 when the clip cannot be removed. Files are returned, not deleted: the caller
+    removes them only after the commit.
+    """
+    profile = (
+        db.query(VoiceProfile)
+        .filter(
+            VoiceProfile.id == profile_id,
+            VoiceProfile.user_id == user_id,
+            VoiceProfile.deleted_at == None,
+        )
+        .first()
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Voice profile not found")
+    if profile.status != "ready":
+        raise HTTPException(status_code=409, detail="This voice profile is not ready.")
+    if profile.embedding_version not in (None, EMBEDDING_VERSION):
+        raise HTTPException(
+            status_code=409,
+            detail="This voice profile was made by an older engine and cannot be changed. "
+            "Upload a new profile.",
+        )
+    samples = list(profile.samples)
+    if len(samples) <= 1:  # includes a profile from before sample rows: one clip
+        raise HTTPException(
+            status_code=409,
+            detail="A voice needs at least one clip. Delete the profile instead.",
+        )
+    removed = next((s for s in samples if s.position == position), None)
+    if removed is None:
+        raise HTTPException(status_code=404, detail="Voice sample not found")
+    removed_files = [removed.audio_path, removed.embedding_path]
+    kept = [s for s in samples if s is not removed]
+    try:
+        embeddings = [np.load(s.embedding_path) for s in kept]
+    except (OSError, ValueError):
+        logger.exception("Stored clip embedding unreadable for profile %s", profile_id)
+        raise HTTPException(
+            status_code=409,
+            detail="This voice profile's stored clips are unavailable. Upload a new profile.",
+        )
+    old_embedding_path = profile.embedding_path
+    new_path = None
+    if len(kept) == 1:
+        # One clip left: the profile embedding is that clip's own, as for a first upload.
+        profile.embedding_path = kept[0].embedding_path
+    else:
+        new_path = os.path.join(
+            os.path.dirname(kept[0].audio_path), f"{uuid.uuid4()}_profile_embed.npy"
+        )
+        np.save(new_path, aggregate_embeddings(embeddings))
+        profile.embedding_path = new_path
+    scores = clip_agreement(embeddings)
+    try:
+        db.delete(removed)
+        profile.samples.remove(removed)
+        # Renumber from 0 in two steps so the (profile, position) unique key never collides.
+        for i, sample in enumerate(kept):
+            sample.position = -(i + 1)
+        db.flush()
+        for i, (sample, score) in enumerate(zip(kept, scores)):
+            sample.position = i
+            sample.agreement = score
+        profile.audio_sample_path = kept[0].audio_path
+        profile.embedding_version = EMBEDDING_VERSION
+        db.commit()
+    except Exception:
+        db.rollback()
+        if new_path:
+            _remove_quietly(new_path)
+        raise
+    files = list(removed_files)
+    if old_embedding_path not in [removed_files[1], *(s.embedding_path for s in kept)]:
+        files.append(old_embedding_path)
+    return profile, files
+
+
+@router.delete(
+    "/profiles/{profile_id}/samples/{position}", response_model=VoiceProfileUploadOut
+)
+@limiter.limit(settings.API_RATE_LIMIT)
+async def remove_sample(
+    request: Request,
+    profile_id: str,
+    position: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove one clip from a multi-clip profile and re-derive its embedding from the rest.
+
+    The clip's audio and embedding are erased from disk (SPEECH_QUALITY_PLAN.md S2.1d). The
+    remaining clips are renumbered from 0. The last clip cannot be removed: delete the profile.
+    """
+    try:
+        pid = uuid.UUID(profile_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid profile ID format")
+    try:
+        profile, files = await asyncio.to_thread(
+            _remove_sample, db, current_user.id, pid, position
+        )
+    except SQLAlchemyError as error:
+        logger.exception("Failed to remove clip from profile %s", pid)
+        if is_transient_db_error(error):
+            raise db_unavailable()
+        raise HTTPException(status_code=500, detail="Failed to save voice profile")
+    await asyncio.to_thread(remove_files, files)
+    logger.info(
+        "Clip %d removed from profile %s by user_id=%s", position, pid, current_user.id
+    )
+    rows = list(profile.samples)
+    embeddings = [np.load(row.embedding_path) for row in rows]
+    mismatched = set(find_outliers(embeddings, CLIP_AGREEMENT_WARN))
+    return VoiceProfileUploadOut(
+        id=profile.id,
+        name=profile.name,
+        status=profile.status,
+        consent_confirmed_at=profile.consent_confirmed_at,
+        terms_version=profile.terms_version,
+        created_at=profile.created_at,
+        embedding_version=profile.embedding_version,
+        samples=[
+            SampleOut(
+                position=row.position,
+                agreement=round(row.agreement, 4),
+                mismatch=i in mismatched,
+            )
+            for i, row in enumerate(rows)
+        ],
+    )
+
+
 @router.get("/profiles", response_model=List[VoiceProfileOut])
 @limiter.limit(settings.API_RATE_LIMIT)
 def get_profiles(

@@ -1625,6 +1625,63 @@
         ]
       }
     },
+    "/api/v1/voice/profiles/{profile_id}/samples/{position}": {
+      "delete": {
+        "description": "Remove one clip from a multi-clip profile and re-derive its embedding from the rest.\n\nThe clip's audio and embedding are erased from disk (SPEECH_QUALITY_PLAN.md S2.1d). The\nremaining clips are renumbered from 0. The last clip cannot be removed: delete the profile.",
+        "operationId": "remove_sample_api_v1_voice_profiles__profile_id__samples__position__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "position",
+            "required": true,
+            "schema": {
+              "title": "Position",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfileUploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Remove Sample",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
     "/api/v1/voice/upload": {
       "post": {
         "description": "Validate, process and embed one audio sample, or several clips of one speaker.\n\nSend a single clip as ``file`` (as before) and/or several as ``files``. Several clips\nare averaged into one steadier voice embedding (SPEECH_QUALITY_PLAN.md S2.1). If any\nclip fails, none is kept and no profile is created.",
