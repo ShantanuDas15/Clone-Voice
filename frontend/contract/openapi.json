@@ -765,6 +765,14 @@
             "title": "Name",
             "type": "string"
           },
+          "samples": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -786,7 +794,7 @@
         "type": "object"
       },
       "VoiceProfileUploadOut": {
-        "description": "The upload response: the profile, plus recording-quality reports when they could be made.\n\n``quality`` is the report of the lowest-rated clip (the one most worth re-recording);\n``samples`` has one entry per uploaded clip, in upload order.",
+        "description": "The upload response: the profile, plus recording-quality reports when they could be made.\n\n``quality`` is the report of the lowest-rated clip (the one most worth re-recording);\n``samples`` (inherited) has one entry per clip, in order.",
         "properties": {
           "consent_confirmed_at": {
             "format": "date-time",
@@ -1569,7 +1577,7 @@
     },
     "/api/v1/voice/profiles/{profile_id}/samples": {
       "post": {
-        "description": "Add clips of the same speaker to an existing profile and re-derive its embedding.\n\nThe profile embedding becomes the mean over every clip, old and new (SPEECH_QUALITY_PLAN.md\nS2.1c). If any new clip fails, none is kept and the profile is unchanged. The response lists\nevery clip, with recording-quality reports for the newly added ones only.",
+        "description": "Add clips of the same speaker to an existing profile and re-derive its embedding.\n\nThe profile embedding becomes the mean over every clip, old and new (SPEECH_QUALITY_PLAN.md\nS2.1c). If any new clip fails, none is kept and the profile is unchanged. The response lists\nevery clip with its stored recording-quality report.",
         "operationId": "add_samples_api_v1_voice_profiles__profile_id__samples_post",
         "parameters": [
           {

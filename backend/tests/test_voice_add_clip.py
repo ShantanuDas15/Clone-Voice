@@ -114,12 +114,8 @@ def test_adding_a_clip_re_derives_the_mean_over_all_clips(
     assert response.status_code == 201, response.text
     body = response.json()
     assert [s["position"] for s in body["samples"]] == [0, 1, 2, 3]
-    assert [s["quality"] is not None for s in body["samples"]] == [
-        False,
-        False,
-        False,
-        True,
-    ]
+    # Every clip now carries its stored report, not just the new one (S2.2c).
+    assert all(s["quality"] is not None for s in body["samples"])
     profile = _profile(db_session)
     expected = sum(first + [new])
     expected = expected / np.linalg.norm(expected)
@@ -478,3 +474,78 @@ def test_removal_requires_authentication(client):
         "/api/v1/voice/profiles/00000000-0000-0000-0000-000000000000/samples/0"
     )
     assert response.status_code == 401
+
+
+# --- stored quality reports (S2.2c) -----------------------------------------
+
+
+def test_each_clips_quality_report_is_stored_on_its_row(
+    client, auth_headers, db_session
+):
+    body_id = _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1)])
+    rows = _profile(db_session).samples
+    assert body_id
+    for row in rows:
+        assert row.quality["rating"] in ("good", "fair", "poor")
+        assert {"hints", "measures"} <= set(row.quality)
+
+
+def test_get_profiles_lists_every_clip_with_its_stored_report(
+    client, auth_headers, db_session
+):
+    emb = [_unit(1, 0.0), _unit(1, 0.05), _unit(1, -0.05), _unit(0, 1)]
+    pid = _create(client, auth_headers, emb)
+    listed = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
+    assert [p["id"] for p in listed] == [pid]
+    samples = listed[0]["samples"]
+    assert [s["position"] for s in samples] == [0, 1, 2, 3]
+    assert [s["mismatch"] for s in samples] == [False, False, False, True]
+    assert all(s["quality"]["rating"] for s in samples)
+    assert all(0.0 <= s["agreement"] <= 1.0 for s in samples)
+
+
+def test_the_listing_matches_what_the_upload_returned(client, auth_headers):
+    files = _clips(3)
+    with patch(
+        "backend.services.tts_pipeline.embed_speaker_async",
+        side_effect=[_unit(1, 0.0), _unit(1, 0.1), _unit(1, -0.1)],
+    ):
+        upload = client.post(
+            "/api/v1/voice/upload",
+            headers=auth_headers,
+            data={"name": "V", "consent_confirmed": "true"},
+            files=files,
+        ).json()
+    listed = client.get("/api/v1/voice/profiles", headers=auth_headers).json()[0]
+    assert listed["samples"] == upload["samples"]
+
+
+def test_quality_survives_adding_and_removing_clips(client, auth_headers, db_session):
+    pid = _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1), _unit(1, 0.2)])
+    assert _add(client, auth_headers, pid, [_unit(1, 0.05)]).status_code == 201
+    assert _remove(client, auth_headers, pid, 0).status_code == 200
+    listed = client.get("/api/v1/voice/profiles", headers=auth_headers).json()[0]
+    assert len(listed["samples"]) == 3
+    assert all(s["quality"] is not None for s in listed["samples"])
+
+
+def test_a_profile_from_before_stored_reports_lists_clips_without_one(
+    client, auth_headers, db_session
+):
+    _create(client, auth_headers, [_unit(1, 0.0), _unit(1, 0.1)])
+    for row in _profile(db_session).samples:
+        row.quality = None
+    db_session.commit()
+    samples = client.get("/api/v1/voice/profiles", headers=auth_headers).json()[0][
+        "samples"
+    ]
+    assert [s["quality"] for s in samples] == [None, None]
+
+
+def test_a_profile_without_sample_rows_lists_no_clips(client, auth_headers, db_session):
+    _create(client, auth_headers, [_unit(1, 0.0)])
+    for row in list(_profile(db_session).samples):
+        db_session.delete(row)
+    db_session.commit()
+    listed = client.get("/api/v1/voice/profiles", headers=auth_headers).json()
+    assert listed[0]["samples"] == []
