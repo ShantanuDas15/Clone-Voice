@@ -39,9 +39,17 @@ router = APIRouter()
 
 
 def _record_failed_generation(
-    db: Session, user_id, voice_profile_id, text: str, engine: Optional[str] = None
+    db: Session,
+    user_id,
+    voice_profile_id,
+    text: str,
+    engine: Optional[str] = None,
+    requested: Optional[dict] = None,
 ) -> None:
     """Persist a `status="failed"` audit row for an inference error.
+
+    ``requested`` holds what the user asked for (emotion, intensity, seed); the
+    ``*_applied`` columns stay NULL because no engine finished the request.
 
     Runs on the error path only — a successful synthesis records its own
     `status="completed"` row after the pipeline returns. A DB failure here is
@@ -56,6 +64,7 @@ def _record_failed_generation(
         duration_seconds=None,
         status="failed",
         engine=engine,
+        **(requested or {}),
     )
     try:
         db.add(failed_generation)
@@ -118,6 +127,15 @@ def _seed_headers(seed: Optional[int], result: object) -> dict:
         return {}
     applied = getattr(result, "seed_applied", False)
     return {"X-Voice-Seed": "applied" if applied else "ignored"}
+
+
+def _requested_fields(override: Optional[StyleOverride], seed: Optional[int]) -> dict:
+    """The emotion, intensity and seed the user asked for, as `Generation` columns."""
+    return {
+        "emotion": override.emotion if override else None,
+        "intensity": override.intensity if override else None,
+        "seed": seed,
+    }
 
 
 def _persist_generation(db: Session, generation: Generation) -> None:
@@ -221,6 +239,7 @@ async def synthesize(
         pipeline_extra["style_override"] = override
     if req.seed is not None:
         pipeline_extra["seed"] = req.seed
+    requested = _requested_fields(override, req.seed)
 
     try:
         embedding = await asyncio.to_thread(np.load, embedding_path)
@@ -266,6 +285,7 @@ async def synthesize(
             profile_id,
             req.text,
             settings.TTS_ENGINE,
+            requested,
         )
         free_gpu_memory()
         raise HTTPException(
@@ -286,6 +306,7 @@ async def synthesize(
             profile_id,
             req.text,
             settings.TTS_ENGINE,
+            requested,
         )
         raise HTTPException(
             status_code=502,
@@ -303,6 +324,7 @@ async def synthesize(
             profile_id,
             req.text,
             settings.TTS_ENGINE,
+            requested,
         )
         raise HTTPException(
             status_code=503,
@@ -321,6 +343,7 @@ async def synthesize(
             profile_id,
             req.text,
             settings.TTS_ENGINE,
+            requested,
         )
         free_gpu_memory()
         raise HTTPException(
@@ -340,6 +363,7 @@ async def synthesize(
             profile_id,
             req.text,
             settings.TTS_ENGINE,
+            requested,
         )
         free_gpu_memory()
         raise HTTPException(
@@ -365,12 +389,10 @@ async def synthesize(
         engine=getattr(result, "engine", None),
         engine_version=getattr(result, "engine_version", None),
         engine_fallback_from=getattr(result, "engine_fallback_from", None),
-        emotion=override.emotion if override else None,
-        intensity=override.intensity if override else None,
+        **requested,
         style_applied=(
             bool(getattr(result, "style_applied", False)) if styled_requested else None
         ),
-        seed=req.seed,
         seed_applied=(
             bool(getattr(result, "seed_applied", False))
             if req.seed is not None
