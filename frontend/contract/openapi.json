@@ -179,6 +179,20 @@
             ],
             "title": "Emotion"
           },
+          "emotions_used": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emotions Used"
+          },
           "engine": {
             "anyOf": [
               {
@@ -246,6 +260,20 @@
               }
             ],
             "title": "Seed Applied"
+          },
+          "sound_tags_dropped": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sound Tags Dropped"
           },
           "status": {
             "title": "Status",

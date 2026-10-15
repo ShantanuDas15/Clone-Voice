@@ -44,6 +44,11 @@ class Generation(Base):
     # predates this) and whether the engine that spoke could apply it.
     seed = Column(Integer, nullable=True)
     seed_applied = Column(Boolean, nullable=True)
+    # SPEECH_QUALITY_PLAN.md S7.1f: comma-joined labels, one per sentence, when the engine spoke
+    # sentence by sentence (also for ``auto``), and the sound tags it could not make. NULL = none
+    # or the row predates this.
+    emotions_used = Column(Text, nullable=True)
+    sound_tags_dropped = Column(String(100), nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

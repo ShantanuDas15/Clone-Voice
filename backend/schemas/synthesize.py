@@ -114,5 +114,17 @@ class GenerationOut(BaseModel):
     # The seed the user asked for (None = none) and whether the engine that spoke applied it.
     seed: Optional[int] = None
     seed_applied: Optional[bool] = None
+    # The emotion label of each sentence when the engine spoke sentence by sentence, in order, and
+    # the sound tags (``[laugh]``) the engine that spoke could not make. None = none / old row.
+    emotions_used: Optional[List[str]] = None
+    sound_tags_dropped: Optional[List[str]] = None
+
+    @field_validator("emotions_used", "sound_tags_dropped", mode="before")
+    @classmethod
+    def _split_stored_list(cls, value):
+        """Stored as comma-joined text; returned as a list."""
+        if isinstance(value, str):
+            return [item for item in value.split(",") if item] or None
+        return value
 
     model_config = {"from_attributes": True}
