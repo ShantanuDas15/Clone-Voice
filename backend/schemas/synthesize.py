@@ -111,5 +111,8 @@ class GenerationOut(BaseModel):
     emotion: Optional[str] = None
     intensity: Optional[float] = None
     style_applied: Optional[bool] = None
+    # The seed the user asked for (None = none) and whether the engine that spoke applied it.
+    seed: Optional[int] = None
+    seed_applied: Optional[bool] = None
 
     model_config = {"from_attributes": True}

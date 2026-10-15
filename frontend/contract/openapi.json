@@ -225,6 +225,28 @@
             "title": "Output Filename",
             "type": "string"
           },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "seed_applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed Applied"
+          },
           "status": {
             "title": "Status",
             "type": "string"

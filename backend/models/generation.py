@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import (JSON, Boolean, Column, DateTime, Float, ForeignKey,
-                        String, Text)
+                        Integer, String, Text)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.types import Uuid
@@ -40,6 +40,10 @@ class Generation(Base):
     emotion = Column(String(20), nullable=True)
     intensity = Column(Float, nullable=True)
     style_applied = Column(Boolean, nullable=True)
+    # SPEECH_QUALITY_PLAN.md S7.1d: the seed the user asked for (NULL = none requested or the row
+    # predates this) and whether the engine that spoke could apply it.
+    seed = Column(Integer, nullable=True)
+    seed_applied = Column(Boolean, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
