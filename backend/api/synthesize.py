@@ -370,6 +370,12 @@ async def synthesize(
         style_applied=(
             bool(getattr(result, "style_applied", False)) if styled_requested else None
         ),
+        seed=req.seed,
+        seed_applied=(
+            bool(getattr(result, "seed_applied", False))
+            if req.seed is not None
+            else None
+        ),
     )
     try:
         await asyncio.to_thread(_persist_generation, db, generation)
@@ -458,6 +464,8 @@ def get_history(
                 emotion=gen.emotion,
                 intensity=gen.intensity,
                 style_applied=gen.style_applied,
+                seed=gen.seed,
+                seed_applied=gen.seed_applied,
             )
         )
 
