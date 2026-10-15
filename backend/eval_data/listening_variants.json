@@ -1,0 +1,20 @@
+{
+  "description": "Pipeline variants for a listening test (SPEECH_QUALITY_PLAN.md S0.6). Each variant lists Settings overrides applied while it is synthesized; the first variant is the baseline. 'current' is the shipped behaviour.",
+  "variants": {
+    "current": {},
+    "flat_pause": {
+      "TTS_PAUSE_SECONDS": {
+        "statement": 0.15,
+        "question": 0.15,
+        "exclamation": 0.15,
+        "ellipsis": 0.15,
+        "clause": 0.15,
+        "comma": 0.15,
+        "word": 0.15,
+        "paragraph": 0.15
+      }
+    },
+    "no_limiter": {"OUTPUT_LIMITER_MAX_REDUCTION_DB": 0.0},
+    "best_of_3": {"TTS_BEST_OF_N": 3}
+  }
+}
