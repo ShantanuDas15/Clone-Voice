@@ -8,8 +8,7 @@ from uuid import UUID
 
 import numpy as np
 import torch
-from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
-                     Response, status)
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -25,12 +24,14 @@ from backend.models.voice_profile import VoiceProfile
 from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
 from backend.services import style_markup
 from backend.services.text_analysis import StyleOverride
-from backend.services.tts_engine import (EngineUnavailableError,
-                                         get_engine_for_user)
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           OutputQualityError, free_gpu_memory,
-                                           run_inference_pipeline)
+from backend.services.tts_engine import EngineUnavailableError, get_engine_for_user
+from backend.services.tts_pipeline import (
+    InferenceQueueFullError,
+    InferenceTimeoutError,
+    OutputQualityError,
+    free_gpu_memory,
+    run_inference_pipeline,
+)
 from backend.services.voice_embedding import EMBEDDING_VERSION
 
 logger = logging.getLogger(__name__)
@@ -399,6 +400,8 @@ async def synthesize(
         style_applied=(
             bool(getattr(result, "style_applied", False)) if styled_requested else None
         ),
+        emotions_used=",".join(getattr(result, "emotions_used", ())) or None,
+        sound_tags_dropped=",".join(getattr(result, "sound_tags_dropped", ())) or None,
         seed_applied=(
             bool(getattr(result, "seed_applied", False))
             if req.seed is not None
@@ -495,6 +498,8 @@ def get_history(
                 style_applied=gen.style_applied,
                 seed=gen.seed,
                 seed_applied=gen.seed_applied,
+                emotions_used=gen.emotions_used,
+                sound_tags_dropped=gen.sound_tags_dropped,
             )
         )
 
