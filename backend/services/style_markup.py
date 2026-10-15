@@ -88,6 +88,15 @@ def strip_nonverbal(text: str, keep: tuple = ()) -> str:
     return re.sub(r" {2,}", " ", result) if result != text else result
 
 
+def dropped_nonverbal(text: str, supported: tuple = ()) -> tuple:
+    """The sound tags in ``text`` that an engine supporting only ``supported`` will not make.
+
+    Lowercase, each once, in order of first appearance.
+    """
+    names = (m.group(1).lower() for m in _NONVERBAL.finditer(text))
+    return tuple(dict.fromkeys(n for n in names if n not in supported))
+
+
 def bare(text: str) -> str:
     """The text with every tag removed: what is left to be read aloud."""
     return strip_nonverbal(strip(text))

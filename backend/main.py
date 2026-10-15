@@ -253,6 +253,7 @@ app.add_middleware(
         "X-Voice-Style",
         "X-Voice-Emotions",
         "X-Voice-Seed",
+        "X-Voice-Tags-Dropped",
     ],
 )
 

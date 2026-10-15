@@ -851,6 +851,7 @@ class InferenceResult(tuple):
         style_applied: bool = False,
         emotions_used: tuple = (),
         seed_applied: bool = False,
+        sound_tags_dropped: tuple = (),
     ) -> "InferenceResult":
         """Build the pair and attach the engine facts."""
         self = super().__new__(cls, (path, duration))
@@ -863,6 +864,8 @@ class InferenceResult(tuple):
         self.emotions_used = tuple(emotions_used)
         # True when the request's seed was handed to the engine that spoke (S7.1c).
         self.seed_applied = seed_applied
+        # Sound tags (``[laugh]``) in the text that the engine that spoke cannot make (S6.2c).
+        self.sound_tags_dropped = tuple(sound_tags_dropped)
         return self
 
 
@@ -1152,6 +1155,7 @@ async def run_inference_pipeline(
         style_applied,
         emotions_used,
         seed_applied,
+        style_markup.dropped_nonverbal(text, served_by.capabilities().nonverbal_tags),
     )
 
 

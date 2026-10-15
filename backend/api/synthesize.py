@@ -138,6 +138,12 @@ def _requested_fields(override: Optional[StyleOverride], seed: Optional[int]) ->
     }
 
 
+def _tag_headers(result: object) -> dict:
+    """``X-Voice-Tags-Dropped`` lists sound tags the engine that spoke could not make."""
+    dropped = getattr(result, "sound_tags_dropped", ())
+    return {"X-Voice-Tags-Dropped": ",".join(dropped)} if dropped else {}
+
+
 def _persist_generation(db: Session, generation: Generation) -> None:
     """Add, commit, and refresh a completed generation row (run off the event loop)."""
     db.add(generation)
@@ -425,6 +431,7 @@ async def synthesize(
             **_engine_headers(generation),
             **_style_headers(styled_requested, result),
             **_seed_headers(req.seed, result),
+            **_tag_headers(result),
         },
     )
 
