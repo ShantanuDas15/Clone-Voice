@@ -11,7 +11,7 @@ import { useDegraded } from "@/hooks/use-health";
 import { useOnline } from "@/hooks/use-online";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { useCooldown, useElapsedSeconds } from "@/hooks/use-timers";
-import { type SynthesisResult, synthesize } from "@/lib/api/synthesize";
+import { type SynthesisInput, type SynthesisResult, synthesize } from "@/lib/api/synthesize";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { getDraft, saveDraft } from "@/lib/draft";
 import { ApiError } from "@/lib/errors";
@@ -19,7 +19,8 @@ import { firstRun } from "@/lib/first-run";
 import { TEXT_MAX, hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { Textarea } from "@/components/ui/field";
+import { Select, Textarea } from "@/components/ui/field";
+import { EMOTIONS, DEFAULT_INTENSITY, intensityApplies } from "@/lib/emotion";
 
 const BUSY_COOLDOWN_S = 15; // no Retry-After on "service busy" (G-05)
 const RATE_COOLDOWN_S = 60; // 5/min per IP
@@ -54,6 +55,8 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const client = useQueryClient();
   const [voiceId, setVoiceId] = useState(initialVoiceId ?? "");
   const [text, setText] = useState("");
+  const [emotion, setEmotion] = useState("auto");
+  const [intensity, setIntensity] = useState(DEFAULT_INTENSITY);
   const [textError, setTextError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<(SynthesisResult & { text: string }) | null>(null);
@@ -65,8 +68,8 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const online = useOnline();
 
   const mutation = useMutation({
-    mutationFn: (vars: { voiceId: string; text: string; signal: AbortSignal }) =>
-      synthesize({ voiceProfileId: vars.voiceId, text: vars.text }, { signal: vars.signal }),
+    mutationFn: (vars: SynthesisInput & { signal: AbortSignal }) =>
+      synthesize(vars, { signal: vars.signal }),
     retry: false, // R5
   });
   const pending = mutation.isPending;
@@ -128,7 +131,13 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
     const ctl = new AbortController();
     controller.current = ctl;
     try {
-      const out = await mutation.mutateAsync({ voiceId, text: parsed.data, signal: ctl.signal });
+      const out = await mutation.mutateAsync({
+        voiceProfileId: voiceId,
+        text: parsed.data,
+        emotion,
+        intensity: intensityApplies(emotion) ? intensity : undefined,
+        signal: ctl.signal,
+      });
       setResult({ ...out, text: parsed.data }); // replaces (and so revokes) the previous blob
       void client.invalidateQueries({ queryKey: HISTORY_KEY });
     } catch (err) {
@@ -226,6 +235,51 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           )}
         </div>
 
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="tts-emotion" className="block text-sm font-medium">
+              Delivery
+            </label>
+            <Select
+              id="tts-emotion"
+              value={emotion}
+              onChange={(e) => setEmotion(e.target.value)}
+              disabled={pending}
+              aria-describedby="tts-emotion-hint"
+            >
+              {EMOTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label htmlFor="tts-intensity" className="block text-sm font-medium">
+              Strength{" "}
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                {Math.round(intensity * 100)}%
+              </span>
+            </label>
+            <input
+              id="tts-intensity"
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={intensity}
+              onChange={(e) => setIntensity(Number(e.target.value))}
+              disabled={pending || !intensityApplies(emotion)}
+              aria-describedby="tts-emotion-hint"
+              className="mt-1 block min-h-11 w-full disabled:opacity-60"
+            />
+          </div>
+          <p id="tts-emotion-hint" className="text-xs text-muted-foreground sm:col-span-2">
+            Auto picks the delivery from your text. Choose one to apply it to every sentence; the
+            strength applies only to a named emotion.
+          </p>
+        </div>
+
         {pending && (
           <div role="status" aria-live="polite" className="space-y-2 text-sm">
             <p>
@@ -292,6 +346,23 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             label="Generated speech"
             animateIn
           />
+          {result.styleApplied === false && (
+            <p role="status" className="text-sm">
+              The chosen delivery could not be applied with this voice engine, so the audio uses its
+              default delivery.
+            </p>
+          )}
+          {result.emotions.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Delivery by sentence: {result.emotions.join(", ")}.
+            </p>
+          )}
+          {result.tagsDropped.length > 0 && (
+            <p role="status" className="text-sm">
+              This engine can&apos;t make these sounds, so they were left out:{" "}
+              {result.tagsDropped.join(", ")}.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2 pt-1">
             <Button
               variant="secondary"

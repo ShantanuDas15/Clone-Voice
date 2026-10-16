@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider, __resetBootstrapForTests, useAuth } from "@/components/auth-provider";
 import { TextToSpeechForm } from "@/components/text-to-speech-form";
-import { parseFilename, parseGenerationId } from "@/lib/api/synthesize";
+import { parseFilename, parseGenerationId, parseList } from "@/lib/api/synthesize";
+import { intensityApplies } from "@/lib/emotion";
 import { clearDraft, saveDraft } from "@/lib/draft";
 import { __resetSessionForTests } from "@/lib/auth/session";
 import { hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
@@ -424,5 +425,80 @@ describe("TextToSpeechForm", () => {
     await waitFor(() => expect(button).toBeDisabled());
     expect(screen.getByText("Verify your email first.")).toBeInTheDocument();
     expect(button).toHaveAccessibleDescription("Verify your email first.");
+  });
+});
+
+describe("delivery controls", () => {
+  const post = (headers: Record<string, string> = {}) => {
+    const seen: { body?: Record<string, unknown> } = {};
+    server.use(
+      mswHttp.post(`${API}/synthesize`, async ({ request }) => {
+        seen.body = (await request.json()) as Record<string, unknown>;
+        return wavResponse({
+          "Content-Disposition": `attachment; filename="synthesized_${GEN_ID}.wav"`,
+          ...headers,
+        });
+      }),
+    );
+    return seen;
+  };
+
+  it("parses comma-separated headers and knows when strength applies", () => {
+    expect(parseList("happy, sad,,")).toEqual(["happy", "sad"]);
+    expect(parseList(undefined)).toEqual([]);
+    expect(intensityApplies("auto")).toBe(false);
+    expect(intensityApplies("neutral")).toBe(false);
+    expect(intensityApplies("happy")).toBe(true);
+  });
+
+  it("sends neither field for Auto, and disables the strength slider", async () => {
+    const seen = post();
+    wrap(<TextToSpeechForm />);
+    await generate();
+    await screen.findByRole("link", { name: "Download WAV" });
+    expect(seen.body).toEqual({ voice_profile_id: fixtures.profile.id, text: "Hello there." });
+    expect(screen.getByLabelText(/Strength/)).toBeDisabled();
+  });
+
+  it("sends the emotion and strength, and reports what was applied", async () => {
+    const seen = post({
+      "X-Voice-Style": "applied",
+      "X-Voice-Emotions": "happy,happy",
+      "X-Voice-Tags-Dropped": "laugh",
+    });
+    wrap(<TextToSpeechForm />);
+    const user = userEvent.setup();
+    const select = await screen.findByLabelText("Voice");
+    await waitFor(() => expect(select).not.toBeDisabled());
+    await user.selectOptions(select, fixtures.profile.id);
+    await user.type(screen.getByLabelText("Text"), "Hello there.");
+    await user.selectOptions(screen.getByLabelText("Delivery"), "happy");
+    const slider = screen.getByLabelText(/Strength/);
+    expect(slider).toBeEnabled();
+    fireEvent.change(slider, { target: { value: "0.8" } });
+    await user.click(screen.getByRole("button", { name: "Generate speech" }));
+    await screen.findByRole("link", { name: "Download WAV" });
+    expect(seen.body).toEqual({
+      voice_profile_id: fixtures.profile.id,
+      text: "Hello there.",
+      emotion: "happy",
+      intensity: 0.8,
+    });
+    expect(screen.getByText(/Delivery by sentence: happy, happy/)).toBeInTheDocument();
+    expect(screen.getByText(/left out: laugh/)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be applied/)).not.toBeInTheDocument();
+  });
+
+  it("says so when the chosen delivery was ignored", async () => {
+    post({ "X-Voice-Style": "ignored" });
+    wrap(<TextToSpeechForm />);
+    const user = userEvent.setup();
+    const select = await screen.findByLabelText("Voice");
+    await waitFor(() => expect(select).not.toBeDisabled());
+    await user.selectOptions(select, fixtures.profile.id);
+    await user.type(screen.getByLabelText("Text"), "Hello there.");
+    await user.selectOptions(screen.getByLabelText("Delivery"), "sad");
+    await user.click(screen.getByRole("button", { name: "Generate speech" }));
+    expect(await screen.findByText(/could not be applied/)).toBeInTheDocument();
   });
 });
