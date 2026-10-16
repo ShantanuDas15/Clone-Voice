@@ -68,6 +68,7 @@ export const handlers = [
         headers: { "Content-Type": "audio/wav" },
       }),
   ),
+  http.get(`${API}/synthesize/capabilities`, () => HttpResponse.json({ emotion_control: true })),
   http.get(`${API}/synthesize/history`, () =>
     HttpResponse.json([fixtures.generation], { headers: { "X-Total-Count": "1" } }),
   ),

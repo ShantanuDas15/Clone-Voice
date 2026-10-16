@@ -7,6 +7,7 @@ import { Take } from "@/components/take";
 import { useAuth } from "@/components/auth-provider";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
 import { HISTORY_KEY, PROFILES_KEY, useProfiles } from "@/hooks/use-voice-profiles";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDegraded } from "@/hooks/use-health";
 import { useOnline } from "@/hooks/use-online";
 import { useObjectUrl } from "@/hooks/use-object-url";
@@ -65,6 +66,8 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const inFlight = useRef(false);
   const cooldown = useCooldown();
   const degraded = useDegraded();
+  const capabilities = useCapabilities();
+  const showDelivery = capabilities.data?.emotion_control === true;
   const online = useOnline();
 
   const mutation = useMutation({
@@ -134,8 +137,8 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
       const out = await mutation.mutateAsync({
         voiceProfileId: voiceId,
         text: parsed.data,
-        emotion,
-        intensity: intensityApplies(emotion) ? intensity : undefined,
+        emotion: showDelivery ? emotion : undefined,
+        intensity: showDelivery && intensityApplies(emotion) ? intensity : undefined,
         signal: ctl.signal,
       });
       setResult({ ...out, text: parsed.data }); // replaces (and so revokes) the previous blob
@@ -235,50 +238,52 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor="tts-emotion" className="block text-sm font-medium">
-              Delivery
-            </label>
-            <Select
-              id="tts-emotion"
-              value={emotion}
-              onChange={(e) => setEmotion(e.target.value)}
-              disabled={pending}
-              aria-describedby="tts-emotion-hint"
-            >
-              {EMOTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+        {showDelivery && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="tts-emotion" className="block text-sm font-medium">
+                Delivery
+              </label>
+              <Select
+                id="tts-emotion"
+                value={emotion}
+                onChange={(e) => setEmotion(e.target.value)}
+                disabled={pending}
+                aria-describedby="tts-emotion-hint"
+              >
+                {EMOTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label htmlFor="tts-intensity" className="block text-sm font-medium">
+                Strength{" "}
+                <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                  {Math.round(intensity * 100)}%
+                </span>
+              </label>
+              <input
+                id="tts-intensity"
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={intensity}
+                onChange={(e) => setIntensity(Number(e.target.value))}
+                disabled={pending || !intensityApplies(emotion)}
+                aria-describedby="tts-emotion-hint"
+                className="mt-1 block min-h-11 w-full disabled:opacity-60"
+              />
+            </div>
+            <p id="tts-emotion-hint" className="text-xs text-muted-foreground sm:col-span-2">
+              Auto picks the delivery from your text. Choose one to apply it to every sentence; the
+              strength applies only to a named emotion.
+            </p>
           </div>
-          <div>
-            <label htmlFor="tts-intensity" className="block text-sm font-medium">
-              Strength{" "}
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                {Math.round(intensity * 100)}%
-              </span>
-            </label>
-            <input
-              id="tts-intensity"
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={intensity}
-              onChange={(e) => setIntensity(Number(e.target.value))}
-              disabled={pending || !intensityApplies(emotion)}
-              aria-describedby="tts-emotion-hint"
-              className="mt-1 block min-h-11 w-full disabled:opacity-60"
-            />
-          </div>
-          <p id="tts-emotion-hint" className="text-xs text-muted-foreground sm:col-span-2">
-            Auto picks the delivery from your text. Choose one to apply it to every sentence; the
-            strength applies only to a named emotion.
-          </p>
-        </div>
+        )}
 
         {pending && (
           <div role="status" aria-live="polite" className="space-y-2 text-sm">

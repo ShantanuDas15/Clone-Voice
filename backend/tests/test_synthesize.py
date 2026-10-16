@@ -11,9 +11,12 @@ import pytest
 import torch
 from fastapi.testclient import TestClient
 
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           load_mock_models)
+from backend.core.config import settings
+from backend.services.tts_pipeline import (
+    InferenceQueueFullError,
+    InferenceTimeoutError,
+    load_mock_models,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -393,3 +396,61 @@ def test_synthesize_other_users_non_ready_profile_still_403(
         json={"voice_profile_id": str(profile.id), "text": "Hello"},
     )
     assert res.status_code == 403
+
+
+# --- GET /synthesize/capabilities (S7.5b) ---------------------------------------------------
+
+
+def test_capabilities_requires_auth(client: TestClient):
+    assert client.get("/api/v1/synthesize/capabilities").status_code == 401
+
+
+def test_capabilities_off_by_default(client: TestClient, auth_headers_syn):
+    res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
+    assert res.status_code == 200
+    assert res.json() == {"emotion_control": False}
+
+
+def test_capabilities_off_when_the_engine_cannot_style(
+    client: TestClient, auth_headers_syn, monkeypatch
+):
+    """The flag alone is not enough: SV2TTS has no delivery control, so it stays off."""
+    monkeypatch.setattr(settings, "EMOTION_CONTROL_ENABLED", True)
+    res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
+    assert res.json() == {"emotion_control": False}
+
+
+def test_capabilities_on_with_flag_and_a_styling_engine(
+    client: TestClient, auth_headers_syn, monkeypatch
+):
+    from backend.services import styled_synthesis
+
+    monkeypatch.setattr(settings, "EMOTION_CONTROL_ENABLED", True)
+    monkeypatch.setattr(styled_synthesis, "applies", lambda engine: True)
+    res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
+    assert res.json() == {"emotion_control": True}
+
+
+def test_capabilities_follow_the_canary(
+    client: TestClient, auth_headers_syn, monkeypatch
+):
+    from backend.services import styled_synthesis
+
+    monkeypatch.setattr(styled_synthesis, "applies", lambda engine: True)
+    monkeypatch.setattr(settings, "EMOTION_CONTROL_PERCENT", 100)
+    res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
+    assert res.json() == {"emotion_control": True}
+
+
+def test_capabilities_survive_an_engine_that_cannot_be_built(
+    client: TestClient, auth_headers_syn, monkeypatch
+):
+    import backend.api.synthesize as api
+
+    def boom(user_id):
+        raise ValueError("no such engine")
+
+    monkeypatch.setattr(api, "get_engine_for_user", boom)
+    res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
+    assert res.status_code == 200
+    assert res.json() == {"emotion_control": False}
