@@ -2,12 +2,37 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PasswordField, TextField } from "@/components/form-fields";
 import HomePage from "@/app/page";
 
+let status: "loading" | "authenticated" | "unauthenticated" = "unauthenticated";
+vi.mock("@/components/auth-provider", () => ({ useAuth: () => ({ status }) }));
+
 describe("landing page", () => {
+  beforeEach(() => {
+    status = "unauthenticated";
+  });
+
+  it("sends a signed-in user into the app instead of offering sign-up", () => {
+    status = "authenticated";
+    render(<HomePage />);
+    expect(screen.getByRole("link", { name: "Go to Generate" })).toHaveAttribute(
+      "href",
+      "/generate",
+    );
+    expect(screen.queryByRole("link", { name: "Create account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
+  });
+
+  it("shows neither set of actions while the session resolves", () => {
+    status = "loading";
+    render(<HomePage />);
+    expect(screen.queryByRole("link", { name: "Create account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Go to Generate" })).not.toBeInTheDocument();
+  });
+
   it("has one h1, a primary and a secondary action, and the three plain statements", () => {
     render(<HomePage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);

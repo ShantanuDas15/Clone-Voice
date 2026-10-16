@@ -1,6 +1,4 @@
-import Link from "next/link";
-
-import { buttonVariants } from "@/components/ui/button";
+import { HomeActions } from "@/components/home-actions";
 
 // Each statement is true by construction and cites its source (UX plan §11.3): consent is
 // required at upload (backend/api/voice.py), deleting a voice erases everything made with it
@@ -34,14 +32,7 @@ export default function HomePage() {
           Upload or record 10 to 30 seconds of a voice you have the right to use, then turn any text
           into speech in that voice.
         </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link href="/signup" className={buttonVariants()}>
-            Create account
-          </Link>
-          <Link href="/login" className={buttonVariants({ variant: "secondary" })}>
-            Sign in
-          </Link>
-        </div>
+        <HomeActions />
       </section>
 
       <section aria-labelledby="how" className="mt-16">
