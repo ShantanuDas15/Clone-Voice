@@ -21,8 +21,12 @@ from backend.core.security import get_current_user, get_verified_user
 from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
-from backend.schemas.synthesize import GenerationOut, SynthesizeRequest
-from backend.services import style_markup
+from backend.schemas.synthesize import (
+    GenerationOut,
+    SynthesisCapabilitiesOut,
+    SynthesizeRequest,
+)
+from backend.services import style_markup, styled_synthesis
 from backend.services.text_analysis import StyleOverride
 from backend.services.tts_engine import EngineUnavailableError, get_engine_for_user
 from backend.services.tts_pipeline import (
@@ -437,6 +441,24 @@ async def synthesize(
             **_tag_headers(result),
         },
     )
+
+
+@router.get("/capabilities", response_model=SynthesisCapabilitiesOut)
+@limiter.limit(settings.API_RATE_LIMIT)
+def get_capabilities(
+    request: Request, current_user: User = Depends(get_current_user)
+) -> SynthesisCapabilitiesOut:
+    """Say whether an emotion the user picks would be applied for them."""
+    try:
+        user_id = str(current_user.id)
+        engine = get_engine_for_user(user_id)
+        applied = styled_synthesis.enabled_for(user_id) and styled_synthesis.applies(
+            engine
+        )
+    except Exception:  # an engine that cannot be built just means no controls
+        logger.exception("capabilities check failed")
+        applied = False
+    return SynthesisCapabilitiesOut(emotion_control=applied)
 
 
 @router.get("/history", response_model=List[GenerationOut])

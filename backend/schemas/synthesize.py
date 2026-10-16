@@ -6,8 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from unidecode import unidecode
 
 from backend.services import style_markup
-from backend.services.sv2tts.synthesizer.utils.symbols import \
-    symbols as _sv2tts_symbols
+from backend.services.sv2tts.synthesizer.utils.symbols import symbols as _sv2tts_symbols
 from backend.services.text_normalization import clean_text
 
 # The real Tacotron2 checkpoint's embedding table only has one row per symbol
@@ -128,3 +127,11 @@ class GenerationOut(BaseModel):
         return value
 
     model_config = {"from_attributes": True}
+
+
+class SynthesisCapabilitiesOut(BaseModel):
+    """What the signed-in user's synthesis can do, so the client shows only working controls."""
+
+    # True when a chosen emotion would be applied for this user (flag or canary on, and the
+    # engine that serves them has a delivery control); false means it would be ignored.
+    emotion_control: bool

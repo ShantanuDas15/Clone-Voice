@@ -66,6 +66,7 @@ export async function mockApi(page: Page, firstRun: boolean): Promise<void> {
       return r.fulfill(
         body(firstRun ? [] : [generation], { "X-Total-Count": firstRun ? "0" : "1" }),
       );
+    if (path === "/synthesize/capabilities") return r.fulfill(body({ emotion_control: true }));
     if (path === "/terms") return r.fulfill(body({ version: "1", url: null }));
     return r.fulfill({ status: 404, headers: CORS, body: "{}" });
   });

@@ -22,6 +22,16 @@ export interface SynthesisInput {
   intensity?: number;
 }
 
+export interface SynthesisCapabilities {
+  /** True when a chosen emotion would be applied for this user; false means it is ignored. */
+  emotion_control: boolean;
+}
+
+export async function fetchCapabilities(signal?: AbortSignal): Promise<SynthesisCapabilities> {
+  const { data } = await http.get<SynthesisCapabilities>("/synthesize/capabilities", { signal });
+  return data;
+}
+
 /** Split a comma-separated header into trimmed, non-empty values. */
 export function parseList(value: unknown): string[] {
   return typeof value === "string"

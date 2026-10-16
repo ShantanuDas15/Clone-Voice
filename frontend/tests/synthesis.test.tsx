@@ -457,7 +457,7 @@ describe("delivery controls", () => {
     await generate();
     await screen.findByRole("link", { name: "Download WAV" });
     expect(seen.body).toEqual({ voice_profile_id: fixtures.profile.id, text: "Hello there." });
-    expect(screen.getByLabelText(/Strength/)).toBeDisabled();
+    expect(await screen.findByLabelText(/Strength/)).toBeDisabled();
   });
 
   it("sends the emotion and strength, and reports what was applied", async () => {
@@ -472,8 +472,8 @@ describe("delivery controls", () => {
     await waitFor(() => expect(select).not.toBeDisabled());
     await user.selectOptions(select, fixtures.profile.id);
     await user.type(screen.getByLabelText("Text"), "Hello there.");
-    await user.selectOptions(screen.getByLabelText("Delivery"), "happy");
-    const slider = screen.getByLabelText(/Strength/);
+    await user.selectOptions(await screen.findByLabelText("Delivery"), "happy");
+    const slider = await screen.findByLabelText(/Strength/);
     expect(slider).toBeEnabled();
     fireEvent.change(slider, { target: { value: "0.8" } });
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
@@ -497,8 +497,36 @@ describe("delivery controls", () => {
     await waitFor(() => expect(select).not.toBeDisabled());
     await user.selectOptions(select, fixtures.profile.id);
     await user.type(screen.getByLabelText("Text"), "Hello there.");
-    await user.selectOptions(screen.getByLabelText("Delivery"), "sad");
+    await user.selectOptions(await screen.findByLabelText("Delivery"), "sad");
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     expect(await screen.findByText(/could not be applied/)).toBeInTheDocument();
+  });
+
+  it("hides the controls when the backend would ignore them", async () => {
+    const seen = post();
+    server.use(
+      mswHttp.get(`${API}/synthesize/capabilities`, () =>
+        HttpResponse.json({ emotion_control: false }),
+      ),
+    );
+    wrap(<TextToSpeechForm />);
+    await generate();
+    await screen.findByRole("link", { name: "Download WAV" });
+    expect(screen.queryByLabelText("Delivery")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Strength/)).not.toBeInTheDocument();
+    expect(seen.body).toEqual({ voice_profile_id: fixtures.profile.id, text: "Hello there." });
+  });
+
+  it("hides the controls, and still generates, when the capabilities call fails", async () => {
+    post();
+    server.use(
+      mswHttp.get(`${API}/synthesize/capabilities`, () =>
+        HttpResponse.json({ detail: "boom" }, { status: 500 }),
+      ),
+    );
+    wrap(<TextToSpeechForm />);
+    await generate();
+    expect(await screen.findByRole("link", { name: "Download WAV" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Delivery")).not.toBeInTheDocument();
   });
 });
