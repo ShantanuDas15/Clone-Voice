@@ -74,7 +74,8 @@ describe("response fixtures match the backend schemas", () => {
   });
 
   it("the validator rejects drift (a missing required field, a wrong type)", () => {
-    const { email: _omitted, ...withoutEmail } = fixtures.user;
+    const withoutEmail: Record<string, unknown> = { ...fixtures.user };
+    delete withoutEmail.email;
     expect(validateComponent("UserOut", withoutEmail)).not.toEqual([]);
     expect(validateComponent("UserOut", { ...fixtures.user, has_password: "yes" })).not.toEqual([]);
   });
