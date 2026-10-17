@@ -578,7 +578,10 @@ describe("Deleting a generation from History", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Delete: Second one" }));
     const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText("Delete this audio?")).toBeInTheDocument();
+    // The page has an h1 and no h2 before the dialog, so the dialog title is an h2 (axe heading-order).
+    expect(
+      within(dialog).getByRole("heading", { level: 2, name: "Delete this audio?" }),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText("“Second one”")).toBeInTheDocument();
     expect(
       within(dialog).getByText(/permanently deletes the audio and the text/i),

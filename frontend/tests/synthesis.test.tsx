@@ -171,7 +171,8 @@ describe("TextToSpeechForm", () => {
     );
     wrap(<TextToSpeechForm />);
     await generate();
-    const status = await screen.findByText(/This can take a minute/);
+    const note = await screen.findByText(/This can take a minute/);
+    const status = note.previousElementSibling as HTMLElement; // "Generating… 3 s"
     const clock = status.querySelector("span");
     expect(clock).toHaveAttribute("aria-hidden", "true");
     expect(clock?.className).toContain("font-mono");

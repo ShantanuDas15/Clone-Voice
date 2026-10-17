@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { AudioUploader } from "@/components/audio-uploader";
 import { TextField } from "@/components/form-fields";
+import { useFocusFirstInvalid } from "@/hooks/use-focus-first-invalid";
 import { useDegraded } from "@/hooks/use-health";
 import { useOnline } from "@/hooks/use-online";
 import { PROFILES_KEY } from "@/hooks/use-voice-profiles";
@@ -67,6 +68,7 @@ export function UploadVoiceForm() {
   const [recorderKey, setRecorderKey] = useState(0);
   const [recordingUnavailable, setRecordingUnavailable] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const { ref: formRef, focusFirstInvalid } = useFocusFirstInvalid<HTMLFormElement>();
   const createdRef = useRef<HTMLDivElement>(null);
 
   // Feature-detect after mount (R10): the server render cannot know the browser's capabilities.
@@ -151,7 +153,10 @@ export function UploadVoiceForm() {
     setNameError(parsed.success ? undefined : parsed.error.issues[0]?.message);
     setFileError(files.length > 0 ? undefined : "Choose an audio file");
     setConsentError(consent ? undefined : "Confirm you have the right to use this voice");
-    if (!parsed.success || files.length === 0 || !consent) return;
+    if (!parsed.success || files.length === 0 || !consent) {
+      focusFirstInvalid();
+      return;
+    }
 
     inFlight.current = true;
     setProgress(0);
@@ -176,6 +181,7 @@ export function UploadVoiceForm() {
           else if (fe.field === "file") setFileError(fe.message);
           else setFormError(fe.message);
         }
+        focusFirstInvalid();
       } else setFormError(uploadErrorMessage(err));
       // Failed attempts can leave a `failed` profile behind (G-11): resync the list.
       void client.invalidateQueries({ queryKey: PROFILES_KEY });
@@ -191,7 +197,13 @@ export function UploadVoiceForm() {
   const blocker = !online ? "You're offline." : unverified ? "Verify your email first." : null;
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-4" aria-label="Create a voice">
+    <form
+      ref={formRef}
+      onSubmit={onSubmit}
+      noValidate
+      className="space-y-4"
+      aria-label="Create a voice"
+    >
       <TextField
         label="Voice name"
         name="voice-name"
@@ -245,6 +257,7 @@ export function UploadVoiceForm() {
             checked={consent}
             onChange={(e) => setConsent(e.target.checked)}
             disabled={pending}
+            aria-invalid={consentError ? true : undefined}
             className="mt-1 h-4 w-4"
           />
           <span>
@@ -314,7 +327,7 @@ export function UploadVoiceForm() {
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="submit"
-          disabled={pending || degraded || blocker !== null}
+          disabled={degraded || blocker !== null}
           aria-describedby={
             [blocker && "upload-blocked", degraded && "upload-paused"].filter(Boolean).join(" ") ||
             undefined

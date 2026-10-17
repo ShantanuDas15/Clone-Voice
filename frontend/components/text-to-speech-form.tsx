@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth-provider";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
 import { HISTORY_KEY, PROFILES_KEY, useProfiles } from "@/hooks/use-voice-profiles";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useFocusFirstInvalid } from "@/hooks/use-focus-first-invalid";
 import { useDegraded } from "@/hooks/use-health";
 import { useOnline } from "@/hooks/use-online";
 import { useObjectUrl } from "@/hooks/use-object-url";
@@ -65,6 +66,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const [result, setResult] = useState<(SynthesisResult & { text: string }) | null>(null);
   const controller = useRef<AbortController | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const { ref: formRef, focusFirstInvalid } = useFocusFirstInvalid<HTMLFormElement>();
   const resultRef = useRef<HTMLElement>(null);
   const inFlight = useRef(false);
   const autoPicked = useRef(false);
@@ -149,6 +151,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
     setAnnouncement(""); // cleared first, so the same message is announced again next time
     const parsed = synthesisTextSchema.safeParse(source);
     setTextError(parsed.success ? undefined : parsed.error.issues[0]?.message);
+    if (!parsed.success) focusFirstInvalid();
     if (!voiceId) {
       setFormError("Choose a voice first.");
       return;
@@ -180,8 +183,10 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
         return;
       }
       const field = err.fieldErrors.find((f) => f.field === "text");
-      if (err.status === 422 && field) setTextError(field.message);
-      else setFormError(errorMessage(err));
+      if (err.status === 422 && field) {
+        setTextError(field.message);
+        focusFirstInvalid();
+      } else setFormError(errorMessage(err));
       if (
         err.kind === "NOT_FOUND" ||
         err.kind === "PROFILE_NOT_READY" ||
@@ -194,6 +199,8 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
       }
       if (err.kind === "RATE_LIMITED") cooldown.start(err.retryAfterSec ?? RATE_COOLDOWN_S);
       if (err.kind === "BUSY") cooldown.start(err.retryAfterSec ?? BUSY_COOLDOWN_S);
+      // Generate is about to be disabled for the cooldown; keep focus somewhere useful.
+      if (err.kind === "RATE_LIMITED" || err.kind === "BUSY") textRef.current?.focus();
     } finally {
       inFlight.current = false;
       controller.current = null;
@@ -223,6 +230,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   return (
     <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
       <form
+        ref={formRef}
         onSubmit={onSubmit}
         noValidate
         className="max-w-xl space-y-4"
@@ -357,7 +365,9 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
               {/* Hidden from assistive tech so the ticking seconds are not announced every second. */}
               <span aria-hidden className="font-mono tabular-nums">
                 {elapsed} s
-              </span>{" "}
+              </span>
+            </p>
+            <p className="text-muted-foreground">
               This can take a minute or more on slow servers; please keep this page open.
             </p>
             <div aria-hidden className="h-1 overflow-hidden rounded bg-muted">
@@ -381,7 +391,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           <Button
             type="submit"
             className="whitespace-nowrap"
-            disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
+            disabled={degraded || cooldown.remaining > 0 || blocker !== null}
             aria-describedby={whyDisabled}
             loading={pending}
           >
