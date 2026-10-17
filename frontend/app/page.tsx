@@ -15,7 +15,7 @@ const PROMISES = [
 const STEPS = [
   {
     title: "Add a sample",
-    body: "Upload or record 10 to 30 seconds of a voice you have the right to use.",
+    body: "Upload an audio file, or record with your microphone.",
   },
   { title: "Type your text", body: "Choose the voice and write what it should say." },
   { title: "Play or download", body: "Listen right away, replay it later from your history." },
@@ -25,10 +25,10 @@ export default function HomePage() {
   return (
     <>
       <section className="rounded-lg bg-muted px-6 py-14 text-center sm:py-20">
-        <h1 className="mx-auto max-w-2xl text-[2rem] font-semibold leading-[2.375rem] tracking-tight sm:text-5xl sm:leading-[3.25rem]">
+        <h1 className="mx-auto max-w-2xl text-balance text-[2rem] font-semibold leading-[2.375rem] tracking-tight sm:text-5xl sm:leading-[3.25rem]">
           Clone a voice. Say anything.
         </h1>
-        <p className="mx-auto mt-5 max-w-xl text-lg text-muted-foreground">
+        <p className="mx-auto mt-5 max-w-xl text-balance text-lg text-muted-foreground">
           Upload or record 10 to 30 seconds of a voice you have the right to use, then turn any text
           into speech in that voice.
         </p>
