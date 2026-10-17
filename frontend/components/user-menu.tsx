@@ -33,6 +33,8 @@ export function UserMenu() {
   }
 
   if (status === "unauthenticated") {
+    // The account forms carry the page's one primary action, so the header link steps back.
+    const onAccountForm = isCurrent(pathname, "/login") || isCurrent(pathname, "/signup");
     return (
       <div className="flex min-h-11 items-center gap-4 text-sm">
         <NavLink href="/login" className="inline-flex min-h-11 items-center">
@@ -41,7 +43,10 @@ export function UserMenu() {
         <Link
           href="/signup"
           aria-current={isCurrent(pathname, "/signup") ? "page" : undefined}
-          className={buttonVariants({ size: "sm" })}
+          className={buttonVariants({
+            size: "sm",
+            variant: onAccountForm ? "secondary" : "primary",
+          })}
         >
           Create account
         </Link>

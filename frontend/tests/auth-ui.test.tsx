@@ -188,6 +188,25 @@ describe("LoginForm", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("marks the password field invalid and described by the 401 message", async () => {
+    const { user } = await submit();
+    server.use(
+      mswHttp.post(`${API}/auth/login`, () =>
+        HttpResponse.json({ detail: "Incorrect email or password" }, { status: 401 }),
+      ),
+    );
+    wrap(<LoginForm />);
+    expect(await screen.findByLabelText("Email")).toHaveAttribute("autocomplete", "username");
+    await user.type(screen.getByLabelText("Email"), "ada@example.com");
+    const password = screen.getByLabelText("Password");
+    await user.type(password, "wrong");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/signed up with google\?/i);
+    expect(password).toHaveAttribute("aria-invalid", "true");
+    expect(password).toHaveAttribute("aria-describedby", alert.id);
+  });
+
   it("shows a Retry-After countdown on 429", async () => {
     const { user } = await submit();
     server.use(

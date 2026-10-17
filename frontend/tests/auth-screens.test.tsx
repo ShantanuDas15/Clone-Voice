@@ -95,6 +95,26 @@ describe("header and footer on the account screens", () => {
     expect(screen.getByRole("link", { name: "Sign in" })).not.toHaveAttribute("aria-current");
   });
 
+  it("steps the header's Create account back to secondary on the account forms only", async () => {
+    pathname = "/login";
+    const login = wrap(<UserMenu />);
+    expect((await screen.findByRole("link", { name: "Create account" })).className).not.toMatch(
+      /bg-primary/,
+    );
+    login.unmount();
+    pathname = "/signup";
+    const signup = wrap(<UserMenu />);
+    expect((await screen.findByRole("link", { name: "Create account" })).className).not.toMatch(
+      /bg-primary/,
+    );
+    signup.unmount();
+    pathname = "/";
+    wrap(<UserMenu />);
+    expect((await screen.findByRole("link", { name: "Create account" })).className).toMatch(
+      /bg-primary/,
+    );
+  });
+
   it("gives the footer Terms link a 44 px target without growing the footer", () => {
     render(<SiteFooter />);
     const footer = screen.getByRole("contentinfo");
