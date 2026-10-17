@@ -619,6 +619,17 @@
             ],
             "title": "Output Retention Days"
           },
+          "password_reset_expire_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password Reset Expire Minutes"
+          },
           "url": {
             "anyOf": [
               {
@@ -1628,7 +1639,7 @@
     },
     "/api/v1/terms": {
       "get": {
-        "description": "Return the terms version an upload must acknowledge, and the output retention.",
+        "description": "Return the terms version, the output retention and the reset-link lifetime.",
         "operationId": "get_terms_api_v1_terms_get",
         "responses": {
           "200": {

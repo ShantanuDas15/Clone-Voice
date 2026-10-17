@@ -10,10 +10,11 @@ router = APIRouter()
 @router.get("", response_model=TermsOut)
 @limiter.limit("60/minute")
 def get_terms(request: Request) -> TermsOut:
-    """Return the terms version an upload must acknowledge, and the output retention."""
+    """Return the terms version, the output retention and the reset-link lifetime."""
     days = settings.OUTPUT_RETENTION_DAYS
     return TermsOut(
         version=settings.TERMS_VERSION,
         url=settings.TERMS_URL or None,
         output_retention_days=days if days > 0 else None,
+        password_reset_expire_minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
     )
