@@ -5,7 +5,7 @@ import * as authApi from "@/lib/api/auth";
 import { http as client } from "@/lib/api/http";
 import { fetchHistory } from "@/lib/api/history";
 import { synthesize } from "@/lib/api/synthesize";
-import { uploadProfile } from "@/lib/api/voice";
+import { addClips, uploadProfile } from "@/lib/api/voice";
 import { fixtures, handlers } from "@/mocks/handlers";
 import { server } from "@/mocks/server";
 
@@ -213,6 +213,22 @@ describe("requests the client builds match the request schemas", () => {
       required: string[];
     };
     expect(sent.length).toBeGreaterThan(0);
+    expect(sent.filter((f) => !Object.keys(schema.properties).includes(f))).toEqual([]);
+    expect(schema.required.filter((f) => !sent.includes(f))).toEqual([]);
+  });
+
+  it("POST /voice/profiles/{id}/samples sends only declared multipart fields, including every required one", async () => {
+    const post = vi.spyOn(client, "post").mockResolvedValue({ data: fixtures.profile });
+    const wav = (n: string) => new File([new Uint8Array(8)], n, { type: "audio/wav" });
+    await addClips("id", { files: [wav("a.wav")], termsVersion: "1" });
+    await addClips("id", { files: [wav("a.wav"), wav("b.wav")], termsVersion: "1" });
+    const sent = post.mock.calls.flatMap((c) => [...(c[1] as FormData).keys()]);
+    post.mockRestore();
+    const schema = spec.components.schemas
+      .Body_add_samples_api_v1_voice_profiles__profile_id__samples_post as {
+      properties: Record<string, unknown>;
+      required: string[];
+    };
     expect(sent.filter((f) => !Object.keys(schema.properties).includes(f))).toEqual([]);
     expect(schema.required.filter((f) => !sent.includes(f))).toEqual([]);
   });

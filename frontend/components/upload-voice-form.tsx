@@ -32,7 +32,7 @@ type SampleMode = "file" | "record";
 const SAMPLE_MODES: readonly SampleMode[] = ["file", "record"];
 
 /** Copy for an upload failure, by kind (R3/R8). Network drops mid-upload usually mean a too-large body. */
-function uploadErrorMessage(e: ApiError): string {
+export function uploadErrorMessage(e: ApiError): string {
   switch (e.kind) {
     case "EMAIL_UNVERIFIED":
       return "Please verify your email address before uploading a voice.";

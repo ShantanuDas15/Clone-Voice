@@ -81,3 +81,24 @@ test("two clips become one voice, with the recording advice shown", async ({ pag
   await expect(page.getByText("Voice “Two clips” created.")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByRole("region", { name: "Recording quality" })).toBeVisible();
 });
+
+test("add a clip to a voice, then remove it again", async ({ page }) => {
+  await signUpVerified(page, "manageclips");
+  await createVoice(page, "Growing voice");
+  const row = page.getByRole("listitem").filter({ hasText: "Growing voice" });
+  await row.getByText(/^Clips \(/).click();
+  await expect(row.getByText("Clip 1")).toBeVisible();
+  await expect(row.getByRole("button", { name: /Remove clip/ })).toHaveCount(0); // the only clip
+
+  const form = row.getByRole("form", { name: "Add clips to Growing voice" });
+  await form
+    .getByLabel("Voice sample")
+    .setInputFiles({ name: "more.wav", mimeType: "audio/wav", buffer: readFileSync(SAMPLE_WAV) });
+  await form.getByRole("checkbox").check();
+  await form.getByRole("button", { name: "Add clips" }).click();
+  await expect(row.getByText("Clip 2")).toBeVisible({ timeout: 120_000 });
+
+  await row.getByRole("button", { name: "Remove clip 2 of Growing voice" }).click();
+  await expect(row.getByText("Clip 2")).toHaveCount(0);
+  await expect(row.getByText("Clip 1")).toBeVisible();
+});
