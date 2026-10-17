@@ -10,7 +10,11 @@ const API = "http://api.test/api/v1";
 
 describe("http client", () => {
   it("returns parsed bodies", async () => {
-    await expect(fetchTerms()).resolves.toEqual({ version: "1", url: null });
+    await expect(fetchTerms()).resolves.toEqual({
+      version: "1",
+      url: null,
+      password_reset_expire_minutes: 30,
+    });
   });
 
   it("throws ApiError for HTTP failures", async () => {

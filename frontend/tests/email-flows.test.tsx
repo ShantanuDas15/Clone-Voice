@@ -163,6 +163,29 @@ describe("ForgotPasswordForm", () => {
     expect(await screen.findByText(/if an account exists/i)).toBeInTheDocument();
   });
 
+  it("states the link lifetime the server publishes, not a fixed one", async () => {
+    server.use(
+      mswHttp.get(`${API}/terms`, () =>
+        HttpResponse.json({ version: "1", url: null, password_reset_expire_minutes: 90 }),
+      ),
+    );
+    wrap(<ForgotPasswordForm />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Email"), "anyone@example.com");
+    await user.click(screen.getByRole("button", { name: /send reset link/i }));
+    expect(await screen.findByText(/it expires in 90 minutes/i)).toBeInTheDocument();
+  });
+
+  it("states no lifetime when the server gave none", async () => {
+    server.use(mswHttp.get(`${API}/terms`, () => HttpResponse.json({ version: "1", url: null })));
+    wrap(<ForgotPasswordForm />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Email"), "anyone@example.com");
+    await user.click(screen.getByRole("button", { name: /send reset link/i }));
+    const confirmation = await screen.findByText(/if an account exists/i);
+    expect(confirmation).not.toHaveTextContent(/expires/i);
+  });
+
   it("validates the email client-side", async () => {
     wrap(<ForgotPasswordForm />);
     await userEvent.click(await screen.findByRole("button", { name: /send reset link/i }));

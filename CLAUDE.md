@@ -171,7 +171,7 @@ backend/
 | `POST` | `/api/v1/auth/verify-email`, `/resend-verification` | ❌ / ✅ | Email verification |
 | `POST` | `/api/v1/auth/forgot-password`, `/reset-password` | ❌ | Password reset by emailed single-use token |
 | `GET` | `/api/v1/auth/google`, `/google/callback` | ❌ | Google OAuth |
-| `GET` | `/api/v1/terms` | ❌ | Current voice-consent terms (version, text) |
+| `GET` | `/api/v1/terms` | ❌ | Current voice-consent terms (version, link), output retention days, password-reset link lifetime (minutes) |
 | `POST` | `/api/v1/voice/upload` | ✅ | Upload one audio sample (`file`) or several clips of one speaker (`files`, up to `VOICE_MAX_SAMPLES`), + `consent_confirmed=true` → new voice profile |
 | `GET` | `/api/v1/voice/profiles` | ✅ | List user's voice profiles, each with its clips (agreement, mismatch flag, stored recording-quality report) |
 | `POST` | `/api/v1/voice/profiles/{profile_id}/samples` | ✅ | Add clips (`file`/`files`, + `consent_confirmed=true`) to an existing profile; the embedding is re-derived over all clips |

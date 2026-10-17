@@ -2,8 +2,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from backend.tests.test_voice import \
-    auth_headers  # noqa: F401  (pytest fixture)
+from backend.tests.test_voice import auth_headers  # noqa: F401  (pytest fixture)
 from backend.tests.test_voice import create_dummy_wav
 
 
@@ -51,6 +50,13 @@ def test_terms_retention_is_null_when_outputs_are_kept_forever(
 def test_terms_retention_keeps_a_fractional_value(client: TestClient) -> None:
     with patch("backend.core.config.settings.OUTPUT_RETENTION_DAYS", 0.5):
         assert client.get("/api/v1/terms").json()["output_retention_days"] == 0.5
+
+
+def test_terms_reports_the_reset_link_lifetime(client: TestClient) -> None:
+    """The forgot-password page states this number instead of hard-coding it."""
+    assert client.get("/api/v1/terms").json()["password_reset_expire_minutes"] == 30
+    with patch("backend.core.config.settings.PASSWORD_RESET_EXPIRE_MINUTES", 45):
+        assert client.get("/api/v1/terms").json()["password_reset_expire_minutes"] == 45
 
 
 def test_upload_with_matching_terms_version_succeeds(

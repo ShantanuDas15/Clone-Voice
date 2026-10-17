@@ -39,7 +39,9 @@ export const fixtures = {
 /** Default happy-path handlers for every endpoint in plan §3; tests override per case. */
 export const handlers = [
   http.get(`${ORIGIN}/health/ready`, () => HttpResponse.json({ status: "ok" })),
-  http.get(`${API}/terms`, () => HttpResponse.json({ version: "1", url: null })),
+  http.get(`${API}/terms`, () =>
+    HttpResponse.json({ version: "1", url: null, password_reset_expire_minutes: 30 }),
+  ),
   http.post(`${API}/auth/signup`, () => HttpResponse.json(fixtures.token, { status: 201 })),
   http.post(`${API}/auth/login`, () => HttpResponse.json(fixtures.token)),
   http.post(`${API}/auth/refresh`, () => HttpResponse.json(fixtures.token)),

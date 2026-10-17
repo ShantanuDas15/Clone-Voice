@@ -35,6 +35,8 @@ test("forgot → reset changes the password, ends other sessions and reuse is re
   await page.getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Send reset link" }).click();
   await expect(page.getByText(/if an account exists/i)).toBeVisible();
+  // The figure comes from the server (PASSWORD_RESET_EXPIRE_MINUTES), not from the page.
+  await expect(page.getByText(/it expires in 30 minutes/i)).toBeVisible();
 
   const token = await emailedToken("reset-password", email);
   await page.goto(`/reset-password#token=${token}`);
