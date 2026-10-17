@@ -308,6 +308,18 @@ describe("TextToSpeechForm", () => {
     expect(screen.getByRole("button", { name: "Generate speech" })).toBeDisabled();
   });
 
+  it("says why once and counts the wait down once after a 429", async () => {
+    server.use(
+      mswHttp.post(`${API}/synthesize`, () =>
+        HttpResponse.json({ error: "Rate limit exceeded" }, { status: 429 }),
+      ),
+    );
+    wrap(<TextToSpeechForm />);
+    await generate();
+    expect(await screen.findByText("You've sent too many requests.")).toBeInTheDocument();
+    expect(screen.getAllByText(/try again in/i)).toHaveLength(1);
+  });
+
   it("uses Retry-After and treats 'service busy' as a short cooldown", async () => {
     server.use(
       mswHttp.post(`${API}/synthesize`, () =>
@@ -629,7 +641,7 @@ describe("generate screen details", () => {
   it("says the strength is not adjustable until a delivery is chosen", async () => {
     wrap(<TextToSpeechForm />);
     const slider = await screen.findByLabelText(/Strength/);
-    expect(screen.getByText("pick a delivery first")).toBeInTheDocument();
+    expect(screen.getByText("(choose a delivery to adjust)")).toBeInTheDocument();
     await userEvent.setup().selectOptions(screen.getByLabelText("Delivery"), "happy");
     expect(slider).not.toBeDisabled();
     expect(screen.getByText("50%")).toBeInTheDocument();

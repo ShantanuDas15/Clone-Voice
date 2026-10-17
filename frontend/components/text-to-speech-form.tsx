@@ -186,7 +186,12 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
       if (err.status === 422 && field) {
         setTextError(field.message);
         focusFirstInvalid();
-      } else setFormError(errorMessage(err));
+      } else {
+        // The cooldown line below counts the wait down, so the message only says why.
+        setFormError(
+          err.kind === "RATE_LIMITED" ? "You've sent too many requests." : errorMessage(err),
+        );
+      }
       if (
         err.kind === "NOT_FOUND" ||
         err.kind === "PROFILE_NOT_READY" ||
@@ -303,11 +308,15 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             <div>
               <label htmlFor="tts-intensity" className="block text-sm font-medium">
                 Strength{" "}
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                  {intensityApplies(emotion)
-                    ? `${Math.round(intensity * 100)}%`
-                    : "pick a delivery first"}
-                </span>
+                {intensityApplies(emotion) ? (
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    {Math.round(intensity * 100)}%
+                  </span>
+                ) : (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    (choose a delivery to adjust)
+                  </span>
+                )}
               </label>
               <input
                 id="tts-intensity"

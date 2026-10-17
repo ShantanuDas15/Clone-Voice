@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import NotFound from "@/app/not-found";
 import { AuthProvider, __resetBootstrapForTests } from "@/components/auth-provider";
@@ -26,6 +26,8 @@ function wrap(ui: ReactNode) {
     </QueryClientProvider>,
   );
 }
+
+afterEach(() => vi.unstubAllGlobals());
 
 beforeEach(() => {
   __resetSessionForTests();
@@ -108,6 +110,35 @@ describe("invalid submit moves focus to the first invalid field", () => {
     const consent = screen.getByRole("checkbox", { name: /I confirm I have the right/ });
     expect(consent).toHaveAttribute("aria-invalid", "true");
     expect(consent).toHaveFocus();
+  });
+});
+
+describe("create-voice form polish", () => {
+  it("shows the Upload/Record choice as a segmented control with one selected option", async () => {
+    // The choice only exists where the browser can record (jsdom cannot).
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        static isTypeSupported = () => true;
+      },
+    );
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn() },
+    });
+    wrap(<UploadVoiceForm />);
+    const group = await screen.findByRole("radiogroup", { name: "How to add a sample" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+    expect(radios[0]).toHaveClass("bg-primary");
+    expect(radios[1]).not.toHaveClass("bg-primary");
+  });
+
+  it("keeps the retention note and the terms status in one line under the consent box", () => {
+    wrap(<UploadVoiceForm />);
+    const note = screen.getByText(/Your sample is kept until you delete this voice/);
+    expect(note.tagName).toBe("P");
+    expect(note.querySelectorAll("p")).toHaveLength(0);
   });
 });
 

@@ -216,7 +216,11 @@ export function UploadVoiceForm() {
       <fieldset className="space-y-3" disabled={pending}>
         <legend className="sr-only">Sample source</legend>
         {recordingUnavailable === null ? (
-          <div role="radiogroup" aria-label="How to add a sample" className="flex gap-2 text-sm">
+          <div
+            role="radiogroup"
+            aria-label="How to add a sample"
+            className="inline-flex overflow-hidden rounded border border-line text-sm"
+          >
             {SAMPLE_MODES.map((m) => (
               <button
                 key={m}
@@ -227,7 +231,7 @@ export function UploadVoiceForm() {
                 tabIndex={mode === m ? 0 : -1}
                 onClick={() => selectMode(m)}
                 onKeyDown={(e) => onModeKeyDown(e, m)}
-                className={`min-h-11 rounded border px-4 forced-colors:border-2 ${mode === m ? "border-primary bg-muted font-medium forced-colors:border-[Highlight]" : "border-line"}`}
+                className={`min-h-11 px-4 transition-colors duration-fast ${mode === m ? "bg-primary font-medium text-primary-foreground forced-colors:underline" : "bg-surface hover:bg-muted"}`}
               >
                 {m === "file" ? "Upload a file" : "Record now"}
               </button>
@@ -281,11 +285,9 @@ export function UploadVoiceForm() {
             .
           </span>
         </label>
-        {terms.data && !terms.data.url && (
-          <p className="mt-1 text-sm text-muted-foreground">Terms are being finalised.</p>
-        )}
         <p className="mt-1 text-sm text-muted-foreground">
           Your sample is kept until you delete this voice.
+          {terms.data && !terms.data.url && " Terms are being finalised."}
         </p>
         {consentError && (
           <Alert tone="danger" className="mt-1">

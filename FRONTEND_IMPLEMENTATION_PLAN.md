@@ -1566,6 +1566,20 @@ Not changed: the duplicate "try again in 20 seconds" and "You can try again in 1
 **Open items from FE-UX53**
 1. Still not covered: the real backend (e2e suite), real microphone hardware, Safari and Firefox rendering, a screen-reader pass (`frontend/A11Y_MANUAL_CHECKLIST.md`) and slow networks beyond delayed requests. Focus behaviour was measured from the DOM, so confirm it with a screen reader.
 
+### FE-UX54 — Polish items left from the audits (2026-10-17, branch `fix/FE-UX54-polish`)
+
+The four polish items FE-UX52/53 left for a product call, done on the owner's instruction. Still flat and token-only (`tests/theme.test.ts` unchanged).
+
+1. **Strength hint (generate):** the disabled slider's label said "pick a delivery first" in the mono face, which read like a value. It is now "(choose a delivery to adjust)" in the body face; the mono percentage appears only when the slider is live.
+2. **Consent helper lines (voices):** two grey sentences under the checkbox are one line ("Your sample is kept until you delete this voice. Terms are being finalised."); the terms note still drops out once a terms link exists.
+3. **Upload / Record choice (voices):** a segmented control (one bordered group, the selected half filled with the primary colour, the other on the surface colour with a hover tint) instead of two near-identical outline buttons. The radio semantics, roving tabindex and arrow-key model are unchanged; in forced-colors mode the selected option is underlined because fills are overridden.
+4. **Rate limit (generate):** after a 429 the form said "Please try again in 20 seconds" and the cooldown line said "You can try again in 19 s". The message now says only why ("You've sent too many requests."); the cooldown line counts the wait. Other kinds of error are unchanged.
+
+`tests/live-audit-fixes.test.tsx` gains tests for the segmented control and the single helper line, `synthesis.test.tsx` one for the single 429 wait and the new hint. The 8 voices baselines and 16 generate baselines were regenerated (the generate hint change is below the screenshot tolerance, so those were deleted and rewritten rather than updated); typecheck, lint, prettier clean; 677 tests pass.
+
+**Open items from FE-UX54**
+1. Not changed on purpose: the two-row logged-out header at 375 px, and Delete keeping the secondary look (it asks first). The "Terms are being finalised" wording stays until the terms text is final (owner item since FE-UX39).
+
 ---
 
 ## 9. Definition of Done (release checklist)
