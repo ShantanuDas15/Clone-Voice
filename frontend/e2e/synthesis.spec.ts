@@ -93,3 +93,36 @@ test("delete a generation from History: it is gone after a reload, not just hidd
   await expect(page.getByText(/nothing generated yet/i)).toBeVisible();
   await expect(page.getByText("Remove this one.")).toHaveCount(0);
 });
+
+test("filter History by voice: two voices, each row and count follows the choice", async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  await signUpVerified(page, "genfilter");
+  await createVoice(page, "Filter one");
+  await createVoice(page, "Filter two");
+  for (const [voice, text] of [
+    ["Filter one", "Spoken by the first."],
+    ["Filter two", "Spoken by the second."],
+  ]) {
+    await page.goto("/generate");
+    await page.getByLabel("Voice").selectOption({ label: voice });
+    await page.getByLabel("Text").fill(text);
+    await page.getByRole("button", { name: "Generate speech" }).click();
+    await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached({
+      timeout: 300_000,
+    });
+  }
+
+  await page.goto("/history");
+  await expect(page.getByText("2 generations.")).toBeVisible();
+  const voice = page.getByLabel("Voice");
+  await voice.selectOption({ label: "Filter two" });
+  await expect(page.getByText("1 generation.")).toBeVisible();
+  await expect(page.getByText("Spoken by the second.")).toBeVisible();
+  await expect(page.getByText("Spoken by the first.")).toHaveCount(0);
+
+  await voice.selectOption({ label: "All voices" });
+  await expect(page.getByText("2 generations.")).toBeVisible();
+  await expect(page.getByText("Spoken by the first.")).toBeVisible();
+});

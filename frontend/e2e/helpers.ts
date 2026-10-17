@@ -70,7 +70,11 @@ export async function signUpVerified(page: Page, tag: string): Promise<string> {
 export async function createVoice(page: Page, name = "E2E voice"): Promise<void> {
   await page.goto("/voices");
   await page.getByLabel("Voice name").fill(name);
-  await page.locator("input[type=file]").setInputFiles(SAMPLE_WAV);
+  // Scoped to the create form: each existing profile has its own "add clips" file input.
+  await page
+    .locator("form", { has: page.getByLabel("Voice name") })
+    .locator("input[type=file]")
+    .setInputFiles(SAMPLE_WAV);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
   await page.getByRole("button", { name: "Create voice" }).click();
   await expect(page.getByText(`Voice “${name}” created.`)).toBeVisible({ timeout: 120_000 });
