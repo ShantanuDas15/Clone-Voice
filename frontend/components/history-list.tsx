@@ -193,9 +193,9 @@ function DeleteDialog({
 }) {
   return (
     <Dialog titleId="del-gen-title" onClose={onCancel}>
-      <h3 id="del-gen-title" className="text-lg font-semibold">
+      <h2 id="del-gen-title" className="text-lg font-semibold">
         Delete this audio?
-      </h3>
+      </h2>
       <p className="text-sm text-muted-foreground">“{snippet(gen.input_text)}”</p>
       <p className="text-sm">
         This permanently deletes the audio and the text you typed. It can&apos;t be undone.

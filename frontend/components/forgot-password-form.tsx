@@ -68,7 +68,7 @@ export function ForgotPasswordForm() {
         {...register("email")}
       />
       {formError && <Alert tone="danger">{formError}</Alert>}
-      <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
+      <Button type="submit" loading={isSubmitting} fullWidth>
         {isSubmitting ? "Sending…" : "Send reset link"}
       </Button>
     </form>

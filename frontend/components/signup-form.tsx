@@ -108,7 +108,7 @@ export function SignupForm() {
         </Link>
         .
       </p>
-      <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
+      <Button type="submit" loading={isSubmitting} fullWidth>
         {isSubmitting ? "Creating account…" : "Create account"}
       </Button>
       <p className="text-sm text-muted-foreground">

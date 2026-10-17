@@ -98,7 +98,7 @@ export function ResetPasswordForm() {
         {...register("confirm")}
       />
       {formError && <Alert tone="danger">{formError}</Alert>}
-      <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
+      <Button type="submit" loading={isSubmitting} fullWidth>
         {isSubmitting ? "Saving…" : "Set new password"}
       </Button>
     </form>

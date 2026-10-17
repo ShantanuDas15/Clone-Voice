@@ -1551,6 +1551,21 @@ A read-only audit of the generate, voices, history and login baselines (ui-ux-pr
 **Open items from FE-UX52**
 1. Remaining audit findings are polish, not defects, and need a product call: Strength slider hint wording (generate), merging the two consent helper lines and a clearer Upload/Record toggle (voices), a call to action on short history lists. Error, loading, recorder, dialog and account states were not in the baselines and are unaudited.
 
+### FE-UX53 — Fixes from a live-state audit (2026-10-17, branch `fix/FE-UX53-live-audit-fixes`)
+
+FE-UX52 left error, loading, recorder, dialog, account and global states unaudited because the visual baselines only show the happy path. A live run (Playwright against a production build, API mocked at the network layer, 45 states at 375 and 1280 px in light, the matrix again in dark; axe, overflow, target-size, console, focus and live-region probes) found no contrast, overflow or console problems and every error already `role="alert"`, plus these, all fixed and re-verified with the same run (zero axe violations afterwards, light and dark):
+
+1. **No `app/not-found.tsx`:** the stock Next.js 404 was unthemed (pure black in dark mode), used the default font and had no link back. Added a themed page with one `h1` and a link home.
+2. **Focus dropped to the page after a failed request:** every submit button was `disabled` while pending, and a disabled button loses focus (login 401, generate 422, rate-limit). `Button` with `loading` now stays focusable (`aria-busy`, `aria-disabled`) and ignores clicks, including the implicit submit; the four auth forms, generate and create-voice no longer also set `disabled` while pending. After a 429 or "busy" answer Generate is disabled for the cooldown, so focus moves to the text box.
+3. **History delete dialog:** its title was an `h3` with no `h2` before it (axe heading-order); now `h2`. The voices and account dialogs sit under an `h2` on their pages and stay `h3`.
+4. **Invalid submit did not move focus to the field** on generate and voices (login already did): new `hooks/use-focus-first-invalid.ts`. The consent checkbox is now `aria-invalid` when unchecked on submit so it can be the target.
+5. **In-flight text:** the aria-hidden timer ran into the next sentence ("1 s This can take..."); it is now its own line.
+
+Not changed: the duplicate "try again in 20 seconds" and "You can try again in 19 s" lines after a 429 (three tests pin that copy; cosmetic); small native checkboxes and inline links (WCAG 2.5.8 exempts them); the two-row logged-out header at 375 px. `tests/live-audit-fixes.test.tsx` (7 tests) covers the busy button, focus on first invalid field and the not-found page; `history-account.test.tsx` asserts the dialog is an `h2`; `synthesis.test.tsx` follows the in-flight markup. typecheck, lint, prettier clean; 674 tests pass; all 90 visual baselines unchanged.
+
+**Open items from FE-UX53**
+1. Still not covered: the real backend (e2e suite), real microphone hardware, Safari and Firefox rendering, a screen-reader pass (`frontend/A11Y_MANUAL_CHECKLIST.md`) and slow networks beyond delayed requests. Focus behaviour was measured from the DOM, so confirm it with a screen reader.
+
 ---
 
 ## 9. Definition of Done (release checklist)

@@ -100,7 +100,7 @@ export function LoginForm() {
           {formError}
         </Alert>
       )}
-      <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
+      <Button type="submit" loading={isSubmitting} fullWidth>
         {isSubmitting ? "Signing in…" : "Sign in"}
       </Button>
       <p className="text-sm text-muted-foreground">

@@ -6,7 +6,7 @@ import { type ButtonHTMLAttributes, forwardRef } from "react";
  * ad-hoc classes; the focus ring comes from the global `:focus-visible` rule in globals.css.
  */
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded font-medium transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress",
+  "inline-flex items-center justify-center rounded font-medium transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress aria-busy:opacity-60",
   {
     variants: {
       variant: {
@@ -30,13 +30,17 @@ export const buttonVariants = cva(
 
 export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
-  /** Marks the button busy (`aria-busy`); the label stays so the layout does not jump. */
+  /**
+   * Marks the button busy (`aria-busy`, `aria-disabled`); the label stays so the layout does not
+   * jump. A busy button ignores clicks but is not `disabled`, so it keeps keyboard focus (a
+   * disabled button drops focus to the page).
+   */
   loading?: boolean;
 }
 
 /** A themed button; defaults to `type="button"` so it never submits a form by accident. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant, size, fullWidth, loading, className, type = "button", ...props },
+  { variant, size, fullWidth, loading, className, type = "button", onClick, ...props },
   ref,
 ) {
   return (
@@ -44,6 +48,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       aria-busy={loading || undefined}
+      aria-disabled={loading || undefined}
+      onClick={(e) => {
+        if (loading) {
+          e.preventDefault(); // also stops a submit button from submitting again
+          return;
+        }
+        onClick?.(e);
+      }}
       className={buttonVariants({ variant, size, fullWidth, className })}
       {...props}
     />
