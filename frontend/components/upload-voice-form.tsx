@@ -67,12 +67,23 @@ export function UploadVoiceForm() {
   const [recorderKey, setRecorderKey] = useState(0);
   const [recordingUnavailable, setRecordingUnavailable] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const createdRef = useRef<HTMLDivElement>(null);
 
   // Feature-detect after mount (R10): the server render cannot know the browser's capabilities.
   useEffect(() => {
     const support = detectRecordingSupport();
     setRecordingUnavailable(support.supported ? null : support.reason);
   }, []);
+
+  // The result (advice and the next step) can sit below the fold: bring it into view.
+  useEffect(() => {
+    if (!created) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    createdRef.current?.scrollIntoView?.({
+      block: "nearest",
+      behavior: reduced ? "auto" : "smooth",
+    });
+  }, [created]);
 
   const unverified = user !== null && !user.email_verified_at;
   // Restore this user's draft name once the session is known, then keep saving it (see
@@ -258,9 +269,9 @@ export function UploadVoiceForm() {
           </span>
         </label>
         {terms.data && !terms.data.url && (
-          <p className="mt-1 text-xs text-muted-foreground">Terms are being finalised.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Terms are being finalised.</p>
         )}
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           Your sample is kept until you delete this voice.
         </p>
         {consentError && (
@@ -284,7 +295,7 @@ export function UploadVoiceForm() {
       )}
       {formError && <Alert tone="danger">{formError}</Alert>}
       {created && (
-        <div className="space-y-2">
+        <div ref={createdRef} className="space-y-2">
           <Alert tone="success">Voice “{created.name}” created.</Alert>
           <VoiceQualityReport profile={created} />
           <Link
