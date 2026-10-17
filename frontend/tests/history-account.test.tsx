@@ -115,7 +115,7 @@ describe("HistoryList", () => {
     wrap(<HistoryList />);
     expect(await screen.findByText(/couldn't load your history/i)).toBeInTheDocument();
     server.use(mswHttp.get(`${API}/synthesize/history`, () => HttpResponse.json([gen()])));
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Try again/ }));
     expect(await screen.findByText("Hello there.")).toBeInTheDocument();
   });
 
@@ -140,7 +140,8 @@ describe("HistoryList", () => {
     expect(screen.queryByText(long)).not.toBeInTheDocument();
     await userEvent.click(more);
     expect(screen.getByText(long)).toBeInTheDocument();
-    expect(screen.getByText(/failed — no audio/i)).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText(/No audio was produced/)).toBeInTheDocument();
   });
 
   it("loads more pages with offset and never duplicates rows", async () => {
@@ -166,7 +167,7 @@ describe("HistoryList", () => {
 
   it("fetches audio with auth on play and revokes the object URL on unmount", async () => {
     const view = wrap(<HistoryList />);
-    await userEvent.click(await screen.findByRole("button", { name: "Play" }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Play:/ }));
     expect(
       await screen.findByLabelText(/generated audio from/i, { selector: "audio" }),
     ).toBeInTheDocument();
@@ -182,8 +183,8 @@ describe("HistoryList", () => {
       ),
     );
     wrap(<HistoryList />);
-    await userEvent.click(await screen.findByRole("button", { name: "Play" }));
-    expect(await screen.findByText(/audio has expired/i)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /^Play:/ }));
+    expect(await screen.findByText(/audio is no longer available/i)).toBeInTheDocument();
   });
 
   it("shows expiry up front when audio_available is false", async () => {
@@ -193,8 +194,8 @@ describe("HistoryList", () => {
       ),
     );
     wrap(<HistoryList />);
-    expect(await screen.findByText(/audio has expired/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Play" })).not.toBeInTheDocument();
+    expect(await screen.findByText(/audio is no longer available/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Play:/ })).not.toBeInTheDocument();
   });
 
   it("offers retry after a transient audio error", async () => {
@@ -202,9 +203,9 @@ describe("HistoryList", () => {
       mswHttp.get(`${API}/synthesize/:id/audio`, () => new HttpResponse(null, { status: 503 })),
     );
     wrap(<HistoryList />);
-    await userEvent.click(await screen.findByRole("button", { name: "Play" }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Play:/ }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Try again/ })).toBeInTheDocument();
   });
 });
 
@@ -406,7 +407,7 @@ describe("retention comes from the server (FE-UX39)", () => {
     terms(body);
     expiredHistory();
     wrap(<HistoryList />);
-    expect(await screen.findByText(/audio has expired/i)).toBeInTheDocument();
+    expect(await screen.findByText(/audio is no longer available/i)).toBeInTheDocument();
     expect(screen.queryByText(/kept for/)).not.toBeInTheDocument();
   });
 
@@ -414,7 +415,134 @@ describe("retention comes from the server (FE-UX39)", () => {
     server.use(mswHttp.get(`${API}/terms`, () => HttpResponse.error()));
     expiredHistory();
     wrap(<HistoryList />);
-    expect(await screen.findByText(/audio has expired/i)).toBeInTheDocument();
+    expect(await screen.findByText(/audio is no longer available/i)).toBeInTheDocument();
     expect(screen.queryByText(/kept for/)).not.toBeInTheDocument();
+  });
+});
+
+describe("History rows: names, focus, exclusive playback, count, expiry, download", () => {
+  const rows = (items: unknown[], total?: number) =>
+    server.use(
+      mswHttp.get(`${API}/synthesize/history`, () =>
+        HttpResponse.json(items, {
+          headers: total === undefined ? {} : { "X-Total-Count": String(total) },
+        }),
+      ),
+    );
+
+  it("tells identical buttons apart by the row's text", async () => {
+    rows([
+      gen({ id: "a", input_text: "First line" }),
+      gen({ id: "b", input_text: "Second line that is considerably longer than forty characters" }),
+    ]);
+    wrap(<HistoryList />);
+    expect(await screen.findByRole("button", { name: "Play: First line" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Play: Second line that is considerably longer…" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download: First line" })).toBeInTheDocument();
+  });
+
+  it("moves focus to the player's play control when Play is pressed", async () => {
+    wrap(<HistoryList />);
+    await userEvent.click(await screen.findByRole("button", { name: /^Play:/ }));
+    const control = await screen.findByRole("button", { name: /Generated audio from/ });
+    await waitFor(() => expect(control).toHaveFocus());
+  });
+
+  it("pauses the take that was playing when another starts", async () => {
+    const { claimPlayback } = await import("@/lib/exclusive-playback");
+    const a = document.createElement("audio");
+    const b = document.createElement("audio");
+    const pauseA = vi.spyOn(a, "pause").mockImplementation(() => {});
+    const pauseB = vi.spyOn(b, "pause").mockImplementation(() => {});
+    claimPlayback(a);
+    claimPlayback(b);
+    expect(pauseA).toHaveBeenCalledTimes(1);
+    claimPlayback(b); // the same one again pauses nothing
+    expect(pauseB).not.toHaveBeenCalled();
+  });
+
+  it("says where you are in the history, and announces what Load more added", async () => {
+    server.use(
+      mswHttp.get(`${API}/synthesize/history`, ({ request }) => {
+        const offset = new URL(request.url).searchParams.get("offset") ?? "0";
+        const items =
+          offset === "0"
+            ? Array.from({ length: 50 }, (_, i) => gen({ id: `g${i}`, input_text: `Row ${i}` }))
+            : [gen({ id: "g50", input_text: "Row 50" })];
+        return HttpResponse.json(items, { headers: { "X-Total-Count": "51" } });
+      }),
+    );
+    wrap(<HistoryList />);
+    expect(await screen.findByText("Showing 50 of 51.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Loaded 1 more. Showing 51 of 51.")).toBeInTheDocument();
+    expect(screen.getByText("51 generations.")).toBeInTheDocument();
+  });
+
+  it("states a single generation in the singular and nothing when the total is unknown", async () => {
+    rows([gen()], 1);
+    const view = wrap(<HistoryList />);
+    expect(await screen.findByText("1 generation.")).toBeInTheDocument();
+    view.unmount();
+    rows([gen()]);
+    wrap(<HistoryList />);
+    await screen.findByRole("button", { name: /^Play:/ });
+    expect(screen.queryByText(/generations?\.$/)).toBeNull();
+  });
+
+  it("marks an expired row with a badge", async () => {
+    rows([gen({ audio_available: false })]);
+    wrap(<HistoryList />);
+    expect(await screen.findByText("Expired")).toBeInTheDocument();
+  });
+
+  it("warns that audio is about to expire, only when the server gave a retention period", async () => {
+    const created = new Date(Date.now() - 28 * 86_400_000).toISOString(); // 30-day retention: 2 left
+    server.use(
+      mswHttp.get(`${API}/terms`, () =>
+        HttpResponse.json({ version: "1", text: "", url: null, output_retention_days: 30 }),
+      ),
+    );
+    rows([gen({ created_at: created })]);
+    wrap(<HistoryList />);
+    expect(
+      await screen.findByText(/Expires in [12] days?\. Download it to keep it\./),
+    ).toBeInTheDocument();
+  });
+
+  it("does not warn about expiry without a retention period", async () => {
+    server.use(
+      mswHttp.get(`${API}/terms`, () =>
+        HttpResponse.json({ version: "1", text: "", url: null, output_retention_days: null }),
+      ),
+    );
+    rows([gen({ created_at: new Date(Date.now() - 86_400_000).toISOString() })]);
+    wrap(<HistoryList />);
+    await screen.findByRole("button", { name: /^Play:/ });
+    expect(screen.queryByText(/Expires in/)).toBeNull();
+  });
+
+  it("downloads without playing first, and says so when the audio has expired", async () => {
+    const saved: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push(this.download);
+    });
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Download:/ }));
+    await waitFor(() => expect(saved).toEqual([`clonevoice-${fixtures.generation.id}.wav`]));
+    expect(screen.queryByLabelText(/generated audio from/i, { selector: "audio" })).toBeNull();
+    server.use(
+      mswHttp.get(`${API}/synthesize/:id/audio`, () =>
+        HttpResponse.json({ detail: "expired" }, { status: 410 }),
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /^Download:/ }));
+    expect(await screen.findByText(/audio is no longer available/i)).toBeInTheDocument();
+    click.mockRestore();
   });
 });
