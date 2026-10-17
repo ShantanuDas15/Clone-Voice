@@ -1462,7 +1462,7 @@
     },
     "/api/v1/synthesize/history": {
       "get": {
-        "description": "Return paginated synthesis history for the current user.\n\nThe size of the whole history (not just this page) is sent in the\n``X-Total-Count`` header, so a client can tell when it has reached the end.",
+        "description": "Return paginated synthesis history for the current user.\n\nThe size of the whole history (not just this page) is sent in the\n``X-Total-Count`` header, so a client can tell when it has reached the end.\n``voice_profile_id`` narrows both to one voice; an unknown or foreign id\nsimply matches nothing, so it cannot be used to probe for other profiles.",
         "operationId": "get_history_api_v1_synthesize_history_get",
         "parameters": [
           {
@@ -1485,6 +1485,23 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "voice_profile_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Voice Profile Id"
             }
           }
         ],

@@ -469,6 +469,7 @@ def get_history(
     response: Response,
     limit: int = Query(50, ge=1),
     offset: int = Query(0, ge=0),
+    voice_profile_id: Optional[UUID] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -476,6 +477,8 @@ def get_history(
 
     The size of the whole history (not just this page) is sent in the
     ``X-Total-Count`` header, so a client can tell when it has reached the end.
+    ``voice_profile_id`` narrows both to one voice; an unknown or foreign id
+    simply matches nothing, so it cannot be used to probe for other profiles.
     """
     if limit > 50:
         limit = 50
@@ -489,6 +492,8 @@ def get_history(
             VoiceProfile.deleted_at == None,
         )
     )
+    if voice_profile_id is not None:
+        visible = visible.filter(Generation.voice_profile_id == voice_profile_id)
     response.headers["X-Total-Count"] = str(visible.count())
     generations = (
         visible.with_entities(Generation, VoiceProfile.name)
