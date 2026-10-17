@@ -30,6 +30,25 @@ E2E_BACKEND_LOG=/tmp/backend.log npm run test:e2e   # both browsers
 Set `CSP_ENFORCE=1` to run the whole suite under an **enforcing** Content-Security-Policy;
 `csp.spec.ts` fails on any violation reported while browsing every flow.
 
+## Expressive engine (pre-release, optional)
+
+The delivery controls (Delivery, Strength, Tips) only exist when the backend says an engine can use
+them, so the normal recipe never shows them. To exercise them for real, without a GPU or the
+worker's own environment, start a health-only stub worker and point the API at it. The capabilities
+answer comes from engine metadata and a flag, not from the worker, and the stub keeps
+`/health/ready` healthy so no "service degraded" banner skews layout:
+
+```bash
+node e2e/tools/stub-worker.mjs &                       # :9100, answers /health only
+# API: as in the recipe above, plus
+export TTS_ENGINE=chatterbox EMOTION_CONTROL_ENABLED=true \
+  TTS_WORKER_URL=http://127.0.0.1:9100 TTS_WORKER_TOKEN=<32+ chars>
+E2E_EXPRESSIVE=1 npx playwright test e2e/expressive-layout-shift.spec.ts --project=chromium
+```
+
+Synthesis itself is not available in this setup (the stub does not synthesize); upload, the form
+and the layout are. Only the original `chatterbox` engine reports emotion control by name.
+
 ## Notes
 
 - **CSP reporting spec (FE-UX40).** `csp.spec.ts` "a real violation reaches the endpoint" reads the web
