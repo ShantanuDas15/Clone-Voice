@@ -55,10 +55,6 @@ export function ForgotPasswordForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Enter your email and we&apos;ll send a link to reset your password, or to set one if you
-        signed up with Google.
-      </p>
       <TextField
         label="Email"
         type="email"

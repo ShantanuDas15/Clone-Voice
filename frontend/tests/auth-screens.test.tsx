@@ -8,6 +8,7 @@ import { AuthProvider, __resetBootstrapForTests } from "@/components/auth-provid
 import { LoginForm } from "@/components/login-form";
 import { SignupForm } from "@/components/signup-form";
 import { SiteFooter } from "@/components/site-footer";
+import ForgotPasswordPage from "@/app/(public)/forgot-password/page";
 import { UserMenu } from "@/components/user-menu";
 import { __resetSessionForTests } from "@/lib/auth/session";
 import { server } from "@/mocks/server";
@@ -72,6 +73,15 @@ describe("sign-in and sign-up screens", () => {
     wrap(<SignupForm />);
     expect(screen.getByText(/email you a link to verify your address/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "terms of use" })).toHaveAttribute("href", "/terms");
+  });
+});
+
+describe("forgot-password copy", () => {
+  it("explains the link once, including the Google case", () => {
+    wrap(<ForgotPasswordPage />);
+    expect(screen.getAllByText(/email you a link/i)).toHaveLength(1);
+    expect(screen.getByText(/set one if you signed up with google/i)).toBeInTheDocument();
+    expect(screen.queryByText(/we will send you a link/i)).toBeNull();
   });
 });
 
