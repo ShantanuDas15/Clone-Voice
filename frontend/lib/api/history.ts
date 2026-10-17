@@ -14,6 +14,16 @@ export interface Generation {
   /** False once the WAV has been pruned (30-day retention, G-10) or for failed rows. */
   audio_available: boolean;
   created_at: string;
+  /** What the request asked for and what the server did with it; null on rows from before each was recorded. */
+  engine?: string | null;
+  engine_fallback_from?: string | null;
+  emotion?: string | null;
+  intensity?: number | null;
+  style_applied?: boolean | null;
+  emotions_used?: string[] | null;
+  sound_tags_dropped?: string[] | null;
+  seed?: number | null;
+  seed_applied?: boolean | null;
 }
 
 export interface HistoryPage {
