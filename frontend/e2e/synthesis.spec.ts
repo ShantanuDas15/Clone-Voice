@@ -66,3 +66,30 @@ test("a text with unsupported characters is refused by the server and shown on t
   await page.getByRole("button", { name: "Generate speech" }).click();
   await expect(page.getByText(/unsupported|characters/i).first()).toBeVisible({ timeout: 30_000 });
 });
+
+test("delete a generation from History: it is gone after a reload, not just hidden", async ({
+  page,
+}) => {
+  test.setTimeout(420_000);
+  await signUpVerified(page, "gendel");
+  await createVoice(page, "Delete voice");
+  await page.goto("/generate");
+  await page.getByLabel("Voice").selectOption({ label: "Delete voice" });
+  await page.getByLabel("Text").fill("Remove this one.");
+  await page.getByRole("button", { name: "Generate speech" }).click();
+  await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached({
+    timeout: 300_000,
+  });
+
+  await page.goto("/history");
+  await expect(page.getByText("1 generation.")).toBeVisible();
+  await page.getByRole("button", { name: "Delete: Remove this one." }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByText("Delete this audio?")).toBeVisible();
+  await dialog.getByRole("button", { name: "Delete audio" }).click();
+  await expect(page.getByText(/nothing generated yet/i)).toBeVisible();
+
+  await page.reload(); // the server agrees: no row, no text
+  await expect(page.getByText(/nothing generated yet/i)).toBeVisible();
+  await expect(page.getByText("Remove this one.")).toHaveCount(0);
+});
