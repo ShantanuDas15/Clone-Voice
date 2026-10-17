@@ -15,6 +15,9 @@ export const APP_LINKS = [
   { href: "/account", label: "Account" },
 ] as const;
 
+/** Public pages whose form has its own primary button (sign in, sign up, password reset). */
+const ACCOUNT_FORMS = ["/login", "/signup", "/forgot-password", "/reset-password"] as const;
+
 /** Header account controls: sign-in links, or the user's name and a sign-out button. */
 export function UserMenu() {
   const { status, user, logout } = useAuth();
@@ -34,7 +37,7 @@ export function UserMenu() {
 
   if (status === "unauthenticated") {
     // The account forms carry the page's one primary action, so the header link steps back.
-    const onAccountForm = isCurrent(pathname, "/login") || isCurrent(pathname, "/signup");
+    const onAccountForm = ACCOUNT_FORMS.some((href) => isCurrent(pathname, href));
     return (
       <div className="flex min-h-11 items-center gap-4 text-sm">
         <NavLink href="/login" className="inline-flex min-h-11 items-center">
