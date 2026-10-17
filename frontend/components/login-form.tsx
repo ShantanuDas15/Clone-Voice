@@ -27,6 +27,8 @@ export function LoginForm() {
   const sessionEnded = params.get("reason") === "expired";
   const inFlight = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // A 401 is about the credentials, so the password field is marked invalid and points at it.
+  const [rejected, setRejected] = useState(false);
   const {
     register,
     handleSubmit,
@@ -41,6 +43,7 @@ export function LoginForm() {
     if (inFlight.current) return; // R4: block Enter-key repeats.
     inFlight.current = true;
     setFormError(null);
+    setRejected(false);
     try {
       await login({ email: values.email.trim(), password: values.password });
       router.replace(next);
@@ -49,8 +52,9 @@ export function LoginForm() {
       if (e.kind === "RATE_LIMITED") setFormError(rateLimitMessage(e));
       // G-19: one generic message; never confirm whether the account exists.
       else if (e.status === 401) {
+        setRejected(true);
         setFormError(
-          "Incorrect email or password. If you signed up with Google, use “Continue with Google” or reset your password.",
+          "Incorrect email or password. Signed up with Google? Use “Continue with Google”, or reset your password.",
         );
       } else if (e.status === 0 || e.status >= 500) setFormError(e.message);
       else setFormError(e.message);
@@ -68,7 +72,7 @@ export function LoginForm() {
       <TextField
         label="Email"
         type="email"
-        autoComplete="email"
+        autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}
         error={errors.email?.message}
@@ -86,9 +90,16 @@ export function LoginForm() {
           </Link>
         }
         error={errors.password?.message}
+        {...(rejected && !errors.password
+          ? { "aria-invalid": true, "aria-describedby": "login-error" }
+          : {})}
         {...register("password")}
       />
-      {formError && <Alert tone="danger">{formError}</Alert>}
+      {formError && (
+        <Alert tone="danger" id="login-error">
+          {formError}
+        </Alert>
+      )}
       <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
         {isSubmitting ? "Signing in…" : "Sign in"}
       </Button>
