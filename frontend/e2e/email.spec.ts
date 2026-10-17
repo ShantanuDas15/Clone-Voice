@@ -17,8 +17,19 @@ test("verification link from the real email clears the banner; reopening it stil
   // Idempotent: the same link opened again is still a success, and the fragment is stripped.
   const token = await emailedToken("verify-email", email);
   await page.goto(`/verify-email#token=${token}`);
-  await expect(page.getByText(/verified/i).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Email verified" })).toBeVisible();
   expect(new URL(page.url()).hash).toBe("");
+
+  // The next step is a real button, and it leads into the app.
+  await page.getByRole("link", { name: "Start generating" }).click();
+  await expect(page).toHaveURL(/\/generate/);
+});
+
+test("a verification link with no token offers a way to ask for a new one", async ({ page }) => {
+  await page.goto("/verify-email");
+  await expect(page.getByText(/looks incomplete/i)).toBeVisible();
+  await page.getByRole("link", { name: /sign in to request a new link/i }).click();
+  await expect(page).toHaveURL(/\/login/);
 });
 
 test("forgot → reset changes the password, ends other sessions and reuse is refused", async ({
