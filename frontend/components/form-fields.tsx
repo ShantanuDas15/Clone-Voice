@@ -1,4 +1,4 @@
-import { type InputHTMLAttributes, forwardRef, useState } from "react";
+import { type InputHTMLAttributes, type ReactNode, forwardRef, useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/field";
@@ -8,11 +8,13 @@ interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   /** Always-visible guidance shown under the field, e.g. the rule a password must meet. */
   hint?: string;
+  /** A control shown at the end of the label row (e.g. "Forgot password?"). */
+  labelEnd?: ReactNode;
 }
 
 /** Labelled input with an associated hint and an associated, announced error message. */
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
-  { label, error, hint, id, ...props },
+  { label, error, hint, labelEnd, id, ...props },
   ref,
 ) {
   const inputId = id ?? props.name ?? label;
@@ -22,9 +24,18 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
       .join(" ") || undefined;
   return (
     <div>
-      <label htmlFor={inputId} className="block text-sm font-medium">
-        {label}
-      </label>
+      {labelEnd ? (
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor={inputId} className="block text-sm font-medium">
+            {label}
+          </label>
+          {labelEnd}
+        </div>
+      ) : (
+        <label htmlFor={inputId} className="block text-sm font-medium">
+          {label}
+        </label>
+      )}
       <Input
         id={inputId}
         ref={ref}

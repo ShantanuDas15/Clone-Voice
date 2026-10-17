@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
-import { NavLink } from "@/components/nav-link";
+import { NavLink, isCurrent } from "@/components/nav-link";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 /** The signed-in destinations, one per job (UX plan §5.1). */
@@ -19,6 +19,7 @@ export const APP_LINKS = [
 export function UserMenu() {
   const { status, user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   // Every state is at least as tall as the 44 px sign-out button, and below `sm` the menu has
   // its own row (see app-shell), so the header never changes height when the session
@@ -34,13 +35,14 @@ export function UserMenu() {
   if (status === "unauthenticated") {
     return (
       <div className="flex min-h-11 items-center gap-4 text-sm">
-        <Link
-          href="/login"
-          className="inline-flex min-h-11 items-center underline-offset-4 hover:underline"
-        >
+        <NavLink href="/login" className="inline-flex min-h-11 items-center">
           Sign in
-        </Link>
-        <Link href="/signup" className={buttonVariants({ size: "sm" })}>
+        </NavLink>
+        <Link
+          href="/signup"
+          aria-current={isCurrent(pathname, "/signup") ? "page" : undefined}
+          className={buttonVariants({ size: "sm" })}
+        >
           Create account
         </Link>
       </div>
