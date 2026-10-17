@@ -66,3 +66,8 @@ export async function fetchGenerationAudio(id: string, signal?: AbortSignal): Pr
   });
   return data;
 }
+
+/** Delete one generation: its audio file and the text typed for it (backend D1). */
+export async function deleteGeneration(id: string): Promise<void> {
+  await http.delete(`/synthesize/${encodeURIComponent(id)}`);
+}

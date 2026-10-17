@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http as mswHttp } from "msw";
 import type { ReactNode } from "react";
@@ -544,5 +544,163 @@ describe("History rows: names, focus, exclusive playback, count, expiry, downloa
     await user.click(screen.getByRole("button", { name: /^Download:/ }));
     expect(await screen.findByText(/audio is no longer available/i)).toBeInTheDocument();
     click.mockRestore();
+  });
+});
+
+describe("Deleting a generation from History", () => {
+  const two = [
+    gen({ id: "g1", input_text: "First one" }),
+    gen({ id: "g2", input_text: "Second one" }),
+  ];
+  /** A mutable server-side list, so a refetch after the delete sees it gone. */
+  function serve(initial: Generation[], onDelete?: (id: string) => Response | undefined) {
+    let rows = [...initial];
+    const deleted: string[] = [];
+    server.use(
+      mswHttp.get(`${API}/synthesize/history`, () =>
+        HttpResponse.json(rows, { headers: { "X-Total-Count": String(rows.length) } }),
+      ),
+      mswHttp.delete(`${API}/synthesize/:id`, ({ params }) => {
+        const id = String(params.id);
+        const custom = onDelete?.(id);
+        if (custom) return custom;
+        deleted.push(id);
+        rows = rows.filter((r) => r.id !== id);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    return deleted;
+  }
+
+  it("asks first, names the text, and does nothing on Cancel", async () => {
+    const deleted = serve(two);
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete: Second one" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Delete this audio?")).toBeInTheDocument();
+    expect(within(dialog).getByText("“Second one”")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/permanently deletes the audio and the text/i),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(deleted).toEqual([]);
+    expect(screen.getByText("Second one")).toBeInTheDocument();
+  });
+
+  it("deletes after confirmation: the row goes, the count updates, and it is announced", async () => {
+    const deleted = serve(two);
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    expect(await screen.findByText("2 generations.")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Delete: First one" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete audio" }),
+    );
+    await waitFor(() => expect(screen.queryByText("First one")).toBeNull());
+    expect(deleted).toEqual(["g1"]);
+    expect(await screen.findByText("1 generation.")).toBeInTheDocument();
+    expect(await screen.findByText("Deleted.")).toBeInTheDocument();
+  });
+
+  it("moves focus to the next row's first control", async () => {
+    serve(two);
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete: First one" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete audio" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Play: Second one" })).toHaveFocus(),
+    );
+  });
+
+  it("moves focus to the row before when the last row is deleted", async () => {
+    serve(two);
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete: Second one" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete audio" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Play: First one" })).toHaveFocus(),
+    );
+  });
+
+  it("shows the empty state after the only generation is deleted", async () => {
+    serve([gen({ id: "only", input_text: "Lonely" })]);
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete: Lonely" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete audio" }),
+    );
+    expect(await screen.findByText(/nothing generated yet/i)).toBeInTheDocument();
+    expect(await screen.findByText("Deleted.")).toBeInTheDocument();
+  });
+
+  it("treats a 404 as already gone", async () => {
+    serve(two, () => HttpResponse.json({ detail: "Generation not found" }, { status: 404 }));
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete: First one" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete audio" }),
+    );
+    expect(await screen.findByText("Deleted.")).toBeInTheDocument();
+  });
+
+  it("puts the row back and says so when the delete fails", async () => {
+    serve(two, () =>
+      HttpResponse.json({ detail: "Failed to delete the generation" }, { status: 500 }),
+    );
+    wrap(<HistoryList />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete: First one" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete audio" }),
+    );
+    await waitFor(() => expect(screen.getByText("First one")).toBeInTheDocument());
+    expect(screen.getByText("2 generations.")).toBeInTheDocument();
+    expect(screen.queryByText("Deleted.")).toBeNull();
+  });
+
+  it("offers Delete on a failed row too", async () => {
+    serve([
+      gen({
+        id: "bad",
+        input_text: "Broke",
+        status: "failed",
+        output_filename: "",
+        duration_seconds: null,
+      }),
+    ]);
+    wrap(<HistoryList />);
+    expect(await screen.findByRole("button", { name: "Delete: Broke" })).toBeInTheDocument();
+  });
+});
+
+describe("withoutGeneration", () => {
+  const data = (total: number | null) => ({
+    pageParams: [0],
+    pages: [{ items: [gen({ id: "a" }), gen({ id: "b" })], total, offset: 0 }],
+  });
+
+  it("drops the row and one from the total", async () => {
+    const { withoutGeneration } = await import("@/hooks/use-history");
+    const out = withoutGeneration(data(2), "a");
+    expect(out.pages[0]!.items.map((g) => g.id)).toEqual(["b"]);
+    expect(out.pages[0]!.total).toBe(1);
+  });
+
+  it("changes nothing for an id that is not loaded, keeps an unknown total unknown, never goes below 0", async () => {
+    const { withoutGeneration } = await import("@/hooks/use-history");
+    const same = data(2);
+    expect(withoutGeneration(same, "zzz")).toBe(same);
+    expect(withoutGeneration(data(null), "a").pages[0]!.total).toBeNull();
+    expect(withoutGeneration(data(0), "a").pages[0]!.total).toBe(0);
   });
 });

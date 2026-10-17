@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ExpandableText } from "@/components/expandable-text";
 import { Take } from "@/components/take";
-import { flattenHistory, useHistory } from "@/hooks/use-history";
+import { flattenHistory, useDeleteGeneration, useHistory } from "@/hooks/use-history";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { useTerms } from "@/hooks/use-terms";
 import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
@@ -16,6 +16,8 @@ import { saveBlob } from "@/lib/download";
 import { describeRetention, expiresSoon } from "@/lib/retention";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { notify } from "@/lib/toast";
 
 const PREVIEW_CHARS = 140;
 const NAME_CHARS = 40;
@@ -138,12 +140,12 @@ function Playback({ gen }: { gen: Generation }) {
   );
 }
 
-function HistoryItem({ gen }: { gen: Generation }) {
+function HistoryItem({ gen, onDelete }: { gen: Generation; onDelete: (gen: Generation) => void }) {
   const failed = isFailedGeneration(gen);
   const details = generationDetails(gen);
 
   return (
-    <li className="space-y-2 rounded border border-border p-3">
+    <li data-gen-id={gen.id} className="space-y-2 rounded border border-border p-3">
       <ExpandableText text={gen.input_text} limit={PREVIEW_CHARS} />
       <p className="text-sm text-muted-foreground">
         {gen.voice_profile_name} · {formatDateTime(gen.created_at)}
@@ -154,14 +156,57 @@ function HistoryItem({ gen }: { gen: Generation }) {
           {details.join(" · ")}
         </p>
       )}
-      {failed ? (
-        <p className="text-sm">
-          <Badge tone="notice">Failed</Badge> No audio was produced.
-        </p>
-      ) : (
-        <Playback gen={gen} />
-      )}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          {failed ? (
+            <p className="text-sm">
+              <Badge tone="notice">Failed</Badge> No audio was produced.
+            </p>
+          ) : (
+            <Playback gen={gen} />
+          )}
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onDelete(gen)}
+          aria-label={`Delete: ${snippet(gen.input_text)}`}
+        >
+          Delete
+        </Button>
+      </div>
     </li>
+  );
+}
+
+/** Modal confirmation for deleting one generation; the text is quoted so the user knows which. */
+function DeleteDialog({
+  gen,
+  onCancel,
+  onConfirm,
+}: {
+  gen: Generation;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog titleId="del-gen-title" onClose={onCancel}>
+      <h3 id="del-gen-title" className="text-lg font-semibold">
+        Delete this audio?
+      </h3>
+      <p className="text-sm text-muted-foreground">“{snippet(gen.input_text)}”</p>
+      <p className="text-sm">
+        This permanently deletes the audio and the text you typed. It can&apos;t be undone.
+      </p>
+      <div className="flex gap-2">
+        <Button variant="danger" autoFocus onClick={onConfirm}>
+          Delete audio
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -171,6 +216,29 @@ export function HistoryList() {
     useHistory();
   const retention = describeRetention(useTerms().data?.output_retention_days);
   const [announcement, setAnnouncement] = useState("");
+  const remove = useDeleteGeneration();
+  const [confirming, setConfirming] = useState<Generation | null>(null);
+  // Where keyboard focus goes once a deleted row is gone: the row after it (or before it), else
+  // the page heading. The deleted row's button is unmounted, so focus would otherwise be lost.
+  const [focusAfter, setFocusAfter] = useState<{ deleted: string; next: string | null } | null>(
+    null,
+  );
+  const listedIds = data ? flattenHistory(data.pages).map((g) => g.id) : [];
+  const listed = listedIds.join(",");
+  useEffect(() => {
+    if (!focusAfter || listedIds.includes(focusAfter.deleted)) return;
+    const row = focusAfter.next
+      ? document.querySelector<HTMLElement>(`li[data-gen-id="${focusAfter.next}"]`)
+      : null;
+    const target = row?.querySelector<HTMLElement>("button") ?? document.querySelector("main h1");
+    if (target instanceof HTMLElement) {
+      if (!row) target.tabIndex = -1;
+      target.focus();
+    }
+    setFocusAfter(null);
+    // `listed` stands for the id list, which is a new array every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusAfter, listed]);
 
   if (isPending) {
     return (
@@ -202,6 +270,9 @@ export function HistoryList() {
         <Link href="/generate" className={buttonVariants()}>
           Generate speech
         </Link>
+        <span role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </span>
       </div>
     );
   }
@@ -235,9 +306,29 @@ export function HistoryList() {
       )}
       <ul className="space-y-2">
         {items.map((gen) => (
-          <HistoryItem key={gen.id} gen={gen} />
+          <HistoryItem key={gen.id} gen={gen} onDelete={setConfirming} />
         ))}
       </ul>
+      {confirming && (
+        <DeleteDialog
+          gen={confirming}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            const target = confirming;
+            const at = items.findIndex((g) => g.id === target.id);
+            const neighbour = items[at + 1] ?? items[at - 1];
+            setConfirming(null);
+            setFocusAfter({ deleted: target.id, next: neighbour?.id ?? null });
+            remove.mutate(target.id, {
+              onError: (e) => {
+                setFocusAfter(null);
+                notify.error(e instanceof ApiError ? e.message : "Couldn't delete that audio.");
+              },
+              onSuccess: () => setAnnouncement("Deleted."),
+            });
+          }}
+        />
+      )}
       {hasNextPage && (
         <Button variant="secondary" onClick={() => void loadMore()} disabled={isFetchingNextPage}>
           {isFetchingNextPage ? "Loading more…" : "Load more"}
