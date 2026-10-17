@@ -1,6 +1,28 @@
 import { http, longRequest } from "@/lib/api/http";
 import { canonicalAudioFile } from "@/lib/validation/audio";
 
+/** One thing the user can fix in a recording (`severity` is `warning` or `poor`). */
+export interface QualityHint {
+  code: string;
+  severity: string;
+  message: string;
+}
+
+/** How well a recording suits cloning: `good` (no hints), `fair` (warnings) or `poor`. */
+export interface QualityReport {
+  rating: string;
+  hints: QualityHint[];
+}
+
+/** One clip of a profile and how it compares with the others. */
+export interface VoiceSample {
+  position: number;
+  agreement: number;
+  /** True when the clip may be a different speaker from the rest (needs 3+ clips). */
+  mismatch: boolean;
+  quality?: QualityReport | null;
+}
+
 export interface VoiceProfile {
   id: string;
   name: string;
@@ -9,6 +31,12 @@ export interface VoiceProfile {
   consent_confirmed_at: string;
   terms_version: string;
   created_at: string;
+  samples?: VoiceSample[];
+}
+
+/** The upload response: the profile plus the lowest-rated clip's report, when it could be made. */
+export interface VoiceProfileUpload extends VoiceProfile {
+  quality?: QualityReport | null;
 }
 
 /** Profiles come back newest first, but order is not contractually guaranteed (G-09): sort anyway. */
@@ -23,7 +51,8 @@ export async function fetchProfiles(signal?: AbortSignal): Promise<VoiceProfile[
 
 export interface UploadInput {
   name: string;
-  file: File;
+  /** One or more clips of the same speaker; one is sent as `file`, several as `files`. */
+  files: File[];
   /** Terms version the user was shown; the server answers 409 if it has changed. */
   termsVersion: string | null;
 }
@@ -38,13 +67,14 @@ export interface UploadInput {
 export async function uploadProfile(
   input: UploadInput,
   options: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
-): Promise<VoiceProfile> {
+): Promise<VoiceProfileUpload> {
   const form = new FormData();
   form.append("name", input.name);
   form.append("consent_confirmed", "true");
   if (input.termsVersion) form.append("terms_version", input.termsVersion);
-  form.append("file", canonicalAudioFile(input.file));
-  const { data } = await http.post<VoiceProfile>("/voice/upload", form, {
+  const field = input.files.length === 1 ? "file" : "files";
+  for (const f of input.files) form.append(field, canonicalAudioFile(f));
+  const { data } = await http.post<VoiceProfileUpload>("/voice/upload", form, {
     ...longRequest,
     signal: options.signal,
     onUploadProgress: (e) => options.onProgress?.(e.total ? e.loaded / e.total : 0),

@@ -194,11 +194,18 @@ describe("requests the client builds match the request schemas", () => {
     const post = vi.spyOn(client, "post").mockResolvedValue({ data: fixtures.profile });
     await uploadProfile({
       name: "My voice",
-      file: new File([new Uint8Array(8)], "a.wav", { type: "audio/wav" }),
+      files: [new File([new Uint8Array(8)], "a.wav", { type: "audio/wav" })],
       termsVersion: "1",
     });
-    const form = post.mock.calls[0]![1] as FormData;
-    const sent = [...form.keys()];
+    await uploadProfile({
+      name: "My voice",
+      files: [
+        new File([new Uint8Array(8)], "a.wav", { type: "audio/wav" }),
+        new File([new Uint8Array(8)], "b.wav", { type: "audio/wav" }),
+      ],
+      termsVersion: "1",
+    });
+    const sent = [...post.mock.calls.flatMap((c) => [...(c[1] as FormData).keys()])];
     post.mockRestore();
 
     const schema = spec.components.schemas.Body_upload_audio_api_v1_voice_upload_post as {

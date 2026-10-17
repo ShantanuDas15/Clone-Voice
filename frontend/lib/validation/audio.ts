@@ -58,3 +58,22 @@ export const voiceNameSchema = z
   .trim()
   .min(1, "Enter a name for this voice")
   .max(NAME_MAX, `Name must be at most ${NAME_MAX} characters`);
+
+/** Clips per voice; mirrors the API's default `VOICE_MAX_SAMPLES` (a larger set gets a 422). */
+export const MAX_CLIPS = 10;
+
+/** Two picks are the same clip when name, size and modified time all match. */
+export function sameFile(a: File, b: File): boolean {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
+/**
+ * Pre-check of the whole set: the API bounds the single request body by the one-file size limit,
+ * so the clips together must fit in it. Returns a message, or null when the set looks acceptable.
+ */
+export function validateClipSet(files: readonly Pick<File, "size">[]): string | null {
+  if (files.length > MAX_CLIPS) return `Use at most ${MAX_CLIPS} clips per voice.`;
+  const total = files.reduce((sum, f) => sum + f.size, 0);
+  if (total > MAX_AUDIO_BYTES) return "The clips together are larger than 25 MB.";
+  return null;
+}

@@ -13,13 +13,14 @@ import { useDegraded } from "@/hooks/use-health";
 import { useOnline } from "@/hooks/use-online";
 import { PROFILES_KEY } from "@/hooks/use-voice-profiles";
 import { fetchTerms } from "@/lib/api/terms";
-import { uploadProfile } from "@/lib/api/voice";
+import { type VoiceProfileUpload, uploadProfile } from "@/lib/api/voice";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { detectRecordingSupport } from "@/lib/recording";
 import { voiceNameSchema } from "@/lib/validation/audio";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { VoiceQualityReport } from "@/components/voice-quality-report";
 
 // The recorder (MediaRecorder, permissions) loads only when someone chooses to record (§5.10).
 const Recorder = dynamic(() => import("@/components/recorder").then((m) => m.Recorder), {
@@ -55,13 +56,13 @@ export function UploadVoiceForm() {
   const { user } = useAuth();
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string>();
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string>();
   const [consent, setConsent] = useState(false);
   const [consentError, setConsentError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
-  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
+  const [created, setCreated] = useState<VoiceProfileUpload | null>(null);
   const [mode, setMode] = useState<SampleMode>("file");
   const [recorderKey, setRecorderKey] = useState(0);
   const [recordingUnavailable, setRecordingUnavailable] = useState<string | null>(null);
@@ -90,7 +91,7 @@ export function UploadVoiceForm() {
       uploadProfile(
         {
           name: voiceNameSchema.parse(name),
-          file: file as File,
+          files,
           termsVersion: terms.data?.version ?? null,
         },
         { onProgress: setProgress },
@@ -100,7 +101,7 @@ export function UploadVoiceForm() {
 
   function selectMode(m: SampleMode) {
     setMode(m);
-    setFile(null);
+    setFiles([]);
     setFileError(undefined);
   }
 
@@ -137,18 +138,18 @@ export function UploadVoiceForm() {
     setCreated(null);
     const parsed = voiceNameSchema.safeParse(name);
     setNameError(parsed.success ? undefined : parsed.error.issues[0]?.message);
-    setFileError(file ? undefined : "Choose an audio file");
+    setFileError(files.length > 0 ? undefined : "Choose an audio file");
     setConsentError(consent ? undefined : "Confirm you have the right to use this voice");
-    if (!parsed.success || !file || !consent) return;
+    if (!parsed.success || files.length === 0 || !consent) return;
 
     inFlight.current = true;
     setProgress(0);
     try {
       const profile = await upload.mutateAsync();
       void client.invalidateQueries({ queryKey: PROFILES_KEY }); // show the new voice (found by e2e)
-      setCreated({ id: profile.id, name: profile.name });
+      setCreated(profile);
       setName("");
-      setFile(null);
+      setFiles([]);
       setRecorderKey((k) => k + 1); // a fresh recorder for the next voice
       setConsent(false);
     } catch (err) {
@@ -214,11 +215,15 @@ export function UploadVoiceForm() {
         )}
         {mode === "record" && recordingUnavailable === null ? (
           <>
-            <Recorder key={recorderKey} onChange={setFile} disabled={pending} />
+            <Recorder
+              key={recorderKey}
+              onChange={(f) => setFiles(f ? [f] : [])}
+              disabled={pending}
+            />
             {fileError && <Alert tone="danger">{fileError}</Alert>}
           </>
         ) : (
-          <AudioUploader file={file} onChange={setFile} disabled={pending} error={fileError} />
+          <AudioUploader files={files} onChange={setFiles} disabled={pending} error={fileError} />
         )}
       </fieldset>
 
@@ -281,6 +286,7 @@ export function UploadVoiceForm() {
       {created && (
         <div className="space-y-2">
           <Alert tone="success">Voice “{created.name}” created.</Alert>
+          <VoiceQualityReport profile={created} />
           <Link
             href={`/generate?voice=${encodeURIComponent(created.id)}`}
             className={buttonVariants()}
