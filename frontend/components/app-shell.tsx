@@ -27,7 +27,7 @@ export function AppShell({ children, theme }: { children: ReactNode; theme: Them
       <header className="border-b border-border bg-surface">
         <nav
           aria-label="Primary"
-          className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 sm:gap-y-2"
+          className="mx-auto flex max-w-5xl flex-col items-start gap-y-1 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2"
         >
           <Link href="/" className="inline-flex min-h-11 items-center">
             <Logo />
