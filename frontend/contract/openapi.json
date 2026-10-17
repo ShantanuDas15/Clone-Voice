@@ -1525,6 +1525,48 @@
         ]
       }
     },
+    "/api/v1/synthesize/{generation_id}": {
+      "delete": {
+        "description": "Delete one of the caller's own generations: its audio file and the text they typed.\n\nThe row is soft-deleted and scrubbed (GENERATION_DELETE_PLAN.md D1), then the file is removed\nafter the commit. 404 covers an unknown id, someone else's generation and one already\ndeleted alike, so ids cannot be probed. A failed generation (no audio) can be deleted too.\nDeliberately open to unverified users: removing your own data is never gated on email state.",
+        "operationId": "delete_generation_api_v1_synthesize__generation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Generation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Generation",
+        "tags": [
+          "synthesize"
+        ]
+      }
+    },
     "/api/v1/synthesize/{generation_id}/audio": {
       "get": {
         "description": "Return the WAV of one of the caller's own completed generations.\n\n404 covers an unknown id, someone else's generation, a deleted one and a\nfailed one alike, so ids cannot be probed. 410 means the generation exists\nbut its file has expired and been pruned.",

@@ -27,6 +27,7 @@ from backend.schemas.synthesize import (
     SynthesizeRequest,
 )
 from backend.services import style_markup, styled_synthesis
+from backend.services.erasure import erase_generation, remove_files
 from backend.services.text_analysis import StyleOverride
 from backend.services.tts_engine import EngineUnavailableError, get_engine_for_user
 from backend.services.tts_pipeline import (
@@ -482,7 +483,11 @@ def get_history(
     visible = (
         db.query(Generation)
         .join(VoiceProfile, Generation.voice_profile_id == VoiceProfile.id)
-        .filter(Generation.user_id == current_user.id, VoiceProfile.deleted_at == None)
+        .filter(
+            Generation.user_id == current_user.id,
+            Generation.deleted_at.is_(None),
+            VoiceProfile.deleted_at == None,
+        )
     )
     response.headers["X-Total-Count"] = str(visible.count())
     generations = (
@@ -564,3 +569,46 @@ def get_generation_audio(
     return FileResponse(
         path, media_type="audio/wav", filename=f"synthesized_{generation.id}.wav"
     )
+
+
+@router.delete("/{generation_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(settings.API_RATE_LIMIT)
+def delete_generation(
+    request: Request,
+    generation_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Delete one of the caller's own generations: its audio file and the text they typed.
+
+    The row is soft-deleted and scrubbed (GENERATION_DELETE_PLAN.md D1), then the file is removed
+    after the commit. 404 covers an unknown id, someone else's generation and one already
+    deleted alike, so ids cannot be probed. A failed generation (no audio) can be deleted too.
+    Deliberately open to unverified users: removing your own data is never gated on email state.
+    """
+    generation = (
+        db.query(Generation)
+        .filter(
+            Generation.id == generation_id,
+            Generation.user_id == current_user.id,
+            Generation.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if generation is None:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    files = erase_generation(db, generation)
+    try:
+        db.commit()
+    except SQLAlchemyError as error:
+        db.rollback()
+        logger.exception("Failed to delete generation: id=%s", generation_id)
+        if is_transient_db_error(error):
+            raise db_unavailable()
+        raise HTTPException(status_code=500, detail="Failed to delete the generation")
+    remove_files(files)
+    logger.info(
+        "Generation deleted: id=%s by user_id=%s", generation_id, current_user.id
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

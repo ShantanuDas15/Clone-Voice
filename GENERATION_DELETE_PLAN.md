@@ -1,7 +1,7 @@
 # CloneVoice — Delete a Single Generation (Privacy) Plan
 
-> **Status**: 🔴 Planned, not started (written 2026-10-17 after the History screen review, FE-UX44)
-> **Last Reviewed**: 2026-10-17
+> **Status**: 🟡 D1 (backend) landed 2026-10-17 (`f6eafbf`); D2 (frontend) and D3 (optional filter) not started
+> **Last Reviewed**: 2026-10-17 (D1 landed)
 > **Rule that orders this work**: backend first (CLAUDE.md §2). D1 (backend) must be merged and verified before D2 (frontend). D3 is optional and independent.
 > **Why now**: today the only ways to remove a generated clip are deleting the whole voice (which erases every clip made with it) or waiting for retention to prune the file (default 30 days, `OUTPUT_RETENTION_DAYS`). For a voice-cloning product a user must be able to remove one output, and the text they typed, on request.
 
@@ -92,6 +92,6 @@ ls backend/outputs/<user_id>/                                                   
 
 | Milestone | Status | Commit | Date | What was verified | What is still open |
 |---|:---:|:---:|:---:|---|---|
-| D1 | 🔴 Not started | — | — | — | all of §3 D1 |
+| D1 | 🟡 Partial | `f6eafbf` | 2026-10-17 | `DELETE /api/v1/synthesize/{id}` (204; 404 unknown / foreign / already deleted; 422 malformed; 401 without a token; open to unverified users): `erasure.erase_generation` soft-deletes, scrubs `input_text` to `[erased]`, clears the path; the file is removed **after** the commit; a failed commit answers 503 (transient, with `Retry-After`) or 500 and removes nothing. `get_history` now also filters `Generation.deleted_at`, so the rows and `X-Total-Count` drop a deleted one. 20 new tests (3 unit, 17 integration/boundary/failure: file gone and row scrubbed, history and total, audio 404, double delete, foreign id with the file kept, failed and file-already-missing rows, path outside storage never removed, empty path, sibling generations untouched, voice deleted afterwards, unverified user, both commit-failure paths). Backend suite **1853 passed, 1 skipped, 11 warnings** (was 1833; no new warning). OpenAPI snapshot refreshed (frontend contract tests 46 pass), CLAUDE.md §7 row added. **Live gateway** (real models, real SQLite, uvicorn, curl): DELETE 204 then 404, audio 404, `X-Total-Count` 1 to 0, the WAV removed from disk, the row `[erased]`, no path, `deleted_at` set; no token 401; bad id 422. | (1) The plan's rate-limit test was **dropped**: the only version I could write asserted a config value, not behaviour; the route carries the same `API_RATE_LIMIT` decorator as history and audio, unverified by a test. (2) Not run against real Postgres: no schema change, the one new predicate is a plain `IS NULL`. (3) `tts_metadata` is never written, so nothing else holds the text; backups and request logs are not purged (open question 4). (4) Two generations created in the same second tie on `created_at` (SQLite resolution), which made a test helper return the wrong id; fixed in the test, but any client that assumes "newest = first" has the same ambiguity (pre-existing). (5) Frontend not changed (D2) |
 | D2 | 🔴 Not started (blocked on D1) | — | — | — | all of §3 D2 |
 | D3 | 🔴 Not started (optional) | — | — | — | all of §3 D3 |
