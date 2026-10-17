@@ -1580,6 +1580,18 @@ The four polish items FE-UX52/53 left for a product call, done on the owner's in
 **Open items from FE-UX54**
 1. Not changed on purpose: the two-row logged-out header at 375 px, and Delete keeping the secondary look (it asks first). The "Terms are being finalised" wording stays until the terms text is final (owner item since FE-UX39).
 
+### FE-UX55 — Revert the FE-UX52 mobile header (2026-10-17, branch `fix/FE-UX55-revert-mobile-header`; **corrects FE-UX52**)
+
+**FE-UX52 was a regression and is reverted.** The e2e suite was run against the real backend (real weights, SQLite, Chromium and Firefox, production build): 105 passed, 12 skipped (the Chromium-only layout-shift specs on Firefox), 5 failed. Four were the layout-shift specs on Chromium at 320 px (first-run 0.30 against a 0.2 ceiling, signed-in 0.18 against 0.05, unverified 0.38 against 0.1) and 360 px signed out (0.20 against 0.05). With the pre-FE-UX52 `components/app-shell.tsx` restored and the same backend, all 12 layout-shift specs passed, so the one-row header was the cause. Likely mechanism (not isolated further): below `sm` the loading placeholder and the loaded header wrapped to a different number of rows, which the old always-stacked layout never did. The unit tests and the 90 visual baselines are static and start at 375 px, so they could not show it, and the e2e suite is not part of CI, which is why it reached `main`.
+
+`components/app-shell.tsx` is back to its FE-UX50 form (logo above the actions below `sm`); the same 12 signed-in 375 px baselines FE-UX52 changed were regenerated and pass a second run. The FE-UX54 changes are kept. typecheck, lint, prettier clean; 677 tests pass.
+
+The fifth failure was not the app: the Firefox a11y "light" spec timed out creating a voice because `/voice/upload` is hard-coded at 10 per minute per IP (`backend/api/voice.py`, not configurable) and the suite had just made more; it passed alone in 3.7 s. The recipe in `frontend/e2e/README.md` cannot raise that limit, so run the Firefox project separately or pause between projects.
+
+**Open items from FE-UX55**
+1. The 50 px the one-row header saved on phones is gone again. A version that keeps it needs the loading and loaded states to have the same number of rows at every width (the signed-out header cannot fit one row below about 420 px), and must pass `e2e/layout-shift.spec.ts` at 320, 360 and 412 px.
+2. The layout-shift specs at 320 and 360 px need a place to run on pull requests (they need the real backend, so the same CI work as the rest of e2e).
+
 ---
 
 ## 9. Definition of Done (release checklist)
