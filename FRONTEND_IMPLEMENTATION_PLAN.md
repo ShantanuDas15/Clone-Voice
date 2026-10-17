@@ -1604,6 +1604,27 @@ FE-UX55 found that the CLS specs were the only check that caught the FE-UX52 hea
 1. With an engine that does offer delivery controls (the Chatterbox engines), the form grows when the capabilities answer arrives after the session; in the mock that measured 0.2 to 0.3 on the signed-in generate page. Not verified against a real expressive engine, and not fixed here. If it holds, reserve the controls' space or hold the form until capabilities are known.
 2. The real-backend e2e suite is still manual (it needs weights); run it before a release.
 
+### FE-UX57 — Delivery controls arriving late: measured, accepted, and checkable (2026-10-17, branch `docs/FE-UX57-expressive-engine-measurement`; resolves FE-UX56 open item 1)
+
+FE-UX56 suspected that with an engine offering delivery controls, the form grows when the capabilities answer arrives after the session. Measured on the **real backend** (original Chatterbox engine, `EMOTION_CONTROL_ENABLED`, a health-only stub worker so readiness is healthy and no degraded banner skews layout; the real `/synthesize/capabilities` answered `emotion_control: true`), signed-in `/generate`, session refresh held 1.2 s, Chromium:
+
+| Width | SV2TTS (control) | Expressive engine |
+|---|---|---|
+| 320 px | 0.008 | 0.065 |
+| 360 px | 0.013 | 0.071 |
+| 412 px | 0.013 | 0.068 |
+| 1280 px | 0.014 | 0.020 |
+
+The form paints, the capabilities answer follows about 18 ms later, and the Delivery and Strength controls push the footer off a phone screen (one shift of about 0.057). It is real but under Google's "good" 0.1, it affects only expressive engines at phone widths, and the mocked API of FE-UX56 had overstated it (0.23 to 0.29) because it models the answer differently.
+
+**Decision: accept it, do not change the form.** Holding the form until capabilities are known would delay it by that round trip for every user, including SV2TTS users who have no controls; reserving space for the controls while they load would shift the other way for SV2TTS users. Neither was worth about 0.06 on a non-default engine, and neither was measured. Revisit if an expressive engine becomes the default.
+
+**Made checkable instead:** `e2e/expressive-layout-shift.spec.ts` (320, 360, 412 px) asserts a ceiling of 0.1 and that the Delivery control is visible, so it fails if the backend is not configured as intended (seen: "waiting for Delivery" on SV2TTS) and fails if the shift gets noticeably worse. It is skipped unless `E2E_EXPRESSIVE=1`, so the normal e2e run is unchanged (3 skipped), and passes 3 of 3 on the expressive setup. `e2e/tools/stub-worker.mjs` is the health-only worker; `e2e/README.md` has the recipe. No app code changed; 679 unit tests pass.
+
+**Open items from FE-UX57**
+1. Not measured: a real GPU worker (the stub only answers `/health`, so synthesis was not exercised), the nano and turbo engines, and Firefox/Safari (the layout-shift API is Chromium-only).
+2. Run `E2E_EXPRESSIVE=1` once before a release that changes the generate page or makes an expressive engine the default.
+
 ---
 
 ## 9. Definition of Done (release checklist)
