@@ -92,6 +92,23 @@ def erase_voice_profile(db: Session, profile: VoiceProfile) -> List[str]:
     return [profile.audio_sample_path, profile.embedding_path, *clips, *outputs]
 
 
+def erase_generation(db: Session, generation: Generation) -> List[str]:
+    """Soft-delete one generation, scrub the typed text, and return its file to remove.
+
+    The row stays as the audit trail (CLAUDE.md §6) but no longer holds the user's text or a path
+    to the audio; the history and audio routes skip a soft-deleted row. Idempotent: an already
+    deleted row yields no files and is left as it is. The caller commits, then calls
+    `remove_files`, so a failed commit never deletes a file a surviving row points at.
+    """
+    if generation.deleted_at is not None:
+        return []
+    files = [generation.output_audio_path] if generation.output_audio_path else []
+    generation.input_text = ERASED_TEXT
+    generation.output_audio_path = None
+    generation.deleted_at = _now()
+    return files
+
+
 def remove_files(paths: Iterable[str]) -> int:
     """Delete files that lie inside the storage directories; return the count.
 

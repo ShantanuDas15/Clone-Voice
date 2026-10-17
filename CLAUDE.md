@@ -180,6 +180,7 @@ backend/
 | `POST` | `/api/v1/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output (`X-Voice-Engine`, and `X-Voice-Engine-Fallback` when the backup engine served it) |
 | `GET` | `/api/v1/synthesize/history` | ✅ | List user's generated audio history (`limit`/`offset`, `X-Total-Count`) |
 | `GET` | `/api/v1/synthesize/{generation_id}/audio` | ✅ | Download a past generation's WAV (404 / 410 expired) |
+| `DELETE` | `/api/v1/synthesize/{generation_id}` | ✅ | Delete one generation: soft-delete, scrub the typed text, remove the audio file (204; 404 unknown / foreign / already deleted) |
 | `GET` | `/health`, `/health/live`, `/health/ready` | ❌ | Liveness / readiness (outside `/api/v1`) |
 
 The authoritative list is the generated OpenAPI snapshot, `frontend/contract/openapi.json`
