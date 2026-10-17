@@ -9,7 +9,7 @@ export default function Page() {
   return (
     <AuthCard
       title="Reset your password"
-      lead="Enter your email and we will send you a link to choose a new one."
+      lead="We’ll email you a link to choose a new password, or to set one if you signed up with Google."
     >
       <ForgotPasswordForm />
     </AuthCard>
