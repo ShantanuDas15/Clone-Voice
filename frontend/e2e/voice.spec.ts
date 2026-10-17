@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import { SAMPLE_WAV, createVoice, signUp, signUpVerified, uniqueEmail } from "./helpers";
@@ -62,4 +64,20 @@ test("consent is required: no request is made without it", async ({ page }) => {
   await page.getByRole("button", { name: "Create voice" }).click();
   await expect(page.getByText(/right to use this voice/i).last()).toBeVisible();
   expect(uploads).toBe(0);
+});
+
+test("two clips become one voice, with the recording advice shown", async ({ page }) => {
+  await signUpVerified(page, "twoclips");
+  await page.goto("/voices");
+  await page.getByLabel("Voice name").fill("Two clips");
+  const wav = readFileSync(SAMPLE_WAV);
+  await page.locator("input[type=file]").setInputFiles([
+    { name: "one.wav", mimeType: "audio/wav", buffer: wav },
+    { name: "two.wav", mimeType: "audio/wav", buffer: wav },
+  ]);
+  await expect(page.getByTestId("selected-file")).toHaveCount(2);
+  await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("button", { name: "Create voice" }).click();
+  await expect(page.getByText("Voice “Two clips” created.")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("region", { name: "Recording quality" })).toBeVisible();
 });

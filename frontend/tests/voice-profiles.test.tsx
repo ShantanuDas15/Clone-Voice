@@ -228,6 +228,56 @@ describe("UploadVoiceForm", () => {
     post.mockRestore();
   });
 
+  it("sends several clips as `files`, one clip as `file`", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValue({ data: fixtures.profile });
+    wrap(<UploadVoiceForm />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Voice name"), "Trio");
+    await user.upload(screen.getByLabelText("Voice sample"), [
+      wav(),
+      new File([new Uint8Array(3000)], "b.wav", { type: "audio/wav" }),
+    ]);
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Create voice" }));
+    expect(await screen.findByText(/created\./i)).toBeInTheDocument();
+    const form = post.mock.calls[0]![1] as FormData;
+    expect(form.getAll("files").map((f) => (f as File).name)).toEqual(["sample.wav", "b.wav"]);
+    expect(form.get("file")).toBeNull();
+    post.mockRestore();
+  });
+
+  it("shows the recording advice and a different-speaker warning after the upload", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValue({
+      data: {
+        ...fixtures.profile,
+        quality: {
+          rating: "fair",
+          hints: [{ code: "noisy", severity: "warning", message: "Background noise is audible." }],
+        },
+        samples: [
+          { position: 0, agreement: 0.9, mismatch: false },
+          { position: 1, agreement: 0.5, mismatch: true },
+        ],
+      },
+    });
+    wrap(<UploadVoiceForm />);
+    await fillAndSubmit();
+    const report = await screen.findByRole("region", { name: "Recording quality" });
+    expect(within(report).getByText("Fair recording")).toBeInTheDocument();
+    expect(within(report).getByText("Background noise is audible.")).toBeInTheDocument();
+    expect(within(report).getByText(/Clip 2 may be a different speaker/)).toBeInTheDocument();
+    post.mockRestore();
+  });
+
+  it("shows no quality section when the server sent none", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValue({ data: fixtures.profile });
+    wrap(<UploadVoiceForm />);
+    await fillAndSubmit();
+    await screen.findByText(/created\./i);
+    expect(screen.queryByRole("region", { name: "Recording quality" })).not.toBeInTheDocument();
+    post.mockRestore();
+  });
+
   it("uploads a Firefox-style audio/vnd.wave file as audio/wav (found by the Firefox e2e run)", async () => {
     const post = vi.spyOn(http, "post").mockResolvedValue({ data: fixtures.profile });
     wrap(<UploadVoiceForm />);
@@ -424,6 +474,46 @@ describe("AudioUploader", () => {
     expect(button).toHaveAttribute("for", input.id);
     await userEvent.setup().upload(input, wav());
     expect(await screen.findByTestId("selected-file")).toHaveTextContent("sample.wav");
-    expect(screen.getByText("Choose a different file")).toBeInTheDocument();
+    expect(screen.getByText("Add another clip")).toBeInTheDocument();
+  });
+  it("collects several clips, ignores a repeat, and removes one", async () => {
+    wrap(<UploadVoiceForm />);
+    const input = (await screen.findByLabelText("Voice sample")) as HTMLInputElement;
+    const user = userEvent.setup();
+    const b = new File([new Uint8Array(3000)], "second.wav", { type: "audio/wav" });
+    const a = wav();
+    await user.upload(input, [a, b]);
+    expect(await screen.findAllByTestId("selected-file")).toHaveLength(2);
+    await user.upload(input, a); // the same clip again
+    expect(screen.getAllByTestId("selected-file")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Remove sample.wav" }));
+    const left = screen.getAllByTestId("selected-file");
+    expect(left).toHaveLength(1);
+    expect(left[0]).toHaveTextContent("second.wav");
+  });
+
+  it("refuses a pick that would push the clips past the size limit, keeping the earlier ones", async () => {
+    wrap(<UploadVoiceForm />);
+    const input = (await screen.findByLabelText("Voice sample")) as HTMLInputElement;
+    const user = userEvent.setup();
+    const big = (name: string) => {
+      const f = new File([new Uint8Array(1)], name, { type: "audio/wav" });
+      Object.defineProperty(f, "size", { value: 20 * 1024 * 1024 });
+      return f;
+    };
+    await user.upload(input, big("one.wav"));
+    await user.upload(input, big("two.wav"));
+    expect(await screen.findByText(/together are larger than 25 MB/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId("selected-file")).toHaveLength(1);
+  });
+
+  it("keeps the clips already chosen when another pick is invalid", async () => {
+    wrap(<UploadVoiceForm />);
+    const input = (await screen.findByLabelText("Voice sample")) as HTMLInputElement;
+    const user = userEvent.setup({ applyAccept: false });
+    await user.upload(input, wav());
+    await user.upload(input, new File([new Uint8Array(10)], "notes.txt", { type: "text/plain" }));
+    expect(await screen.findByText(/WAV, MP3 or WEBM audio file/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId("selected-file")).toHaveLength(1);
   });
 });
