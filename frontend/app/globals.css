@@ -137,3 +137,44 @@ main h1[tabindex="-1"]:focus {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * Range sliders (the Strength control): a track in the `line` token (>= 3:1 on the page, WCAG
+ * 1.4.11) and a primary thumb, instead of each browser's pale default. In forced-colors mode the
+ * native control is used, so the system colours apply.
+ */
+input[type="range"].range {
+  appearance: none;
+  background: transparent;
+}
+input[type="range"].range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: hsl(var(--line));
+}
+input[type="range"].range::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: hsl(var(--line));
+}
+input[type="range"].range::-webkit-slider-thumb {
+  appearance: none;
+  height: 22px;
+  width: 22px;
+  margin-top: -8px;
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--surface));
+  background: hsl(var(--primary));
+}
+input[type="range"].range::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--surface));
+  background: hsl(var(--primary));
+}
+@media (forced-colors: active) {
+  input[type="range"].range {
+    appearance: auto;
+  }
+}

@@ -193,10 +193,11 @@ describe("TextToSpeechForm", () => {
     server.use(mswHttp.post(`${API}/synthesize`, () => ((calls += 1), wavResponse())));
     wrap(<TextToSpeechForm />);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Generate speech" }));
-    expect(await screen.findByText("Choose a voice first.")).toBeInTheDocument();
-    const select = screen.getByLabelText("Voice");
+    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
     await waitFor(() => expect(select).not.toBeDisabled());
+    await user.selectOptions(select, ""); // the only voice is preselected; unselect it
+    await user.click(screen.getByRole("button", { name: "Generate speech" }));
+    expect(await screen.findByText("Choose a voice first.")).toBeInTheDocument();
     await user.selectOptions(select, fixtures.profile.id);
     await user.type(screen.getByLabelText("Text"), "   ");
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
@@ -423,8 +424,12 @@ describe("TextToSpeechForm", () => {
     wrap(<TextToSpeechForm />);
     const button = await screen.findByRole("button", { name: "Generate speech" });
     await waitFor(() => expect(button).toBeDisabled());
-    expect(screen.getByText("Verify your email first.")).toBeInTheDocument();
-    expect(button).toHaveAccessibleDescription("Verify your email first.");
+    expect(screen.getByText(/Verify your email first\./)).toBeInTheDocument();
+    expect(button).toHaveAccessibleDescription("Verify your email first. See the steps below.");
+    expect(screen.getByRole("link", { name: "See the steps below." })).toHaveAttribute(
+      "href",
+      "#first-run-title",
+    );
   });
 });
 
@@ -528,5 +533,123 @@ describe("delivery controls", () => {
     await generate();
     expect(await screen.findByRole("link", { name: "Download WAV" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Delivery")).not.toBeInTheDocument();
+  });
+});
+
+describe("generate screen details", () => {
+  const okSynthesis = () =>
+    server.use(
+      mswHttp.post(`${API}/synthesize`, () =>
+        wavResponse({
+          "Content-Disposition": `attachment; filename="synthesized_${GEN_ID}.wav"`,
+        }),
+      ),
+    );
+
+  it("does not cut pasted text at the limit: it says how many characters are too many", async () => {
+    let calls = 0;
+    server.use(mswHttp.post(`${API}/synthesize`, () => ((calls += 1), wavResponse())));
+    wrap(<TextToSpeechForm />);
+    const user = userEvent.setup();
+    const box = (await screen.findByLabelText("Text")) as HTMLTextAreaElement;
+    await user.click(box);
+    await user.paste("a".repeat(520));
+    expect(box.value).toHaveLength(520); // nothing silently dropped
+    expect(screen.getByText("520 / 500 (20 too many)")).toBeInTheDocument();
+    expect(await screen.findByText(/over the 500-character limit/i)).toBeInTheDocument();
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    await waitFor(() => expect(screen.getByLabelText("Voice")).not.toBeDisabled());
+    await user.click(screen.getByRole("button", { name: "Generate speech" }));
+    expect(await screen.findByText("Text must be at most 500 characters")).toBeInTheDocument();
+    expect(calls).toBe(0);
+  });
+
+  it("shows no over-limit message at exactly the limit", async () => {
+    wrap(<TextToSpeechForm />);
+    const box = await screen.findByLabelText("Text");
+    fireEvent.change(box, { target: { value: "a".repeat(500) } });
+    expect(screen.getByText("500 / 500")).toBeInTheDocument();
+    expect(screen.queryByText(/over the 500-character limit/i)).not.toBeInTheDocument();
+  });
+
+  it("announces when the audio is ready", async () => {
+    okSynthesis();
+    wrap(<TextToSpeechForm />);
+    await generate();
+    const ready = await screen.findByText("Your audio is ready.");
+    expect(ready.closest("[role=status]")).toHaveAttribute("aria-live", "polite");
+    expect(ready).toHaveClass("sr-only");
+  });
+
+  it("preselects the only ready voice", async () => {
+    wrap(<TextToSpeechForm />);
+    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe(fixtures.profile.id));
+  });
+
+  it("leaves the choice to the user with two ready voices", async () => {
+    server.use(
+      mswHttp.get(`${API}/voice/profiles`, () =>
+        HttpResponse.json([
+          fixtures.profile,
+          { ...fixtures.profile, id: "44444444-4444-4444-8444-444444444444", name: "Other" },
+        ]),
+      ),
+    );
+    wrap(<TextToSpeechForm />);
+    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
+    await waitFor(() => expect(select).not.toBeDisabled());
+    expect(select.value).toBe("");
+  });
+
+  it("puts the player first and cuts a long quote with Show more", async () => {
+    okSynthesis();
+    wrap(<TextToSpeechForm />);
+    const long = "Word ".repeat(60).trim(); // 299 characters
+    await generate(long);
+    const player = await screen.findByRole("button", { name: "Play Generated speech" });
+    const more = await screen.findByRole("button", { name: "Show more" });
+    const quote = more.previousElementSibling as HTMLElement;
+    expect(quote.textContent?.endsWith("…")).toBe(true);
+    expect(player.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.setup().click(more);
+    expect(quote.textContent).toBe(`“${long}”`);
+  });
+
+  it("keeps the text selectable (read-only, not disabled) while generating", async () => {
+    server.use(mswHttp.post(`${API}/synthesize`, () => new Promise(() => {})));
+    wrap(<TextToSpeechForm />);
+    await generate("Hold on.");
+    const box = screen.getByLabelText("Text");
+    await waitFor(() => expect(box).toHaveAttribute("readonly"));
+    expect(box).not.toBeDisabled();
+  });
+
+  it("says the strength is not adjustable until a delivery is chosen", async () => {
+    wrap(<TextToSpeechForm />);
+    const slider = await screen.findByLabelText(/Strength/);
+    expect(screen.getByText("pick a delivery first")).toBeInTheDocument();
+    await userEvent.setup().selectOptions(screen.getByLabelText("Delivery"), "happy");
+    expect(slider).not.toBeDisabled();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(slider).toHaveClass("range");
+  });
+
+  it("explains the inline tags only when delivery controls are offered", async () => {
+    wrap(<TextToSpeechForm />);
+    expect(await screen.findByText("Tips for expressive speech")).toBeInTheDocument();
+    expect(screen.getByText("[happy]Great news![/happy]")).toBeInTheDocument();
+  });
+
+  it("hides the tips with the delivery controls", async () => {
+    server.use(
+      mswHttp.get(`${API}/synthesize/capabilities`, () =>
+        HttpResponse.json({ emotion_control: false }),
+      ),
+    );
+    wrap(<TextToSpeechForm />);
+    await screen.findByLabelText("Text");
+    await waitFor(() => expect(screen.getByLabelText("Voice")).not.toBeDisabled());
+    expect(screen.queryByText("Tips for expressive speech")).not.toBeInTheDocument();
   });
 });

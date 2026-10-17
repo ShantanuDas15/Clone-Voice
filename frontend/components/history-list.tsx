@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ExpandableText } from "@/components/expandable-text";
 import { Take } from "@/components/take";
 import { flattenHistory, useHistory } from "@/hooks/use-history";
 import { useObjectUrl } from "@/hooks/use-object-url";
@@ -92,25 +93,12 @@ function Playback({ gen }: { gen: Generation }) {
 }
 
 function HistoryItem({ gen }: { gen: Generation }) {
-  const [expanded, setExpanded] = useState(false);
   const failed = isFailedGeneration(gen);
   const details = generationDetails(gen);
-  const long = gen.input_text.length > PREVIEW_CHARS;
-  const text = expanded || !long ? gen.input_text : `${gen.input_text.slice(0, PREVIEW_CHARS)}…`;
 
   return (
     <li className="space-y-2 rounded border border-border p-3">
-      <p className="whitespace-pre-wrap break-words">{text}</p>
-      {long && (
-        <Button
-          variant="quiet"
-          size="sm"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-        >
-          {expanded ? "Show less" : "Show more"}
-        </Button>
-      )}
+      <ExpandableText text={gen.input_text} limit={PREVIEW_CHARS} />
       <p className="text-sm text-muted-foreground">
         {gen.voice_profile_name} · {formatDateTime(gen.created_at)}
         {gen.duration_seconds !== null && !failed && ` · ${gen.duration_seconds.toFixed(1)} s`}
