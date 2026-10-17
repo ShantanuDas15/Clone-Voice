@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, signUp, uniqueEmail } from "./helpers";
+import { PASSWORD, signUp, uniqueEmail, verifyEmail } from "./helpers";
 
 test("rename, then delete the account: signed out and login no longer works", async ({ page }) => {
   const email = uniqueEmail("acct");
@@ -30,4 +30,23 @@ test("rename, then delete the account: signed out and login no longer works", as
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
+});
+
+test("the account page shows the verification state, and updates once the email is verified", async ({
+  page,
+}) => {
+  const email = uniqueEmail("acctverify");
+  await signUp(page, email);
+  await page.goto("/account");
+  const details = page
+    .getByRole("term")
+    .filter({ hasText: "Verification" })
+    .locator("xpath=following-sibling::dd[1]");
+  await expect(details.getByText("Not verified")).toBeVisible();
+  await expect(details.getByRole("button", { name: "Resend verification email" })).toBeVisible();
+
+  await verifyEmail(page, email);
+  await page.goto("/account");
+  await expect(details.getByText("Verified", { exact: true })).toBeVisible();
+  await expect(page.getByText("Not verified")).toHaveCount(0);
 });

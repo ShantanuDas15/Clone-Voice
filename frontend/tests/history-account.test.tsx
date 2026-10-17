@@ -704,3 +704,63 @@ describe("withoutGeneration", () => {
     expect(withoutGeneration(data(0), "a").pages[0]!.total).toBe(0);
   });
 });
+
+describe("AccountSection: details", () => {
+  const me = (over: Record<string, unknown>) =>
+    server.use(
+      mswHttp.get(`${API}/auth/me`, () => HttpResponse.json({ ...fixtures.user, ...over })),
+    );
+
+  it("shows a verified email, the date joined without a time, and the password row", async () => {
+    wrap(<AccountSection />);
+    await screen.findByLabelText("Display name");
+    expect(screen.getByText("Verified")).toBeInTheDocument();
+    expect(screen.queryByText("Not verified")).toBeNull();
+    expect(screen.getByText("Oct 1, 2026")).toBeInTheDocument(); // no "12:00 AM"
+    expect(screen.getByText(/^Set\./)).toBeInTheDocument();
+    const reset = screen.getByRole("link", { name: "Reset it by email" });
+    expect(reset).toHaveAttribute("href", "/forgot-password");
+    expect(reset).toHaveClass("min-h-11");
+  });
+
+  it("says an unverified email is unverified, what it blocks, and offers to resend", async () => {
+    me({ email_verified_at: null });
+    wrap(<AccountSection />);
+    expect(await screen.findByText("Not verified")).toBeInTheDocument();
+    expect(
+      screen.getByText(/can't create voices or generate speech until you verify/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeInTheDocument();
+    expect(screen.queryByText("Verified")).toBeNull();
+  });
+
+  it("offers a Google-only account to set a password by email", async () => {
+    me({ provider: "google", has_password: false });
+    wrap(<AccountSection />);
+    expect(await screen.findByText(/^Not set\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Set one by email" })).toHaveAttribute(
+      "href",
+      "/forgot-password",
+    );
+  });
+
+  it("lays the details out as one aligned list, with the danger section as an h2", async () => {
+    wrap(<AccountSection />);
+    await screen.findByLabelText("Display name");
+    const labels = screen.getAllByRole("term").map((t) => t.textContent);
+    expect(labels).toEqual(["Email", "Verification", "Sign-in", "Password", "Member since"]);
+    expect(screen.getByRole("heading", { level: 2, name: "Delete account" })).toBeInTheDocument();
+  });
+
+  it("restates what is erased inside the delete dialog", async () => {
+    wrap(<AccountSection />);
+    await screen.findByLabelText("Display name");
+    await userEvent.click(screen.getByRole("button", { name: /delete my account/i }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).getByText(
+        /permanently erases your account, every voice and every generated clip/i,
+      ),
+    ).toBeInTheDocument();
+  });
+});
