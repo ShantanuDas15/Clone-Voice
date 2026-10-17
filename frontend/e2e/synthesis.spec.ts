@@ -101,9 +101,9 @@ test("filter History by voice: two voices, each row and count follows the choice
   await signUpVerified(page, "genfilter");
   await createVoice(page, "Filter one");
   await createVoice(page, "Filter two");
-  for (const [voice, text] of [
-    ["Filter one", "Spoken by the first."],
-    ["Filter two", "Spoken by the second."],
+  for (const { voice, text } of [
+    { voice: "Filter one", text: "Spoken by the first." },
+    { voice: "Filter two", text: "Spoken by the second." },
   ]) {
     await page.goto("/generate");
     await page.getByLabel("Voice").selectOption({ label: voice });
