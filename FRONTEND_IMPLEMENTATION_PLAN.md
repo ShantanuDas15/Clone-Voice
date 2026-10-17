@@ -1544,6 +1544,13 @@ Owner request: smaller footer, cleaner and more business-like pages. Still flat 
 **Open items from FE-UX50**
 1. Run the e2e suite (`frontend/e2e/README.md`) once before the next release; selectors target roles and labels, which did not change.
 
+### FE-UX52 — One-row mobile header (2026-10-17, branch `fix/FE-UX52-shell-layout`)
+
+A read-only audit of the generate, voices, history and login baselines (ui-ux-pro-max `ux` rules plus the screenshots) produced 10 findings. Three were checked against the code and **rejected**: the bottom tab bar "overlapping" the form is a full-page-capture artefact (the bar is `fixed`, with an `h-14` spacer after the footer); the narrow left column is deliberate (every single-column page is `max-w-xl`); Delete is the ordinary secondary button behind a confirm dialog. **Fixed:** below `sm` the header stacked the logo above Sign out and the theme toggle, using about 50 px of a 375 px screen before any content. `components/app-shell.tsx` is now one wrapping row (logo left, actions right) at every width; 768 px and wider are unchanged. The 12 signed-in 375 px baselines were regenerated locally (laptop and CI baselines matched 80 of 80 in FE-UX42) and pass a second run; the required `visual` check confirms them on the runner. typecheck, lint, prettier clean; 667 tests pass.
+
+**Open items from FE-UX52**
+1. Remaining audit findings are polish, not defects, and need a product call: Strength slider hint wording (generate), merging the two consent helper lines and a clearer Upload/Record toggle (voices), a call to action on short history lists. Error, loading, recorder, dialog and account states were not in the baselines and are unaudited.
+
 ---
 
 ## 9. Definition of Done (release checklist)
