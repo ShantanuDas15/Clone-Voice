@@ -13,6 +13,21 @@ export function describeRetention(days: number | null | undefined): string | nul
   return `${hours} ${hours === 1 ? "hour" : "hours"}`;
 }
 
+/**
+ * Describe how long an emailed reset link works, from the server's `password_reset_expire_minutes`
+ * ("30 minutes", "2 hours"). Null when the server gave no usable number, so the page never states
+ * a figure the server did not.
+ */
+export function describeLinkLifetime(minutes: number | null | undefined): string | null {
+  if (typeof minutes !== "number" || !Number.isFinite(minutes) || minutes <= 0) return null;
+  const n = Math.round(minutes);
+  if (n >= 60 && n % 60 === 0) {
+    const hours = n / 60;
+    return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  return `${n} ${n === 1 ? "minute" : "minutes"}`;
+}
+
 /** A clip is "close to expiring" within this many days; further out, saying so is just noise. */
 export const EXPIRY_NOTICE_DAYS = 7;
 

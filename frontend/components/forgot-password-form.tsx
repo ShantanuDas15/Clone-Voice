@@ -7,14 +7,17 @@ import { useForm } from "react-hook-form";
 
 import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
+import { useTerms } from "@/hooks/use-terms";
 import { forgotPassword } from "@/lib/api/auth";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
+import { describeLinkLifetime } from "@/lib/retention";
 import { type ForgotValues, forgotSchema } from "@/lib/validation/auth";
 import { Alert } from "@/components/ui/alert";
 
 /** Neutral by design: the same confirmation shows whether or not the account exists. */
 export function ForgotPasswordForm() {
+  const lifetime = describeLinkLifetime(useTerms().data?.password_reset_expire_minutes);
   const inFlight = useRef(false);
   const [done, setDone] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -43,8 +46,8 @@ export function ForgotPasswordForm() {
     return (
       <div role="status" className="space-y-4">
         <p>
-          If an account exists for that email, we&apos;ve sent a link to set a new password. It
-          expires in 30 minutes.
+          If an account exists for that email, we&apos;ve sent a link to set a new password.
+          {lifetime && ` It expires in ${lifetime}.`}
         </p>
         <Link href="/login" className="underline">
           Back to sign in
