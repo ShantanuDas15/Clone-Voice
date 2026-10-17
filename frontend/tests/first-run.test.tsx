@@ -133,7 +133,7 @@ describe("Generate readiness", () => {
     wrap(<TextToSpeechForm />);
     const button = await screen.findByRole("button", { name: "Generate speech" });
     await waitFor(() => expect(button).toBeDisabled());
-    expect(button).toHaveAccessibleDescription("Create a voice first.");
+    expect(button).toHaveAccessibleDescription("Create a voice first. See the steps below.");
   });
 
   it("verified with a ready voice: enabled and no reason shown", async () => {
@@ -153,7 +153,14 @@ describe("Generate readiness", () => {
   });
 
   it("ignores a preselected voice that no longer exists", async () => {
-    setup({ verified: true, profiles: [fixtures.profile] });
+    // Two voices, so nothing is preselected for lack of a choice.
+    setup({
+      verified: true,
+      profiles: [
+        fixtures.profile,
+        { ...fixtures.profile, id: "44444444-4444-4444-8444-444444444444" },
+      ],
+    });
     wrap(<TextToSpeechForm initialVoiceId="99999999-9999-4999-8999-999999999999" />);
     const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
     await waitFor(() => expect(select).not.toBeDisabled());

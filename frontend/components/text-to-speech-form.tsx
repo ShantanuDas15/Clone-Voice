@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { ExpandableText } from "@/components/expandable-text";
 import { Take } from "@/components/take";
 import { useAuth } from "@/components/auth-provider";
 import { VoiceProfileSelect } from "@/components/voice-profile-select";
@@ -25,6 +26,7 @@ import { EMOTIONS, DEFAULT_INTENSITY, intensityApplies } from "@/lib/emotion";
 
 const BUSY_COOLDOWN_S = 15; // no Retry-After on "service busy" (G-05)
 const RATE_COOLDOWN_S = 60; // 5/min per IP
+const QUOTE_PREVIEW_CHARS = 160; // the result card quotes the text; long text is cut
 
 /** Message for a failed synthesis by kind (R3). Ambiguous failures never assume the job didn't run (R9). */
 function errorMessage(e: ApiError): string {
@@ -63,7 +65,10 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const [result, setResult] = useState<(SynthesisResult & { text: string }) | null>(null);
   const controller = useRef<AbortController | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const resultRef = useRef<HTMLElement>(null);
   const inFlight = useRef(false);
+  const autoPicked = useRef(false);
+  const [announcement, setAnnouncement] = useState("");
   const cooldown = useCooldown();
   const degraded = useDegraded();
   const capabilities = useCapabilities();
@@ -100,6 +105,25 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
     if (!profiles.data.some((p) => p.id === voiceId && p.status === "ready")) setVoiceId("");
   }, [voiceId, profiles.data]);
 
+  // One ready voice is the only choice: select it, once, unless a voice is already chosen.
+  useEffect(() => {
+    if (autoPicked.current || !profiles.data || !user || draftReady.current !== user.id) return;
+    autoPicked.current = true;
+    const ready = profiles.data.filter((p) => p.status === "ready");
+    const only = ready.length === 1 ? ready[0] : undefined;
+    if (only) setVoiceId((v) => v || only.id);
+  }, [profiles.data, user]);
+
+  // A finished take can land below the fold on a phone: bring it into view (no-op when visible).
+  useEffect(() => {
+    if (!result) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    resultRef.current?.scrollIntoView?.({
+      block: "nearest",
+      behavior: reduced ? "auto" : "smooth",
+    });
+  }, [result]);
+
   // R9: warn before leaving mid-generation.
   useEffect(() => {
     if (!pending) return;
@@ -122,6 +146,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   async function run(source: string) {
     if (inFlight.current || cooldown.remaining > 0) return; // R4
     setFormError(null);
+    setAnnouncement(""); // cleared first, so the same message is announced again next time
     const parsed = synthesisTextSchema.safeParse(source);
     setTextError(parsed.success ? undefined : parsed.error.issues[0]?.message);
     if (!voiceId) {
@@ -142,6 +167,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
         signal: ctl.signal,
       });
       setResult({ ...out, text: parsed.data }); // replaces (and so revokes) the previous blob
+      setAnnouncement("Your audio is ready.");
       void client.invalidateQueries({ queryKey: HISTORY_KEY });
     } catch (err) {
       if (!(err instanceof ApiError)) throw err;
@@ -175,17 +201,19 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   }
 
   const warnChars = hasLikelyUnsupportedChars(text);
+  const over = text.trim().length - TEXT_MAX; // > 0: that many characters too many
 
   // Why Generate is unavailable, shown next to the button (UR4). While the list loads we don't
   // block; the server still enforces both rules.
-  const blocker = !online
-    ? "You're offline."
-    : user && !profiles.isPending
+  const steps =
+    user && !profiles.isPending
       ? firstRun({
           emailVerified: Boolean(user.email_verified_at),
           hasReadyVoice: (profiles.data ?? []).some((p) => p.status === "ready"),
-        }).blocker
+        })
       : null;
+  const blocker = !online ? "You're offline." : (steps?.blocker ?? null);
+  const stepsBelow = online && steps?.blocker != null; // the checklist under the form has them
   // UR4: every visible reason the generate buttons are disabled is linked to them.
   const whyDisabled =
     [blocker && "tts-blocked", degraded && "tts-paused", cooldown.remaining > 0 && "tts-cooldown"]
@@ -211,18 +239,24 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             ref={textRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            maxLength={TEXT_MAX}
             rows={5}
-            disabled={pending}
-            aria-invalid={textError ? true : undefined}
-            aria-describedby="tts-count tts-hint"
+            readOnly={pending} // stays selectable and copyable while generating
+            className="read-only:bg-muted"
+            aria-invalid={textError || over > 0 ? true : undefined}
+            aria-describedby={`tts-count tts-hint${over > 0 ? " tts-over" : ""}`}
           />
           <p
             id="tts-count"
-            className="mt-1 text-right font-mono text-xs tabular-nums text-muted-foreground"
+            className={`mt-1 text-right font-mono text-xs tabular-nums ${over > 0 ? "font-semibold text-danger" : "text-muted-foreground"}`}
           >
             {text.length} / {TEXT_MAX}
+            {over > 0 && ` (${over} too many)`}
           </p>
+          {over > 0 && (
+            <Alert tone="danger" id="tts-over" className="mt-1">
+              That&apos;s over the {TEXT_MAX}-character limit. Shorten the text to generate it.
+            </Alert>
+          )}
           <p id="tts-hint" className="text-xs text-muted-foreground">
             Plain text works best: letters, numbers and basic punctuation.
           </p>
@@ -262,7 +296,9 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
               <label htmlFor="tts-intensity" className="block text-sm font-medium">
                 Strength{" "}
                 <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                  {Math.round(intensity * 100)}%
+                  {intensityApplies(emotion)
+                    ? `${Math.round(intensity * 100)}%`
+                    : "pick a delivery first"}
                 </span>
               </label>
               <input
@@ -275,7 +311,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
                 onChange={(e) => setIntensity(Number(e.target.value))}
                 disabled={pending || !intensityApplies(emotion)}
                 aria-describedby="tts-emotion-hint"
-                className="mt-1 block min-h-11 w-full disabled:opacity-60"
+                className="range mt-1 block min-h-11 w-full disabled:opacity-60"
               />
             </div>
             <p id="tts-emotion-hint" className="text-xs text-muted-foreground sm:col-span-2">
@@ -284,6 +320,35 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             </p>
           </div>
         )}
+
+        {showDelivery && (
+          <details className="text-sm">
+            <summary className="min-h-11 cursor-pointer py-2 underline underline-offset-2">
+              Tips for expressive speech
+            </summary>
+            <div className="space-y-2 pb-2 text-muted-foreground">
+              <p>
+                Set the delivery for part of the text by wrapping it in a tag, for example{" "}
+                <code className="font-mono">[happy]Great news![/happy]</code>. The tags are{" "}
+                <code className="font-mono">neutral</code>, <code className="font-mono">happy</code>
+                , <code className="font-mono">sad</code>, <code className="font-mono">angry</code>,{" "}
+                <code className="font-mono">fearful</code> and{" "}
+                <code className="font-mono">surprised</code>.
+              </p>
+              <p>
+                Some voice engines can also make a sound where you write{" "}
+                <code className="font-mono">[laugh]</code>,{" "}
+                <code className="font-mono">[chuckle]</code> or{" "}
+                <code className="font-mono">[cough]</code>. Where one can&apos;t, the sound is left
+                out and you are told.
+              </p>
+            </div>
+          </details>
+        )}
+
+        <span role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </span>
 
         {pending && (
           <div role="status" aria-live="polite" className="space-y-2 text-sm">
@@ -312,9 +377,10 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           </p>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             type="submit"
+            className="whitespace-nowrap"
             disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
             aria-describedby={whyDisabled}
             loading={pending}
@@ -324,6 +390,14 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           {blocker && (
             <p id="tts-blocked" className="self-center text-sm text-muted-foreground">
               {blocker}
+              {stepsBelow && (
+                <>
+                  {" "}
+                  <a href="#first-run-title" className="underline">
+                    See the steps below.
+                  </a>
+                </>
+              )}
             </p>
           )}
           {pending && (
@@ -336,6 +410,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
 
       {result && audioUrl && (
         <section
+          ref={resultRef}
           aria-labelledby="result-title"
           className="max-w-xl space-y-2 rounded border border-border p-4"
         >
@@ -343,13 +418,17 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             Your audio{" "}
             <span className="text-sm font-normal text-muted-foreground">(AI-generated voice)</span>
           </h2>
-          <p className="text-sm text-muted-foreground">“{result.text}”</p>
           <Take
             src={audioUrl}
             blob={result.blob}
             filename={result.filename}
             label="Generated speech"
             animateIn
+          />
+          <ExpandableText
+            text={`“${result.text}”`}
+            limit={QUOTE_PREVIEW_CHARS}
+            className="text-sm text-muted-foreground"
           />
           {result.styleApplied === false && (
             <p role="status" className="text-sm">
