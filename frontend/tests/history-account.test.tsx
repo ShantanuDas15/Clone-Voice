@@ -77,6 +77,31 @@ describe("history helpers", () => {
 });
 
 describe("HistoryList", () => {
+  it("shows how a generation was made, on completed and failed rows, and nothing for a plain one", async () => {
+    server.use(
+      mswHttp.get(`${API}/synthesize/history`, () =>
+        HttpResponse.json([
+          gen({ id: "a", emotion: "sad", intensity: 0.4, style_applied: true, seed: 7 }),
+          gen({
+            id: "b",
+            status: "failed",
+            output_filename: "",
+            audio_available: false,
+            emotion: "happy",
+            intensity: 0.9,
+          }),
+          gen({ id: "c" }),
+        ]),
+      ),
+    );
+    wrap(<HistoryList />);
+    const shown = await screen.findAllByTestId("generation-details");
+    expect(shown.map((n) => n.textContent)).toEqual([
+      "Delivery: Sad at 40% · Seed 7",
+      "Delivery: Happy at 90%",
+    ]);
+  });
+
   it("shows an empty state", async () => {
     server.use(mswHttp.get(`${API}/synthesize/history`, () => HttpResponse.json([])));
     wrap(<HistoryList />);

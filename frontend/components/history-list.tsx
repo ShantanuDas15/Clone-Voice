@@ -10,6 +10,7 @@ import { useTerms } from "@/hooks/use-terms";
 import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
+import { generationDetails } from "@/lib/generation-details";
 import { describeRetention } from "@/lib/retention";
 import { Button, buttonVariants } from "@/components/ui/button";
 
@@ -93,6 +94,7 @@ function Playback({ gen }: { gen: Generation }) {
 function HistoryItem({ gen }: { gen: Generation }) {
   const [expanded, setExpanded] = useState(false);
   const failed = isFailedGeneration(gen);
+  const details = generationDetails(gen);
   const long = gen.input_text.length > PREVIEW_CHARS;
   const text = expanded || !long ? gen.input_text : `${gen.input_text.slice(0, PREVIEW_CHARS)}…`;
 
@@ -113,6 +115,11 @@ function HistoryItem({ gen }: { gen: Generation }) {
         {gen.voice_profile_name} · {formatDateTime(gen.created_at)}
         {gen.duration_seconds !== null && !failed && ` · ${gen.duration_seconds.toFixed(1)} s`}
       </p>
+      {details.length > 0 && (
+        <p className="text-sm text-muted-foreground" data-testid="generation-details">
+          {details.join(" · ")}
+        </p>
+      )}
       {failed ? <p className="text-sm">Failed — no audio was produced.</p> : <Playback gen={gen} />}
     </li>
   );
