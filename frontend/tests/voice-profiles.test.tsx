@@ -615,3 +615,51 @@ describe("ProfileClips", () => {
     expect(await screen.findByText(/most clips it can hold/i)).toBeInTheDocument();
   });
 });
+
+describe("VoiceProfileList actions and advice", () => {
+  const list = (profiles: unknown[]) =>
+    server.use(mswHttp.get(`${API}/voice/profiles`, () => HttpResponse.json(profiles)));
+  const ok = { position: 0, agreement: 1, mismatch: false, quality: { rating: "good", hints: [] } };
+
+  it("offers Generate on a ready voice, with that voice preselected, and not on a failed one", async () => {
+    list([
+      profile({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Ready one" }),
+      profile({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Broken one", status: "failed" }),
+    ]);
+    wrap(<VoiceProfileList />);
+    const link = await screen.findByRole("link", { name: "Generate speech with Ready one" });
+    expect(link).toHaveAttribute("href", "/generate?voice=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(screen.queryByRole("link", { name: /Generate speech with Broken one/ })).toBeNull();
+  });
+
+  it("surfaces clip advice on the card without opening the Clips panel", async () => {
+    list([
+      profile({
+        samples: [
+          ok,
+          { ...ok, position: 1, mismatch: true, quality: { rating: "fair", hints: [] } },
+        ],
+      }),
+    ]);
+    wrap(<VoiceProfileList />);
+    expect(
+      await screen.findByText(
+        "Clip 2 may be a different speaker. A recording could be cleaner. Open Clips for tips.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no advice line for a voice whose clips are fine", async () => {
+    list([profile({ samples: [ok] })]);
+    wrap(<VoiceProfileList />);
+    await screen.findByText("Clips (1)");
+    expect(screen.queryByText(/Open Clips for tips/)).toBeNull();
+  });
+
+  it("calls a voice with no clip rows just Clips, not Clips (0)", async () => {
+    list([profile({ samples: [] })]);
+    wrap(<VoiceProfileList />);
+    expect(await screen.findByText("Clips")).toBeInTheDocument();
+    expect(screen.queryByText("Clips (0)")).toBeNull();
+  });
+});

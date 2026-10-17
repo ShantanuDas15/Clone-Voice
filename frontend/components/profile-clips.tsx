@@ -65,7 +65,7 @@ export function ProfileClips({ profile }: { profile: VoiceProfile }) {
   return (
     <details className="w-full text-sm">
       <summary className="min-h-11 cursor-pointer py-2 underline underline-offset-2">
-        Clips ({samples.length})
+        Clips{samples.length > 0 ? ` (${samples.length})` : ""}
       </summary>
       <div className="space-y-3 pb-2">
         {samples.length === 0 ? (

@@ -8,8 +8,9 @@ import { useDeleteProfile, useProfiles } from "@/hooks/use-voice-profiles";
 import type { VoiceProfile } from "@/lib/api/voice";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
+import { voiceAdvice } from "@/lib/voice-advice";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { ProfileClips } from "@/components/profile-clips";
 
@@ -101,21 +102,35 @@ export function VoiceProfileList() {
               <p className="text-sm text-muted-foreground">
                 Created {formatDateTime(p.created_at)}
               </p>
+              {p.status === "ready" && voiceAdvice(p.samples ?? []) && (
+                <p className="text-sm">{voiceAdvice(p.samples ?? [])} Open Clips for tips.</p>
+              )}
               {p.status === "failed" && (
                 <p className="text-sm">
                   This upload couldn&apos;t be processed. Delete it and try again.
                 </p>
               )}
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setConfirming(p)}
-              disabled={remove.isPending && remove.variables === p.id}
-              aria-label={`Delete ${p.name}`}
-            >
-              Delete
-            </Button>
+            <div className="flex gap-2">
+              {p.status === "ready" && (
+                <Link
+                  href={`/generate?voice=${encodeURIComponent(p.id)}`}
+                  className={buttonVariants({ size: "sm" })}
+                  aria-label={`Generate speech with ${p.name}`}
+                >
+                  Generate
+                </Link>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirming(p)}
+                disabled={remove.isPending && remove.variables === p.id}
+                aria-label={`Delete ${p.name}`}
+              >
+                Delete
+              </Button>
+            </div>
             {p.status === "ready" && <ProfileClips profile={p} />}
           </li>
         ))}
