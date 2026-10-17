@@ -5,6 +5,13 @@ export function formatDateTime(iso: string, locale?: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+/** Locale-aware date without a time, from an ISO string; the raw value if unparseable. */
+export function formatDate(iso: string, locale?: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
+}
+
 /** Human-readable file size. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

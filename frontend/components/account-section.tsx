@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -8,14 +9,16 @@ import { notify } from "@/lib/toast";
 
 import { useAuth } from "@/components/auth-provider";
 import { TextField } from "@/components/form-fields";
+import { ResendVerification } from "@/components/resend-verification";
 import * as authApi from "@/lib/api/auth";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
-import { formatDateTime } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { DELETE_CONFIRMATION, type NameValues, nameSchema } from "@/lib/validation/auth";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 function NameForm() {
   const { user, applyUser } = useAuth();
@@ -140,6 +143,10 @@ function DeleteAccount() {
           <h3 id="del-account-title" className="font-medium">
             Delete your account?
           </h3>
+          <p className="text-sm">
+            This permanently erases your account, every voice and every generated clip. It
+            can&apos;t be undone.
+          </p>
           <TextField
             label={`Type ${DELETE_CONFIRMATION} to confirm`}
             autoComplete="off"
@@ -181,31 +188,50 @@ export function AccountSection() {
   if (!user) return null;
   return (
     <div className="space-y-6">
-      <dl className="space-y-1 text-sm">
-        <div className="flex gap-2">
-          <dt className="shrink-0 text-muted-foreground">Email</dt>
-          <dd className="min-w-0 [overflow-wrap:anywhere]">{user.email}</dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="text-muted-foreground">Sign-in</dt>
-          <dd>
-            {user.provider === "google"
-              ? user.has_password
-                ? "Google and password"
-                : "Google"
-              : "Email and password"}
-          </dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="text-muted-foreground">Member since</dt>
-          <dd>{formatDateTime(user.created_at)}</dd>
-        </div>
+      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 text-sm">
+        <dt className="text-muted-foreground">Email</dt>
+        <dd className="[overflow-wrap:anywhere]">{user.email}</dd>
+        <dt className="text-muted-foreground">Verification</dt>
+        <dd>
+          {user.email_verified_at ? (
+            <Badge tone="success">Verified</Badge>
+          ) : (
+            <>
+              <Badge tone="notice">Not verified</Badge>{" "}
+              <span className="text-muted-foreground">
+                You can&apos;t create voices or generate speech until you verify.
+              </span>
+              <br />
+              <ResendVerification />
+            </>
+          )}
+        </dd>
+        <dt className="text-muted-foreground">Sign-in</dt>
+        <dd>
+          {user.provider === "google"
+            ? user.has_password
+              ? "Google and password"
+              : "Google"
+            : "Email and password"}
+        </dd>
+        <dt className="text-muted-foreground">Password</dt>
+        <dd>
+          {user.has_password ? "Set. " : "Not set. "}
+          <Link
+            href="/forgot-password"
+            className="-my-3 inline-flex min-h-11 items-center underline"
+          >
+            {user.has_password ? "Reset it by email" : "Set one by email"}
+          </Link>
+        </dd>
+        <dt className="text-muted-foreground">Member since</dt>
+        <dd>{formatDate(user.created_at)}</dd>
       </dl>
       <NameForm />
       <section aria-labelledby="danger" className="space-y-3 border-t border-border pt-6">
-        <h3 id="danger" className="font-medium">
+        <h2 id="danger" className="font-medium">
           Delete account
-        </h3>
+        </h2>
         <DeleteAccount />
       </section>
     </div>
