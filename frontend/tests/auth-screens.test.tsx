@@ -118,7 +118,7 @@ describe("header and footer on the account screens", () => {
       /bg-primary/,
     );
     signup.unmount();
-    for (const path of ["/forgot-password", "/reset-password"]) {
+    for (const path of ["/forgot-password", "/reset-password", "/verify-email"]) {
       pathname = path;
       const page = wrap(<UserMenu />);
       expect((await screen.findByRole("link", { name: "Create account" })).className).not.toMatch(

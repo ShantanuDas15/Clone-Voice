@@ -10,7 +10,14 @@ import { Button } from "@/components/ui/button";
 type State = { kind: "idle" } | { kind: "sent" } | { kind: "error"; message: string };
 
 /** Sends a fresh verification email (5/hour per IP, so a 429 explains the wait). */
-export function ResendVerification({ className }: { className?: string }) {
+export function ResendVerification({
+  className,
+  flush,
+}: {
+  className?: string;
+  /** Pull the button's padding out so its text lines up with the text above (used at a line start). */
+  flush?: boolean;
+}) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
@@ -36,7 +43,14 @@ export function ResendVerification({ className }: { className?: string }) {
 
   return (
     <span className={className}>
-      <Button variant="quiet" size="sm" onClick={onClick} disabled={busy} loading={busy}>
+      <Button
+        variant="quiet"
+        size="sm"
+        className={flush ? "-ml-3" : undefined}
+        onClick={onClick}
+        disabled={busy}
+        loading={busy}
+      >
         {busy ? "Sending…" : "Resend verification email"}
       </Button>
       <span role="status" aria-live="polite" className="ml-2">

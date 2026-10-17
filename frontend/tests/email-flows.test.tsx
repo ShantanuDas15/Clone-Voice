@@ -105,6 +105,77 @@ describe("VerifyEmailView", () => {
     wrap(<VerifyEmailView />);
     expect(await screen.findByRole("button", { name: /resend verification/i })).toBeInTheDocument();
   });
+
+  const verifyOk = () =>
+    server.use(
+      mswHttp.post(`${API}/auth/verify-email`, () =>
+        HttpResponse.json({ detail: "Email verified" }),
+      ),
+    );
+  const signedInSession = () =>
+    server.use(mswHttp.post(`${API}/auth/refresh`, () => HttpResponse.json(fixtures.token)));
+
+  it("says 'Email verified' and offers Sign in as a button-sized primary action when signed out", async () => {
+    window.history.replaceState(null, "", "/verify-email#token=ok");
+    verifyOk();
+    wrap(<VerifyEmailView />);
+    expect(await screen.findByRole("heading", { name: "Email verified" })).toBeInTheDocument();
+    const next = screen.getByRole("link", { name: "Sign in" });
+    expect(next).toHaveAttribute("href", "/login");
+    expect(next.className).toMatch(/bg-primary/);
+    expect(next.className).toMatch(/min-h-11/);
+  });
+
+  it("sends a signed-in user on to Generate, not a 'dashboard'", async () => {
+    window.history.replaceState(null, "", "/verify-email#token=ok");
+    verifyOk();
+    signedInSession();
+    wrap(<VerifyEmailView />);
+    const next = await screen.findByRole("link", { name: "Start generating" });
+    expect(next).toHaveAttribute("href", "/generate");
+    expect(screen.queryByText(/dashboard/i)).toBeNull();
+  });
+
+  it("keeps the plain heading until the link has worked", async () => {
+    wrap(<VerifyEmailView />);
+    expect(await screen.findByRole("heading", { name: "Verify email" })).toBeInTheDocument();
+  });
+
+  it("an incomplete link points a signed-out visitor to sign in, and a signed-in one to Resend", async () => {
+    const out = wrap(<VerifyEmailView />);
+    expect(
+      await screen.findByRole("link", { name: /sign in to request a new link/i }),
+    ).toHaveAttribute("href", "/login");
+    out.unmount();
+    __resetSessionForTests();
+    __resetBootstrapForTests();
+    signedInSession();
+    unverifiedUser();
+    wrap(<VerifyEmailView />);
+    expect(await screen.findByRole("button", { name: /resend verification/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /sign in to request/i })).toBeNull();
+  });
+
+  it("on a server error shows a danger alert and Try again, which re-sends the same token", async () => {
+    window.history.replaceState(null, "", "/verify-email#token=again");
+    const bodies: unknown[] = [];
+    let fail = true;
+    server.use(
+      mswHttp.post(`${API}/auth/verify-email`, async ({ request }) => {
+        bodies.push(await request.json());
+        return fail
+          ? HttpResponse.json({ detail: "boom" }, { status: 500 })
+          : HttpResponse.json({ detail: "Email verified" });
+      }),
+    );
+    wrap(<VerifyEmailView />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.closest('[role="status"]')).toBeNull(); // announced once, not inside a live region
+    fail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Email verified" })).toBeInTheDocument();
+    expect(bodies).toEqual([{ token: "again" }, { token: "again" }]);
+  });
 });
 
 describe("VerifyEmailAlert / resend", () => {

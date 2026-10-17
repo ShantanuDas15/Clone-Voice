@@ -15,8 +15,14 @@ export const APP_LINKS = [
   { href: "/account", label: "Account" },
 ] as const;
 
-/** Public pages whose form has its own primary button (sign in, sign up, password reset). */
-const ACCOUNT_FORMS = ["/login", "/signup", "/forgot-password", "/reset-password"] as const;
+/** Public account pages that carry their own primary action (forms, and the verified next step). */
+const ACCOUNT_FORMS = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+] as const;
 
 /** Header account controls: sign-in links, or the user's name and a sign-out button. */
 export function UserMenu() {
