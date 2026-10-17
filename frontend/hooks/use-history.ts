@@ -31,12 +31,15 @@ export function flattenHistory(pages: readonly HistoryPage[]): Generation[] {
   return out;
 }
 
-/** Paged history, newest first. Refetches on focus and after synthesis (R11). */
-export function useHistory() {
+/**
+ * Paged history, newest first, optionally narrowed to one voice. The key extends HISTORY_KEY, so
+ * invalidating HISTORY_KEY (after synthesis, delete) refreshes every filtered list as well.
+ */
+export function useHistory(voiceProfileId?: string) {
   return useInfiniteQuery({
-    queryKey: HISTORY_KEY,
+    queryKey: voiceProfileId ? [...HISTORY_KEY, voiceProfileId] : HISTORY_KEY,
     initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) => fetchHistory(pageParam, signal),
+    queryFn: ({ pageParam, signal }) => fetchHistory(pageParam, signal, undefined, voiceProfileId),
     getNextPageParam: (last) =>
       hasMoreHistory(last) ? last.offset + last.items.length : undefined,
   });
@@ -77,14 +80,15 @@ export function useDeleteGeneration() {
     retry: false,
     onMutate: async (id) => {
       await client.cancelQueries({ queryKey: HISTORY_KEY });
-      const previous = client.getQueryData<InfiniteData<HistoryPage>>(HISTORY_KEY);
-      client.setQueryData<InfiniteData<HistoryPage>>(HISTORY_KEY, (old) =>
+      // Every cached list (unfiltered and per voice) may hold the row.
+      const previous = client.getQueriesData<InfiniteData<HistoryPage>>({ queryKey: HISTORY_KEY });
+      client.setQueriesData<InfiniteData<HistoryPage>>({ queryKey: HISTORY_KEY }, (old) =>
         old ? withoutGeneration(old, id) : old,
       );
       return { previous };
     },
     onError: (_error, _id, context) => {
-      if (context?.previous) client.setQueryData(HISTORY_KEY, context.previous);
+      for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data);
     },
     onSettled: () => void client.invalidateQueries({ queryKey: HISTORY_KEY }),
   });

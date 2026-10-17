@@ -49,9 +49,12 @@ export async function fetchHistory(
   offset: number,
   signal?: AbortSignal,
   limit: number = HISTORY_PAGE_SIZE,
+  voiceProfileId?: string,
 ): Promise<HistoryPage> {
   const response = await http.get<Generation[]>("/synthesize/history", {
-    params: { limit, offset },
+    params: voiceProfileId
+      ? { limit, offset, voice_profile_id: voiceProfileId }
+      : { limit, offset },
     signal,
   });
   const raw = Number.parseInt(String(response.headers["x-total-count"] ?? ""), 10);

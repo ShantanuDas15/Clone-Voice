@@ -7,6 +7,7 @@ import { ExpandableText } from "@/components/expandable-text";
 import { Take } from "@/components/take";
 import { flattenHistory, useDeleteGeneration, useHistory } from "@/hooks/use-history";
 import { useObjectUrl } from "@/hooks/use-object-url";
+import { useProfiles } from "@/hooks/use-voice-profiles";
 import { useTerms } from "@/hooks/use-terms";
 import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
 import { ApiError } from "@/lib/errors";
@@ -17,6 +18,7 @@ import { describeRetention, expiresSoon } from "@/lib/retention";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/field";
 import { notify } from "@/lib/toast";
 
 const PREVIEW_CHARS = 140;
@@ -210,10 +212,36 @@ function DeleteDialog({
   );
 }
 
-/** Past generations, newest first, with load-more, per-row playback and expiry handling. */
+/** Past generations, newest first; an "All voices" filter appears once there are 2+ voices. */
 export function HistoryList() {
+  const voices = useProfiles().data ?? [];
+  const [chosen, setChosen] = useState("");
+  // A voice deleted meanwhile falls back to all voices instead of a filter nobody can clear.
+  const voiceId = voices.some((v) => v.id === chosen) ? chosen : "";
+  return (
+    <div className="space-y-3">
+      {voices.length >= 2 && (
+        <label className="block text-sm font-medium">
+          Voice
+          <Select value={voiceId} onChange={(e) => setChosen(e.target.value)}>
+            <option value="">All voices</option>
+            {voices.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+      )}
+      <HistoryBody key={voiceId} voiceId={voiceId} />
+    </div>
+  );
+}
+
+/** One (optionally filtered) list with load-more, per-row playback and expiry handling. */
+function HistoryBody({ voiceId }: { voiceId: string }) {
   const { data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } =
-    useHistory();
+    useHistory(voiceId || undefined);
   const retention = describeRetention(useTerms().data?.output_retention_days);
   const [announcement, setAnnouncement] = useState("");
   const remove = useDeleteGeneration();
@@ -261,6 +289,16 @@ export function HistoryList() {
   }
 
   const items = flattenHistory(data.pages);
+  if (items.length === 0 && voiceId) {
+    return (
+      <p className="text-muted-foreground">
+        No generations with this voice yet.
+        <span role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </span>
+      </p>
+    );
+  }
   if (items.length === 0) {
     return (
       <div className="space-y-3">
