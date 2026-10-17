@@ -63,6 +63,8 @@ export function ForgotPasswordForm() {
         label="Email"
         type="email"
         autoComplete="email"
+        autoCapitalize="none"
+        spellCheck={false}
         error={errors.email?.message}
         {...register("email")}
       />

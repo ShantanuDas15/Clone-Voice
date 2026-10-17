@@ -73,6 +73,7 @@ export function SignupForm() {
       <TextField
         label="Name"
         autoComplete="name"
+        autoCapitalize="words"
         error={errors.name?.message}
         {...register("name")}
       />
@@ -80,6 +81,8 @@ export function SignupForm() {
         label="Email"
         type="email"
         autoComplete="email"
+        autoCapitalize="none"
+        spellCheck={false}
         error={errors.email?.message}
         {...register("email")}
       />
@@ -92,12 +95,19 @@ export function SignupForm() {
       />
       {emailTaken && (
         <p className="text-sm">
-          <Link href="/login" className="underline">
+          <Link href="/login" className="inline-flex min-h-11 items-center underline">
             Sign in instead
           </Link>
         </p>
       )}
       {formError && <Alert tone="danger">{formError}</Alert>}
+      <p className="text-sm text-muted-foreground">
+        We&apos;ll email you a link to verify your address. By creating an account you agree to the{" "}
+        <Link href="/terms" className="underline">
+          terms of use
+        </Link>
+        .
+      </p>
       <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
         {isSubmitting ? "Creating account…" : "Create account"}
       </Button>

@@ -69,12 +69,22 @@ export function LoginForm() {
         label="Email"
         type="email"
         autoComplete="email"
+        autoCapitalize="none"
+        spellCheck={false}
         error={errors.email?.message}
         {...register("email")}
       />
       <PasswordField
         label="Password"
         autoComplete="current-password"
+        labelEnd={
+          <Link
+            href="/forgot-password"
+            className="-my-3 inline-flex min-h-11 items-center text-sm underline"
+          >
+            Forgot your password?
+          </Link>
+        }
         error={errors.password?.message}
         {...register("password")}
       />
@@ -82,11 +92,6 @@ export function LoginForm() {
       <Button type="submit" disabled={isSubmitting} loading={isSubmitting} fullWidth>
         {isSubmitting ? "Signing in…" : "Sign in"}
       </Button>
-      <p className="text-sm">
-        <Link href="/forgot-password" className="underline">
-          Forgot your password?
-        </Link>
-      </p>
       <p className="text-sm text-muted-foreground">
         New here?{" "}
         <Link href="/signup" className="underline">
