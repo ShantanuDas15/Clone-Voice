@@ -108,6 +108,16 @@ anti-aliasing differ per OS, so **the committed baselines come from CI, not from
    if a new runner image makes them drift. Locally, `npm run test:visual` may show small font
    differences on another OS; let CI decide.
 
+### Layout shift (CLS) in the same job
+
+`visual/layout-shift.spec.ts` (320, 360 and 412 px, Chromium) fails the `visual` job when the
+header or page moves while the session resolves: signed out, first-run, signed in with a voice and
+unverified, with the same ceilings as `e2e/layout-shift.spec.ts` (0.05, 0.2, 0.05 and 0.1). It uses
+the mocked API with the session refresh held for 1.2 s, so it needs no backend or model weights. It
+has no screenshots, so `visual-update` never changes it. On a failure the message lists what moved
+(`FOOTER y 726->0`). Do not raise a ceiling to pass: FE-UX52's one-row header failed it by 0.13 to
+0.38 and had to be reverted (FE-UX55). The real-backend version stays in `e2e/` for pre-release runs.
+
 ## Node version
 
 Use **Node 24** (`.nvmrc`; CI runs the unit tests on it). On Node 20 and 22 the multipart upload

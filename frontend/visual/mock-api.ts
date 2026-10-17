@@ -44,8 +44,37 @@ const generation = {
   created_at: "2026-10-02T00:00:00Z",
 };
 
-/** Mock a signed-in session; `unverified` + no voices gives the first-run state of /generate. */
-export async function mockApi(page: Page, firstRun: boolean): Promise<void> {
+/** Knobs for a mocked session; the defaults reproduce the visual baselines exactly. */
+export interface MockOptions {
+  /** Email verified (default: yes, unless `firstRun`). */
+  verified?: boolean;
+  /** Has a ready voice and a history row (default: yes, unless `firstRun`). */
+  voices?: boolean;
+  /** Hold the session refresh, so the header changes state well after first paint. */
+  refreshDelayMs?: number;
+  /** Delay every other API answer, standing in for real network and server time. */
+  latencyMs?: number;
+  /**
+   * The engine offers delivery controls (default yes, as the baselines show them). The SV2TTS
+   * engine reports no emotion control, so its form never grows when the capabilities arrive.
+   */
+  emotionControl?: boolean;
+}
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Mock a signed-in session; `firstRun` (unverified, no voices) gives the first-run state of /generate. */
+export async function mockApi(
+  page: Page,
+  firstRun: boolean,
+  {
+    verified = !firstRun,
+    voices: hasVoices = !firstRun,
+    refreshDelayMs = 0,
+    latencyMs = 0,
+    emotionControl = true,
+  }: MockOptions = {},
+): Promise<void> {
   const body = (data: unknown, extra: Record<string, string> = {}) => ({
     status: 200,
     contentType: "application/json",
@@ -53,27 +82,31 @@ export async function mockApi(page: Page, firstRun: boolean): Promise<void> {
     body: JSON.stringify(data),
   });
   await page.route("**/health**", (r) => r.fulfill(body({ status: "ok" })));
-  await page.route("**/api/v1/**", (r) => {
+  await page.route("**/api/v1/**", async (r) => {
     const req = r.request();
     if (req.method() === "OPTIONS") return r.fulfill({ status: 204, headers: CORS });
     const path = new URL(req.url()).pathname.replace("/api/v1", "");
-    if (path === "/auth/refresh")
+    if (path === "/auth/refresh") {
+      if (refreshDelayMs) await wait(refreshDelayMs);
       return r.fulfill(body({ access_token: "t", token_type: "bearer" }));
+    }
+    if (latencyMs) await wait(latencyMs);
     if (path === "/auth/me")
-      return r.fulfill(body(firstRun ? { ...user, email_verified_at: null } : user));
-    if (path === "/voice/profiles") return r.fulfill(body(firstRun ? [] : voices));
+      return r.fulfill(body(verified ? user : { ...user, email_verified_at: null }));
+    if (path === "/voice/profiles") return r.fulfill(body(hasVoices ? voices : []));
     if (path === "/synthesize/history")
       return r.fulfill(
-        body(firstRun ? [] : [generation], { "X-Total-Count": firstRun ? "0" : "1" }),
+        body(hasVoices ? [generation] : [], { "X-Total-Count": hasVoices ? "1" : "0" }),
       );
-    if (path === "/synthesize/capabilities") return r.fulfill(body({ emotion_control: true }));
+    if (path === "/synthesize/capabilities")
+      return r.fulfill(body({ emotion_control: emotionControl }));
     if (path === "/terms") return r.fulfill(body({ version: "1", url: null }));
     return r.fulfill({ status: 404, headers: CORS, body: "{}" });
   });
 }
 
-/** Mock a signed-out visitor: health is ok and every API call answers 401. */
-export async function mockSignedOut(page: Page): Promise<void> {
+/** Mock a signed-out visitor: health is ok and every API call answers 401 (the refresh after `refreshDelayMs`). */
+export async function mockSignedOut(page: Page, refreshDelayMs = 0): Promise<void> {
   await page.route("**/health**", (r) =>
     r.fulfill({
       status: 200,
@@ -82,9 +115,10 @@ export async function mockSignedOut(page: Page): Promise<void> {
       body: '{"status":"ok"}',
     }),
   );
-  await page.route("**/api/v1/**", (r) =>
-    r.request().method() === "OPTIONS"
-      ? r.fulfill({ status: 204, headers: CORS })
-      : r.fulfill({ status: 401, contentType: "application/json", headers: CORS, body: "{}" }),
-  );
+  await page.route("**/api/v1/**", async (r) => {
+    if (r.request().method() === "OPTIONS") return r.fulfill({ status: 204, headers: CORS });
+    if (refreshDelayMs && new URL(r.request().url()).pathname.endsWith("/auth/refresh"))
+      await wait(refreshDelayMs);
+    return r.fulfill({ status: 401, contentType: "application/json", headers: CORS, body: "{}" });
+  });
 }

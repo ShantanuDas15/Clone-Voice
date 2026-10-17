@@ -90,3 +90,24 @@ describe("perf measurement method (FE-UX48)", () => {
     expect(runner).not.toMatch(/throttlingMethod:\s*"simulate"/);
   });
 });
+
+describe("layout-shift specs run in the required visual job (FE-UX56)", () => {
+  const root = (rel: string) => readFileSync(path.resolve(__dirname, "..", rel), "utf8");
+
+  it("is picked up by `npm run test:visual`, unfiltered, in the chromium project", () => {
+    const scripts = (JSON.parse(root("package.json")) as { scripts: Record<string, string> })
+      .scripts;
+    expect(scripts["test:visual"]).toContain("playwright.visual.config.ts");
+    expect(scripts["test:visual"]).not.toMatch(/\s(-g|--grep|--grep-invert)\b|\.spec/);
+    // Only the cross-browser smoke spec is excluded from chromium.
+    expect(root("playwright.visual.config.ts")).toMatch(/testIgnore:\s*\/cross-browser\/[^|]/);
+    expect(root("visual/layout-shift.spec.ts")).toContain("CLS_WIDTHS");
+    expect(root("visual/cls.ts")).toMatch(/CLS_WIDTHS\s*=\s*\[320,\s*360,\s*412\]/);
+  });
+
+  it("keeps the visual job a plain, blocking step", () => {
+    const visual = job(read("frontend.yml"), "visual");
+    expect(visual).toContain("npm run test:visual");
+    expect(visual).not.toMatch(/continue-on-error|\|\| true/);
+  });
+});

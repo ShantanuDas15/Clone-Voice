@@ -1592,6 +1592,18 @@ The fifth failure was not the app: the Firefox a11y "light" spec timed out creat
 1. The 50 px the one-row header saved on phones is gone again. A version that keeps it needs the loading and loaded states to have the same number of rows at every width (the signed-out header cannot fit one row below about 420 px), and must pass `e2e/layout-shift.spec.ts` at 320, 360 and 412 px.
 2. The layout-shift specs at 320 and 360 px need a place to run on pull requests (they need the real backend, so the same CI work as the rest of e2e).
 
+### FE-UX56 — Layout-shift specs run on every pull request (2026-10-17, branch `ci/FE-UX56-layout-shift-in-ci`)
+
+FE-UX55 found that the CLS specs were the only check that caught the FE-UX52 header, and they ran nowhere automatic. Putting `e2e/layout-shift.spec.ts` itself in CI would need model weights (it creates a voice), which runners do not have, so the same four cases and ceilings (signed out 0.05, first-run 0.2, signed in 0.05, unverified 0.1; 320, 360 and 412 px) were added as `visual/layout-shift.spec.ts`, against the mocked API with the session refresh held for 1.2 s and every other answer for 50 ms. It runs inside `npm run test:visual`, so it is part of the **required `visual` job**: no new job and no branch-protection change. `visual/mock-api.ts` gained options (`verified`, `voices`, `refreshDelayMs`, `latencyMs`, `emotionControl`; the defaults reproduce the baselines exactly) and `mockSignedOut` a refresh delay; the shift observer moved to `visual/cls.ts`, shared with the e2e spec, and now reports **what moved** in the failure message.
+
+**Does it catch the regression it exists for?** Yes, measured both ways with the same build: with the current header all 12 pass (twice in a row); with FE-UX52's header 5 fail (320 px first-run 0.36, signed-in 0.18, unverified 0.34; 360 px and 412 px signed out 0.20 and 0.37). The real backend showed the same cases failing, and two values match it to three digits (0.1766 and 0.2025). `tests/ci-workflows.test.ts` pins that `test:visual` runs it unfiltered in chromium and that the job stays blocking (2 tests). 679 unit tests and all 102 visual tests pass; `frontend/README.md` documents it.
+
+**Calibration finding:** the first version of the mock failed the signed-in cases on the *good* header (0.23 to 0.29). The shift sources showed why: the mock told the form the engine has emotion control, so the Delivery and Strength controls appeared after the session and pushed the footer off screen. The real SV2TTS backend reports none, so the e2e run never sees it. The spec therefore sets `emotionControl: false` and says why.
+
+**Open items from FE-UX56**
+1. With an engine that does offer delivery controls (the Chatterbox engines), the form grows when the capabilities answer arrives after the session; in the mock that measured 0.2 to 0.3 on the signed-in generate page. Not verified against a real expressive engine, and not fixed here. If it holds, reserve the controls' space or hold the form until capabilities are known.
+2. The real-backend e2e suite is still manual (it needs weights); run it before a release.
+
 ---
 
 ## 9. Definition of Done (release checklist)
