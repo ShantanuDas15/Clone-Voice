@@ -95,7 +95,7 @@ describe("header and footer on the account screens", () => {
     expect(screen.getByRole("link", { name: "Sign in" })).not.toHaveAttribute("aria-current");
   });
 
-  it("steps the header's Create account back to secondary on the account forms only", async () => {
+  it("steps the header's Create account back to secondary on the account and password-reset forms only", async () => {
     pathname = "/login";
     const login = wrap(<UserMenu />);
     expect((await screen.findByRole("link", { name: "Create account" })).className).not.toMatch(
@@ -108,6 +108,14 @@ describe("header and footer on the account screens", () => {
       /bg-primary/,
     );
     signup.unmount();
+    for (const path of ["/forgot-password", "/reset-password"]) {
+      pathname = path;
+      const page = wrap(<UserMenu />);
+      expect((await screen.findByRole("link", { name: "Create account" })).className).not.toMatch(
+        /bg-primary/,
+      );
+      page.unmount();
+    }
     pathname = "/";
     wrap(<UserMenu />);
     expect((await screen.findByRole("link", { name: "Create account" })).className).toMatch(

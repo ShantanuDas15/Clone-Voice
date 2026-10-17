@@ -819,4 +819,8 @@ Review with `ui-ux-pro-max` (five `ux` searches, one outcome each) of the 375 an
 
 **Verified:** frontend 648 tests (2 new), lint, tsc, prettier; visual: the 16 `login-*` and `signup-*` baselines refreshed with `--update-snapshots=all`, login 375 light read; real-backend e2e (chromium) `auth.spec.ts` and `a11y.spec.ts` 9 pass. Backend untouched.
 
-**Not done, by decision or scope:** the one-row phone header, in-field show-password and sparse card stay as decided in FE-UX41; no autofocus (no guidance, and it can hurt phones and screen readers); `forgot-password` and `reset-password` still show the primary header button next to their own primary action (not part of this review). **Open:** Firefox/WebKit not re-run; the 401 `aria-describedby` is asserted in a unit test, not walked with a screen reader.
+**Follow-up (same day):** the same rule now covers `/forgot-password` and `/reset-password` (`ACCOUNT_FORMS` in `components/user-menu.tsx`; each has its own primary submit). Unit test extended; the 8 `forgot-password-*` baselines refreshed (one read); `reset-password` has no baseline (it needs a token), so only the unit test covers it. Frontend 648 tests.
+
+**Not done, by decision or scope:** the one-row phone header, in-field show-password and sparse card stay as decided in FE-UX41; no autofocus (no guidance, and it can hurt phones and screen readers); **Open:** Firefox/WebKit not re-run; the 401 `aria-describedby` is asserted in a unit test, not walked with a screen reader.
+
+**Noticed, not changed:** `/forgot-password` shows two near-identical sentences back to back (the lead "Enter your email and we will send you a link to choose a new one." and the form's own "Enter your email and we'll send a link to reset your password, or to set one if you signed up with Google."). A candidate for a later copy pass.
