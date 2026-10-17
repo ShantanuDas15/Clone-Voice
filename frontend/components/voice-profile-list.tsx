@@ -11,6 +11,7 @@ import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { ProfileClips } from "@/components/profile-clips";
 
 function StatusChip({ status }: { status: string }) {
   if (status === "ready") return <Badge tone="success">Ready</Badge>;
@@ -115,6 +116,7 @@ export function VoiceProfileList() {
             >
               Delete
             </Button>
+            {p.status === "ready" && <ProfileClips profile={p} />}
           </li>
         ))}
       </ul>

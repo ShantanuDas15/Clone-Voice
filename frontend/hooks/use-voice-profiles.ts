@@ -2,7 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { type VoiceProfile, deleteProfile, fetchProfiles } from "@/lib/api/voice";
+import {
+  type VoiceProfile,
+  addClips,
+  deleteProfile,
+  fetchProfiles,
+  removeClip,
+} from "@/lib/api/voice";
 import { ApiError } from "@/lib/errors";
 
 export const PROFILES_KEY = ["voice-profiles"] as const;
@@ -41,5 +47,30 @@ export function useDeleteProfile() {
       void client.invalidateQueries({ queryKey: PROFILES_KEY });
       void client.invalidateQueries({ queryKey: HISTORY_KEY });
     },
+  });
+}
+
+/** Remove one clip from a profile, then refresh the list (positions are renumbered by the server). */
+export function useRemoveClip() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, position }: { id: string; position: number }) => removeClip(id, position),
+    retry: false,
+    onSettled: () => void client.invalidateQueries({ queryKey: PROFILES_KEY }),
+  });
+}
+
+/** Add clips to a profile (never auto-retried), then refresh the list. */
+export function useAddClips() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (v: {
+      id: string;
+      files: File[];
+      termsVersion: string | null;
+      onProgress?: (fraction: number) => void;
+    }) => addClips(v.id, v, { onProgress: v.onProgress }),
+    retry: false,
+    onSettled: () => void client.invalidateQueries({ queryKey: PROFILES_KEY }),
   });
 }

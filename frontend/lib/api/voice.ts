@@ -86,3 +86,37 @@ export async function uploadProfile(
 export async function deleteProfile(id: string): Promise<void> {
   await http.delete(`/voice/profiles/${encodeURIComponent(id)}`);
 }
+
+/**
+ * Add clips of the same speaker to an existing profile; the embedding is re-derived over every
+ * clip. Atomic on the server: a bad clip leaves the profile unchanged.
+ */
+export async function addClips(
+  id: string,
+  input: { files: File[]; termsVersion: string | null },
+  options: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
+): Promise<VoiceProfileUpload> {
+  const form = new FormData();
+  form.append("consent_confirmed", "true");
+  if (input.termsVersion) form.append("terms_version", input.termsVersion);
+  const field = input.files.length === 1 ? "file" : "files";
+  for (const f of input.files) form.append(field, canonicalAudioFile(f));
+  const { data } = await http.post<VoiceProfileUpload>(
+    `/voice/profiles/${encodeURIComponent(id)}/samples`,
+    form,
+    {
+      ...longRequest,
+      signal: options.signal,
+      onUploadProgress: (e) => options.onProgress?.(e.total ? e.loaded / e.total : 0),
+    },
+  );
+  return data;
+}
+
+/** Remove one clip (never the last); the embedding is re-derived from the rest. */
+export async function removeClip(id: string, position: number): Promise<VoiceProfileUpload> {
+  const { data } = await http.delete<VoiceProfileUpload>(
+    `/voice/profiles/${encodeURIComponent(id)}/samples/${position}`,
+  );
+  return data;
+}

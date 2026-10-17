@@ -517,3 +517,101 @@ describe("AudioUploader", () => {
     expect(screen.getAllByTestId("selected-file")).toHaveLength(1);
   });
 });
+
+describe("ProfileClips", () => {
+  const clip = (position: number, over: Record<string, unknown> = {}) => ({
+    position,
+    agreement: 0.9,
+    mismatch: false,
+    quality: { rating: "good", hints: [] },
+    ...over,
+  });
+  const withClips = (samples: unknown[]) =>
+    server.use(
+      mswHttp.get(`${API}/voice/profiles`, () =>
+        HttpResponse.json([{ ...fixtures.profile, samples }]),
+      ),
+    );
+
+  it("lists each clip's stored quality, hints and different-speaker flag", async () => {
+    withClips([
+      clip(0),
+      clip(1, {
+        agreement: 0.5,
+        mismatch: true,
+        quality: {
+          rating: "fair",
+          hints: [{ code: "noisy", severity: "warning", message: "Background noise." }],
+        },
+      }),
+    ]);
+    wrap(<VoiceProfileList />);
+    const list = await screen.findByRole("list", { name: "Clips of My voice" });
+    expect(within(list).getByText("Clip 1")).toBeInTheDocument();
+    expect(within(list).getByText("Fair")).toBeInTheDocument();
+    expect(within(list).getByText("Background noise.")).toBeInTheDocument();
+    expect(within(list).getByText("May be a different speaker")).toBeInTheDocument();
+    expect(within(list).getByText("Matches the others 50%")).toBeInTheDocument();
+  });
+
+  it("removes a clip by position, and offers no removal for the only clip", async () => {
+    let deleted: string | null = null;
+    withClips([clip(0), clip(1)]);
+    server.use(
+      mswHttp.delete(`${API}/voice/profiles/:id/samples/:position`, ({ params }) => {
+        deleted = String(params.position);
+        return HttpResponse.json({ ...fixtures.profile, samples: [clip(0)] });
+      }),
+    );
+    wrap(<VoiceProfileList />);
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Remove clip 2 of My voice" }));
+    await waitFor(() => expect(deleted).toBe("1"));
+  });
+
+  it("hides Remove when one clip is left", async () => {
+    withClips([clip(0)]);
+    wrap(<VoiceProfileList />);
+    await screen.findByText("Clip 1");
+    expect(screen.queryByRole("button", { name: /Remove clip/ })).not.toBeInTheDocument();
+  });
+
+  it("explains a voice from before clips were tracked", async () => {
+    withClips([]);
+    wrap(<VoiceProfileList />);
+    expect(await screen.findByText(/made before clips were tracked/i)).toBeInTheDocument();
+  });
+
+  it("adds clips with consent and the terms version, and needs consent first", async () => {
+    withClips([clip(0)]);
+    const post = vi
+      .spyOn(http, "post")
+      .mockResolvedValue({ data: { ...fixtures.profile, samples: [clip(0), clip(1)] } });
+    wrap(<VoiceProfileList />);
+    const user = userEvent.setup();
+    const form = await screen.findByRole("form", { name: "Add clips to My voice" });
+    await user.upload(
+      within(form).getByLabelText("Voice sample"),
+      new File([new Uint8Array(2000)], "more.wav", { type: "audio/wav" }),
+    );
+    await user.click(within(form).getByRole("button", { name: "Add clips" }));
+    expect(await within(form).findByText(/confirm you have the right/i)).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    await user.click(within(form).getByRole("checkbox"));
+    await user.click(within(form).getByRole("button", { name: "Add clips" }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [url, body] = post.mock.calls[0] as [string, FormData];
+    expect(url).toBe(`/voice/profiles/${fixtures.profile.id}/samples`);
+    expect(body.get("consent_confirmed")).toBe("true");
+    expect(body.get("terms_version")).toBe("1");
+    expect((body.get("file") as File).name).toBe("more.wav");
+    post.mockRestore();
+  });
+
+  it("says a voice is full at the clip limit", async () => {
+    withClips(Array.from({ length: 10 }, (_, i) => clip(i)));
+    wrap(<VoiceProfileList />);
+    expect(await screen.findByText(/most clips it can hold/i)).toBeInTheDocument();
+  });
+});
