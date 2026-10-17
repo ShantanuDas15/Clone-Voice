@@ -12,10 +12,19 @@ import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { generationDetails } from "@/lib/generation-details";
-import { describeRetention } from "@/lib/retention";
+import { saveBlob } from "@/lib/download";
+import { describeRetention, expiresSoon } from "@/lib/retention";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 const PREVIEW_CHARS = 140;
+const NAME_CHARS = 40;
+
+/** The start of a row's text, to tell identical buttons apart ("Play: Hello there."). */
+function snippet(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > NAME_CHARS ? `${flat.slice(0, NAME_CHARS).trimEnd()}…` : flat;
+}
 
 type PlayState =
   | { phase: "idle" }
@@ -35,10 +44,13 @@ function playError(error: unknown): PlayState {
 }
 
 function Playback({ gen }: { gen: Generation }) {
-  const retention = describeRetention(useTerms().data?.output_retention_days);
+  const retentionDays = useTerms().data?.output_retention_days;
+  const retention = describeRetention(retentionDays);
   const [state, setState] = useState<PlayState>(
     gen.audio_available ? { phase: "idle" } : { phase: "expired" },
   );
+  const [saving, setSaving] = useState(false);
+  const name = snippet(gen.input_text);
   const url = useObjectUrl(state.phase === "ready" ? state.blob : null);
 
   async function load() {
@@ -50,10 +62,22 @@ function Playback({ gen }: { gen: Generation }) {
     }
   }
 
+  /** Fetch the audio and hand it to the browser as a file, without playing it first. */
+  async function download() {
+    setSaving(true);
+    try {
+      saveBlob(await fetchGenerationAudio(gen.id), `clonevoice-${gen.id}.wav`);
+    } catch (e) {
+      setState(playError(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (state.phase === "expired") {
     return (
       <p className="text-sm text-muted-foreground">
-        The audio has expired and is no longer available
+        <Badge>Expired</Badge> The audio is no longer available
         {retention ? ` (clips are kept for ${retention})` : ""}.
       </p>
     );
@@ -66,23 +90,45 @@ function Playback({ gen }: { gen: Generation }) {
         filename={`clonevoice-${gen.id}.wav`}
         label={`Generated audio from ${formatDateTime(gen.created_at)}`}
         autoPlay
+        focusPlay
       />
     ) : null;
   }
+  const soon = expiresSoon(gen.created_at, retentionDays);
+  const busy = state.phase === "loading" || saving;
   return (
     <div className="space-y-1">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => void load()}
-        disabled={state.phase === "loading"}
-      >
-        {state.phase === "loading"
-          ? "Loading audio…"
-          : state.phase === "error"
-            ? "Try again"
-            : "Play"}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void load()}
+          disabled={busy}
+          aria-label={
+            state.phase === "loading"
+              ? "Loading audio…"
+              : `${state.phase === "error" ? "Try again" : "Play"}: ${name}`
+          }
+        >
+          {state.phase === "loading"
+            ? "Loading audio…"
+            : state.phase === "error"
+              ? "Try again"
+              : "Play"}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void download()}
+          disabled={busy}
+          aria-label={`Download: ${name}`}
+        >
+          {saving ? "Preparing…" : "Download"}
+        </Button>
+      </div>
+      {soon && (
+        <p className="text-sm text-muted-foreground">Expires in {soon}. Download it to keep it.</p>
+      )}
       {state.phase === "error" && (
         <p role="alert" className="text-sm">
           {state.message}
@@ -108,7 +154,13 @@ function HistoryItem({ gen }: { gen: Generation }) {
           {details.join(" · ")}
         </p>
       )}
-      {failed ? <p className="text-sm">Failed — no audio was produced.</p> : <Playback gen={gen} />}
+      {failed ? (
+        <p className="text-sm">
+          <Badge tone="notice">Failed</Badge> No audio was produced.
+        </p>
+      ) : (
+        <Playback gen={gen} />
+      )}
     </li>
   );
 }
@@ -118,6 +170,7 @@ export function HistoryList() {
   const { data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useHistory();
   const retention = describeRetention(useTerms().data?.output_retention_days);
+  const [announcement, setAnnouncement] = useState("");
 
   if (isPending) {
     return (
@@ -153,8 +206,28 @@ export function HistoryList() {
     );
   }
 
+  // The whole history's size comes from the server (X-Total-Count); say where the user is in it.
+  const total = data.pages[data.pages.length - 1]?.total ?? null;
+  const count =
+    total === null
+      ? null
+      : items.length < total
+        ? `Showing ${items.length} of ${total}.`
+        : `${total} ${total === 1 ? "generation" : "generations"}.`;
+
+  async function loadMore() {
+    const before = items.length;
+    const result = await fetchNextPage();
+    const after = result.data ? flattenHistory(result.data.pages).length : before;
+    const shown = result.data?.pages[result.data.pages.length - 1]?.total ?? null;
+    setAnnouncement(
+      `Loaded ${after - before} more${shown !== null ? `. Showing ${after} of ${shown}` : ""}.`,
+    );
+  }
+
   return (
     <div className="space-y-3">
+      {count && <p className="text-sm text-muted-foreground">{count}</p>}
       {retention && (
         <p className="text-sm text-muted-foreground">
           Audio is kept for {retention}. The text and date stay here after the audio expires.
@@ -166,14 +239,13 @@ export function HistoryList() {
         ))}
       </ul>
       {hasNextPage && (
-        <Button
-          variant="secondary"
-          onClick={() => void fetchNextPage()}
-          disabled={isFetchingNextPage}
-        >
+        <Button variant="secondary" onClick={() => void loadMore()} disabled={isFetchingNextPage}>
           {isFetchingNextPage ? "Loading more…" : "Load more"}
         </Button>
       )}
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </div>
   );
 }

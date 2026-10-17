@@ -134,8 +134,10 @@ test("create a voice by file, generate, replay from history, delete it, then del
   // History: replay the past generation with the keyboard.
   await page.goto("/history");
   await expect(page.getByText("Hello from the keyboard.")).toBeVisible();
-  await pressOn(page, page.getByRole("button", { name: "Play", exact: true }));
+  await pressOn(page, page.getByRole("button", { name: /^Play:/ }));
   await expect(page.locator('audio[aria-label^="Generated audio from"]')).toBeAttached();
+  // The player replaced the button that was pressed: focus moved to its play control, not the page.
+  await expect(page.getByRole("button", { name: /Generated audio from/ })).toBeFocused();
 
   // Delete the voice: open the dialog and confirm, all by key.
   await page.goto("/voices");

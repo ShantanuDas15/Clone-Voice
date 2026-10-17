@@ -42,7 +42,7 @@ test("generate → play → download → history → replay from history (real w
   // History shows it with the voice name, and past audio plays through the authed endpoint.
   await page.goto("/history");
   await expect(page.getByText("Hello there.")).toBeVisible();
-  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.getByRole("button", { name: /^Play:/ }).click();
   const past = page.locator('audio[aria-label^="Generated audio from"]');
   await expect(past).toBeAttached();
   const pastDuration = await past.evaluate(async (el: HTMLAudioElement) => {

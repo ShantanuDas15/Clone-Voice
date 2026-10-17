@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { claimPlayback, releasePlayback } from "@/lib/exclusive-playback";
 import { formatClock } from "@/lib/recording";
 
 interface TakeProps {
@@ -18,6 +19,8 @@ interface TakeProps {
   hideDownload?: boolean;
   /** Draw the waveform in once when it first appears (a finished generation); off for replays. */
   animateIn?: boolean;
+  /** Move keyboard focus to the play control on mount (a take that replaced the control that was pressed). */
+  focusPlay?: boolean;
 }
 
 const BARS = 64;
@@ -29,13 +32,31 @@ const BARS = 64;
  * and the slider. If the shape cannot be computed the controls still work; if the audio cannot be
  * played the take says so and keeps the download.
  */
-export function Take({ src, blob, filename, label, autoPlay, hideDownload, animateIn }: TakeProps) {
+export function Take({
+  src,
+  blob,
+  filename,
+  label,
+  autoPlay,
+  hideDownload,
+  animateIn,
+  focusPlay,
+}: TakeProps) {
   const audio = useRef<HTMLAudioElement>(null);
+  const playButton = useRef<HTMLButtonElement>(null);
   const [peaks, setPeaks] = useState<number[] | null>(null);
   const [duration, setDuration] = useState(0);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (focusPlay) playButton.current?.focus();
+    const el = audio.current;
+    return () => {
+      if (el) releasePlayback(el);
+    };
+  }, [focusPlay]);
 
   useEffect(() => {
     setPeaks(null);
@@ -94,7 +115,10 @@ export function Take({ src, blob, filename, label, autoPlay, hideDownload, anima
           setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)
         }
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-        onPlay={() => setPlaying(true)}
+        onPlay={(e) => {
+          claimPlayback(e.currentTarget);
+          setPlaying(true);
+        }}
         onPause={() => setPlaying(false)}
         onEnded={() => {
           setPlaying(false);
@@ -104,6 +128,7 @@ export function Take({ src, blob, filename, label, autoPlay, hideDownload, anima
       />
       <div className="flex items-center gap-3">
         <Button
+          ref={playButton}
           variant="secondary"
           size="sm"
           onClick={toggle}
