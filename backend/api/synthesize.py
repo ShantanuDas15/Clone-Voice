@@ -462,6 +462,14 @@ def get_capabilities(
     return SynthesisCapabilitiesOut(emotion_control=applied)
 
 
+HISTORY_SEARCH_MAX_LENGTH = 200
+
+
+def _escape_like(text: str) -> str:
+    """Escape LIKE wildcards so a search matches the characters typed."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/history", response_model=List[GenerationOut])
 @limiter.limit(settings.API_RATE_LIMIT)
 def get_history(
@@ -470,6 +478,7 @@ def get_history(
     limit: int = Query(50, ge=1),
     offset: int = Query(0, ge=0),
     voice_profile_id: Optional[UUID] = Query(None),
+    q: Optional[str] = Query(None, max_length=HISTORY_SEARCH_MAX_LENGTH),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -479,6 +488,7 @@ def get_history(
     ``X-Total-Count`` header, so a client can tell when it has reached the end.
     ``voice_profile_id`` narrows both to one voice; an unknown or foreign id
     simply matches nothing, so it cannot be used to probe for other profiles.
+    ``q`` keeps the rows whose typed text contains it (case-insensitive, literal).
     """
     if limit > 50:
         limit = 50
@@ -494,6 +504,11 @@ def get_history(
     )
     if voice_profile_id is not None:
         visible = visible.filter(Generation.voice_profile_id == voice_profile_id)
+    needle = (q or "").strip()
+    if needle:
+        visible = visible.filter(
+            Generation.input_text.ilike(f"%{_escape_like(needle)}%", escape="\\")
+        )
     response.headers["X-Total-Count"] = str(visible.count())
     generations = (
         visible.with_entities(Generation, VoiceProfile.name)

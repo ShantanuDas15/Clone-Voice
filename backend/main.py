@@ -23,6 +23,7 @@ from backend.core.body_limit import BodySizeLimitMiddleware
 from backend.core.config import settings
 from backend.core.database import SessionLocal
 from backend.core.db_errors import register_db_error_handlers
+from backend.core.log_redaction import RedactSearchFilter
 from backend.core.migrations import check_schema_current
 from backend.core.rate_limit import limiter
 from backend.core.sentry import init_sentry
@@ -47,6 +48,7 @@ def configure_logging() -> None:
                     "uuid_length": 32,
                     "default_value": "-",
                 },
+                "redact_search": {"()": RedactSearchFilter},
             },
             "formatters": {
                 "json": {
@@ -81,8 +83,17 @@ def configure_logging() -> None:
             # with the JSON records. Drop those handlers and let the records
             # flow to the root JSON handler like everything else.
             "loggers": {
-                name: {"handlers": [], "level": "INFO", "propagate": True}
-                for name in ("uvicorn", "uvicorn.error", "uvicorn.access")
+                **{
+                    name: {"handlers": [], "level": "INFO", "propagate": True}
+                    for name in ("uvicorn", "uvicorn.error")
+                },
+                # The access line carries the query string, so hide the search text.
+                "uvicorn.access": {
+                    "handlers": [],
+                    "level": "INFO",
+                    "propagate": True,
+                    "filters": ["redact_search"],
+                },
             },
         }
     )

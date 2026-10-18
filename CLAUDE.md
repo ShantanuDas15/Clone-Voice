@@ -179,7 +179,7 @@ backend/
 | `DELETE` | `/api/v1/voice/profiles/{profile_id}` | ✅ | Soft-delete a voice profile |
 | `DELETE` | `/api/v1/voice/profiles/{profile_id}/samples/{position}` | ✅ | Remove one clip (not the last) and re-derive the embedding from the rest |
 | `POST` | `/api/v1/synthesize` | ✅ | Text + Voice Profile ID → generates and returns audio output (`X-Voice-Engine`, and `X-Voice-Engine-Fallback` when the backup engine served it) |
-| `GET` | `/api/v1/synthesize/history` | ✅ | List user's generated audio history (`limit`/`offset`, optional `voice_profile_id`; `X-Total-Count` respects the filter) |
+| `GET` | `/api/v1/synthesize/history` | ✅ | List user's generated audio history (`limit`/`offset`, optional `voice_profile_id` and free-text `q`, a case-insensitive substring of the typed text, max 200; `X-Total-Count` respects the filters) |
 | `GET` | `/api/v1/synthesize/{generation_id}/audio` | ✅ | Download a past generation's WAV (404 / 410 expired) |
 | `DELETE` | `/api/v1/synthesize/{generation_id}` | ✅ | Delete one generation: soft-delete, scrub the typed text, remove the audio file (204; 404 unknown / foreign / already deleted) |
 | `GET` | `/health`, `/health/live`, `/health/ready` | ❌ | Liveness / readiness (outside `/api/v1`) |
