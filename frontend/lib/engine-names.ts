@@ -17,3 +17,19 @@ export const STANDARD_ENGINE = "sv2tts";
 export function engineName(id: string): string {
   return ENGINE_NAMES[id] ?? "another";
 }
+
+/**
+ * One plain sentence about which engine made a clip, or null when there is nothing to say (the
+ * standard engine, or no engine reported). A backup beats the engine line: it explains why the
+ * clip may not sound like the engine that was asked for.
+ */
+export function describeEngine(
+  engine: string | null | undefined,
+  fallbackFrom: string | null | undefined,
+): string | null {
+  if (fallbackFrom) {
+    return `Made by the backup voice engine (${engineName(fallbackFrom)} was unavailable)`;
+  }
+  if (engine && engine !== STANDARD_ENGINE) return `Voice engine: ${engineName(engine)}`;
+  return null;
+}

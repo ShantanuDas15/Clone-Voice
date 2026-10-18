@@ -18,6 +18,7 @@ import { type SynthesisInput, type SynthesisResult, synthesize } from "@/lib/api
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { getDraft, saveDraft } from "@/lib/draft";
 import { ApiError } from "@/lib/errors";
+import { describeEngine } from "@/lib/engine-names";
 import { firstRun } from "@/lib/first-run";
 import { TEXT_MAX, hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const [textError, setTextError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<(SynthesisResult & { text: string }) | null>(null);
+  const engineNote = result ? describeEngine(result.engine, result.engineFallbackFrom) : null;
   const controller = useRef<AbortController | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const { ref: formRef, focusFirstInvalid } = useFocusFirstInvalid<HTMLFormElement>();
@@ -449,6 +451,14 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             limit={QUOTE_PREVIEW_CHARS}
             className="text-sm text-muted-foreground"
           />
+          {engineNote && (
+            <p
+              role={result.engineFallbackFrom ? "status" : undefined}
+              className={result.engineFallbackFrom ? "text-sm" : "text-xs text-muted-foreground"}
+            >
+              {engineNote}.
+            </p>
+          )}
           {result.styleApplied === false && (
             <p role="status" className="text-sm">
               The chosen delivery could not be applied with this voice engine, so the audio uses its

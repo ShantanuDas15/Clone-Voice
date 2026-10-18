@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { STANDARD_ENGINE, engineName } from "@/lib/engine-names";
+import { STANDARD_ENGINE, describeEngine, engineName } from "@/lib/engine-names";
 
 describe("engineName", () => {
   it.each([
@@ -33,5 +33,27 @@ describe("engine ids", () => {
     const ids = [...(declared ?? "").matchAll(/"([a-z0-9_]+)"/g)].map((m) => m[1] ?? "");
     expect(ids).toContain("sv2tts");
     for (const id of ids) expect(engineName(id), id).not.toBe("another");
+  });
+});
+
+describe("describeEngine", () => {
+  it("says nothing for the standard engine or no engine", () => {
+    expect(describeEngine("sv2tts", null)).toBeNull();
+    expect(describeEngine(null, null)).toBeNull();
+    expect(describeEngine(undefined, undefined)).toBeNull();
+    expect(describeEngine("", "")).toBeNull();
+  });
+
+  it("names any other engine", () => {
+    expect(describeEngine("chatterbox", null)).toBe("Voice engine: Expressive");
+  });
+
+  it("puts the backup first, and only once", () => {
+    expect(describeEngine("sv2tts", "chatterbox")).toBe(
+      "Made by the backup voice engine (Expressive was unavailable)",
+    );
+    expect(describeEngine("chatterbox_nano", "chatterbox")).toBe(
+      "Made by the backup voice engine (Expressive was unavailable)",
+    );
   });
 });

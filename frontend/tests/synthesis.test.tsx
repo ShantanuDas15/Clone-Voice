@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http as mswHttp } from "msw";
 import type { ReactNode } from "react";
@@ -518,6 +518,50 @@ describe("delivery controls", () => {
     await user.selectOptions(await screen.findByLabelText("Delivery"), "sad");
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     expect(await screen.findByText(/could not be applied/)).toBeInTheDocument();
+  });
+
+  describe("which engine made it", () => {
+    async function generateWith(headers: Record<string, string>) {
+      post(headers);
+      wrap(<TextToSpeechForm />);
+      const user = userEvent.setup();
+      const select = await screen.findByLabelText("Voice");
+      await waitFor(() => expect(select).not.toBeDisabled());
+      await user.selectOptions(select, fixtures.profile.id);
+      await user.type(screen.getByLabelText("Text"), "Hello there.");
+      await user.click(screen.getByRole("button", { name: "Generate speech" }));
+      await screen.findByRole("link", { name: "Download WAV" });
+    }
+
+    it("says nothing when no engine is reported or the standard one made it", async () => {
+      await generateWith({ "X-Voice-Engine": "sv2tts" });
+      const card = screen.getByRole("region", { name: /your audio/i });
+      expect(within(card).queryByText(/voice engine/i)).not.toBeInTheDocument();
+    });
+
+    it("names a non-standard engine in plain words", async () => {
+      await generateWith({ "X-Voice-Engine": "chatterbox" });
+      expect(screen.getByText("Voice engine: Expressive.")).toBeInTheDocument();
+      expect(screen.queryByText(/chatterbox/)).not.toBeInTheDocument();
+    });
+
+    it("announces a backup engine and says which one was unavailable", async () => {
+      await generateWith({
+        "X-Voice-Engine": "sv2tts",
+        "X-Voice-Engine-Fallback": "chatterbox_turbo",
+      });
+      const note = screen.getByText(
+        "Made by the backup voice engine (Expressive Turbo was unavailable).",
+      );
+      expect(note).toHaveAttribute("role", "status");
+      expect(screen.queryByText(/chatterbox_turbo/)).not.toBeInTheDocument();
+    });
+
+    it("never shows an engine id it does not know", async () => {
+      await generateWith({ "X-Voice-Engine": "zonos_v9" });
+      expect(screen.getByText("Voice engine: another.")).toBeInTheDocument();
+      expect(screen.queryByText(/zonos/)).not.toBeInTheDocument();
+    });
   });
 
   it("hides the controls when the backend would ignore them", async () => {

@@ -1,6 +1,6 @@
 import type { Generation } from "@/lib/api/history";
 import { EMOTIONS } from "@/lib/emotion";
-import { STANDARD_ENGINE, engineName } from "@/lib/engine-names";
+import { describeEngine } from "@/lib/engine-names";
 
 const emotionLabel = (value: string): string =>
   EMOTIONS.find((e) => e.value === value)?.label ?? value;
@@ -12,13 +12,8 @@ const emotionLabel = (value: string): string =>
  */
 export function generationDetails(gen: Generation): string[] {
   const facts: string[] = [];
-  if (gen.engine_fallback_from) {
-    facts.push(
-      `Made by the backup voice engine (${engineName(gen.engine_fallback_from)} was unavailable)`,
-    );
-  } else if (gen.engine && gen.engine !== STANDARD_ENGINE) {
-    facts.push(`Voice engine: ${engineName(gen.engine)}`);
-  }
+  const engine = describeEngine(gen.engine, gen.engine_fallback_from);
+  if (engine) facts.push(engine);
   if (gen.emotion && gen.emotion !== "auto") {
     const strength = gen.intensity != null ? ` at ${Math.round(gen.intensity * 100)}%` : "";
     const outcome = gen.style_applied === false ? ", not applied by this voice engine" : "";
