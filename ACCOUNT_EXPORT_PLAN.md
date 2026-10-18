@@ -1,6 +1,6 @@
 # CloneVoice — Account Data Export Plan
 
-> **Status**: 🟡 E1 in progress. **Last Reviewed**: 2026-10-18
+> **Status**: 🟡 E1 landed (`a5b166b`); E2 not started. **Last Reviewed**: 2026-10-18
 > **Rule that orders this work**: backend first (CLAUDE.md §2). E1 (backend) is merged and verified before E2 (frontend).
 > **Why**: erasure exists (`DELETE /auth/me`, voice and generation delete) but a user cannot take their data with them. For a product that stores voice recordings, a self-service export is the missing half of data-subject access/portability.
 
@@ -29,7 +29,9 @@
 
 ## 3. Milestones
 
-### E1 — Backend export endpoint
+### E1 — Backend export endpoint ✅
+
+**Verified (2026-10-18):** full suite 1876 passed, 1 skipped, 11 warnings (17 new tests in `test_account_export.py`); live curl against a real server: no token 401, wrong password 403, missing body 403, correct password 200 `application/zip` with `Cache-Control: no-store` and a valid archive, temp file removed. The live run had no voice data (the real-weights upload path was not exercised); clips and audio are covered by the tests.
 
 **Work**
 1. `services/account_export.py`: `build_export(db, user) -> str` (path of the temp zip).
@@ -50,5 +52,5 @@ Button in the Account data section beside erase, password field when `has_passwo
 
 | Milestone | Status | Commit |
 |---|---|---|
-| E1 backend export | 🟡 In progress | — |
+| E1 backend export | ✅ Done | `a5b166b` |
 | E2 frontend button | ⬜ Not started | — |
