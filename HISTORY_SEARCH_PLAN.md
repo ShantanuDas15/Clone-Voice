@@ -1,6 +1,6 @@
 # CloneVoice — Free-text History Search Plan
 
-> **Status**: 🟡 H1 landed (`487bbf0`); H2 not started. **Last Reviewed**: 2026-10-18
+> **Status**: 🟡 H1 landed (`487bbf0`); H2 landed (`ae0aa11`) 2026-10-18. **Last Reviewed**: 2026-10-18
 > **Rule that orders this work**: backend first (CLAUDE.md §2). H1 (backend) merges before H2 (frontend).
 > **Why**: History is paged 50 at a time and can only be filtered by voice. A user looking for "the birthday message" has to scroll and expand rows.
 
@@ -32,7 +32,7 @@
 
 **Tests (CLAUDE.md §4.1)**: substring and case-insensitive match; no match gives `[]` and total 0; `%`/`_`/`\` literal; whitespace-only and empty `q` ignored; leading/trailing spaces trimmed; composes with `voice_profile_id`, `limit`/`offset` and total; never returns another user's, soft-deleted, erased or deleted-voice rows; 201-char `q` is 422; unicode text matches; no token 401. **Gateway**: `curl -H "Authorization: Bearer $T" "localhost:8000/api/v1/synthesize/history?q=birthday"` → 200 with only matching rows and a matching `X-Total-Count`.
 
-### H2 — Frontend search box (after H1 merges)
+### H2 — Frontend search box ✅
 
 Search field on History (debounced, keeps the previous list while fetching), "No generations match …" with Clear, polite live count, composes with the voice filter; vitest, real-backend e2e, a11y, visual baselines.
 
@@ -41,4 +41,6 @@ Search field on History (debounced, keeps the previous list while fetching), "No
 | Milestone | Status | Commit |
 |---|---|---|
 | H1 backend `q` | ✅ Done | `487bbf0` |
-| H2 frontend search | ⬜ Not started | — |
+| H2 frontend search | ✅ Done | `ae0aa11` |
+
+**H2 verified (2026-10-18):** frontend 699 vitest tests pass (11 new in `history-search.test.tsx`: q sent only when given, offered only while there is history, one request per pause in typing, trimmed/blank, keeps the list while loading (fails without `keepPreviousData`), no-match message with Clear, text not treated as markup, composes with the voice filter, error state); typecheck, lint, prettier clean; real-weights Chromium e2e (search, no match, clear, literal `100%`) plus the existing delete and voice-filter History specs; a11y, responsive, keyboard and CLS e2e pass; 8 History baselines refreshed and the full Chromium visual suite (102) passes. Not run: Firefox/WebKit, real Postgres for the `ILIKE`.
