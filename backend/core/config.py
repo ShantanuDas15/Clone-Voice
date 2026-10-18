@@ -131,7 +131,8 @@ class Settings(BaseSettings):
     # SPEECH_QUALITY_PLAN.md S7.2c: the per-IP ceiling on POST /synthesize, scaled to what the active
     # engine costs. The default applies to every engine; SYNTHESIZE_RATE_LIMIT_BY_ENGINE overrides it
     # for the engines named (e.g. {"chatterbox": "2/minute"} for a slow GPU engine). The limit follows
-    # TTS_ENGINE, read on each request.
+    # the engine that serves the caller (S7.4c): TTS_CANARY_ENGINE for a canary user, else TTS_ENGINE,
+    # read on each request.
     SYNTHESIZE_RATE_LIMIT: str = "5/minute"
     SYNTHESIZE_RATE_LIMIT_BY_ENGINE: dict[str, str] = Field(default_factory=dict)
 
