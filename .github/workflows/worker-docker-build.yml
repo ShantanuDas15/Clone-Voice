@@ -46,7 +46,7 @@ jobs:
           - torch_backend: cuda
             size_limit_mb: 8192
           - torch_backend: cpu
-            size_limit_mb: 6000
+            size_limit_mb: 2560
     env:
       IMAGE: clonevoice-tts-worker:${{ matrix.torch_backend }}
       TORCH_BACKEND: ${{ matrix.torch_backend }}
