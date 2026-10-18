@@ -76,6 +76,10 @@ for (const scheme of SCHEMES) {
     await page.goto("/account"); // delete-account moved here with the route split
     await page.getByRole("button", { name: /delete my account/i }).click();
     await audit(page, `delete-account dialog (${scheme})`);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: /download my data/i }).click();
+    await audit(page, `export-data dialog (${scheme})`);
+    await page.getByRole("button", { name: "Cancel" }).click();
 
     await page.goto("/generate");
     await page.getByLabel("Text").waitFor();

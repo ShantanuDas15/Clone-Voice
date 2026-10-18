@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http as mswHttp } from "msw";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountSection } from "@/components/account-section";
 import { AuthProvider, __resetBootstrapForTests } from "@/components/auth-provider";
@@ -379,6 +379,158 @@ describe("AccountSection: delete", () => {
     await userEvent.click(screen.getByRole("button", { name: "Delete account" }));
     expect(await screen.findByText(/account still exists/i)).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("AccountSection: export my data (E2)", () => {
+  const EXPORT = `${API}/auth/me/export`;
+  async function openDialog() {
+    await screen.findByLabelText("Display name");
+    await userEvent.click(screen.getByRole("button", { name: /download my data/i }));
+  }
+  const submit = () => screen.getByRole("button", { name: "Download" });
+
+  let saved: string[];
+  let click: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    saved = [];
+    click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push(this.download);
+    });
+  });
+  afterEach(() => click.mockRestore());
+
+  it("asks for the password before sending anything", async () => {
+    let called = false;
+    server.use(
+      mswHttp.post(EXPORT, () => {
+        called = true;
+        return new HttpResponse(new Blob(["PK"]));
+      }),
+    );
+    wrap(<AccountSection />);
+    await openDialog();
+    await userEvent.click(submit());
+    expect(await screen.findByText(/enter your password/i)).toBeInTheDocument();
+    expect(called).toBe(false);
+    expect(saved).toEqual([]);
+  });
+
+  it("sends the password, saves the zip under a dated name and closes the dialog", async () => {
+    let body: unknown;
+    server.use(
+      mswHttp.post(EXPORT, async ({ request }) => {
+        body = await request.json();
+        return new HttpResponse(new Blob(["PK"]), {
+          headers: { "content-type": "application/zip" },
+        });
+      }),
+    );
+    wrap(<AccountSection />);
+    await openDialog();
+    await userEvent.type(screen.getByLabelText("Password"), "hunter2hunter2");
+    await userEvent.click(submit());
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(body).toEqual({ password: "hunter2hunter2" });
+    expect(saved[0]).toMatch(/^clonevoice-export-\d{4}-\d{2}-\d{2}\.zip$/);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("needs no password for a Google-only account", async () => {
+    let body: unknown;
+    server.use(
+      mswHttp.get(`${API}/auth/me`, () =>
+        HttpResponse.json({ ...fixtures.user, provider: "google", has_password: false }),
+      ),
+      mswHttp.post(EXPORT, async ({ request }) => {
+        body = await request.json();
+        return new HttpResponse(new Blob(["PK"]));
+      }),
+    );
+    wrap(<AccountSection />);
+    await openDialog();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    await userEvent.click(submit());
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(body).toEqual({});
+  });
+
+  it("keeps the dialog open and downloads nothing on a wrong password", async () => {
+    server.use(
+      mswHttp.post(EXPORT, () =>
+        HttpResponse.json({ detail: "Incorrect password" }, { status: 403 }),
+      ),
+    );
+    wrap(<AccountSection />);
+    await openDialog();
+    await userEvent.type(screen.getByLabelText("Password"), "wrong-password");
+    await userEvent.click(submit());
+    expect(await screen.findByText("That password is incorrect.")).toBeInTheDocument();
+    expect(saved).toEqual([]);
+    expect(submit()).toBeEnabled();
+  });
+
+  it("explains when the server is busy (429 with Retry-After)", async () => {
+    server.use(
+      mswHttp.post(EXPORT, () =>
+        HttpResponse.json(
+          { detail: "Another export is running, try again shortly" },
+          { status: 429, headers: { "retry-after": "30" } },
+        ),
+      ),
+    );
+    wrap(<AccountSection />);
+    await openDialog();
+    await userEvent.type(screen.getByLabelText("Password"), "hunter2hunter2");
+    await userEvent.click(submit());
+    expect(await screen.findByText(/30 seconds/)).toBeInTheDocument();
+    expect(saved).toEqual([]);
+  });
+
+  it("shows a safe message for a server error without echoing its text", async () => {
+    server.use(
+      mswHttp.post(EXPORT, () => HttpResponse.json({ detail: "boom internals" }, { status: 500 })),
+    );
+    wrap(<AccountSection />);
+    await openDialog();
+    await userEvent.type(screen.getByLabelText("Password"), "hunter2hunter2");
+    await userEvent.click(submit());
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText(/boom internals/)).not.toBeInTheDocument();
+  });
+
+  it("blocks a second request while one is running and disables Cancel", async () => {
+    let calls = 0;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      mswHttp.post(EXPORT, async () => {
+        calls += 1;
+        await gate;
+        return new HttpResponse(new Blob(["PK"]));
+      }),
+    );
+    wrap(<AccountSection />);
+    await openDialog();
+    await userEvent.type(screen.getByLabelText("Password"), "hunter2hunter2");
+    await userEvent.click(submit());
+    const preparing = await screen.findByRole("button", { name: "Preparing…" });
+    expect(preparing).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    release();
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(calls).toBe(1);
+  });
+
+  it("clears the typed password when the dialog is cancelled", async () => {
+    wrap(<AccountSection />);
+    await openDialog();
+    await userEvent.type(screen.getByLabelText("Password"), "hunter2hunter2");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: /download my data/i }));
+    expect(screen.getByLabelText("Password")).toHaveValue("");
   });
 });
 
