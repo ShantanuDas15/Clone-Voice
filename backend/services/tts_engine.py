@@ -87,7 +87,7 @@ class SynthesisResult:
 class EngineUnavailableError(RuntimeError):
     """The engine's backend (for example a remote inference worker) cannot be reached or refused.
 
-    ``reason`` names the cause for metrics: ``unavailable``, ``busy`` or ``circuit_open``.
+    ``reason`` names the cause for metrics: ``unavailable``, ``busy``, ``circuit_open`` or ``reference``.
     """
 
     def __init__(self, message: str, reason: str = "unavailable") -> None:
@@ -102,6 +102,19 @@ class EngineBusyError(EngineUnavailableError):
     def __init__(self, message: str) -> None:
         """A busy backend."""
         super().__init__(message, reason="busy")
+
+
+class EngineRejectedReferenceError(EngineUnavailableError):
+    """The backend is up but cannot use this voice's reference clip (for example one too short).
+
+    The model behind Chatterbox Turbo and Nano accepts only a reference longer than 5 seconds, while
+    an upload may hold less. Worth a fallback to an engine that needs no reference, and not a sign
+    of an outage: the worker answered. ``reason`` is ``reference``.
+    """
+
+    def __init__(self, message: str) -> None:
+        """A reference clip the backend refused."""
+        super().__init__(message, reason="reference")
 
 
 class UnsupportedStyleError(ValueError):

@@ -244,6 +244,7 @@ def test_client_and_worker_agree_on_the_protocol():
         "HEADER_SAMPLE_RATE",
         "HEADER_TRUNCATED",
         "HEADER_MODEL",
+        "REFERENCE_REJECTED_DETAIL",
     ):
         assert getattr(chatterbox_engine, name) == getattr(worker_app, name), name
 
@@ -463,3 +464,14 @@ def test_a_rejected_reference_logs_only_the_kind_of_failure(fake_chatterbox, cap
     assert "RuntimeError" in caplog.text
     assert "bad audio" not in caplog.text  # the library's message is not logged
     assert "private sentence" not in caplog.text
+
+
+def test_the_workers_422_for_an_unusable_reference_carries_the_agreed_detail(
+    fake_chatterbox,
+):
+    """The client turns exactly this detail into a fallback (R0.5); the adapter must raise it."""
+    synth = fake_chatterbox("nano", "cpu")
+    _FakeModel.instances[0].fail_prepare = True
+    with pytest.raises(ValueError) as error:
+        synth.synthesize("Hi.", _wav_bytes(), 0)
+    assert str(error.value) == worker_app.REFERENCE_REJECTED_DETAIL

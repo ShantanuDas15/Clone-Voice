@@ -29,7 +29,9 @@ from backend.schemas.synthesize import (
 from backend.services import style_markup, styled_synthesis
 from backend.services.erasure import erase_generation, remove_files
 from backend.services.text_analysis import StyleOverride
-from backend.services.tts_engine import EngineUnavailableError, get_engine_for_user
+from backend.services.tts_engine import (EngineRejectedReferenceError,
+                                         EngineUnavailableError,
+                                         get_engine_for_user)
 from backend.services.tts_pipeline import (
     InferenceQueueFullError,
     InferenceTimeoutError,
@@ -324,6 +326,28 @@ async def synthesize(
             status_code=502,
             detail="The synthesized audio did not meet the quality bar. "
             "Please try again, or shorten or reword the text.",
+        )
+    except EngineRejectedReferenceError:
+        # Only reaches here when no fallback engine could serve the request (TTS_FALLBACK_ENGINE
+        # is "none"): retrying cannot help, so say what would.
+        logger.warning(
+            "Voice reference refused by the speech engine — user_id=%s, profile_id=%s",
+            user_id,
+            profile_id,
+        )
+        await asyncio.to_thread(
+            _record_failed_generation,
+            db,
+            user_id,
+            profile_id,
+            req.text,
+            settings.TTS_ENGINE,
+            requested,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail="This voice's recording is too short for the selected speech engine. "
+            "Add a longer clip of about 10 seconds to the voice and try again.",
         )
     except EngineUnavailableError:
         logger.exception(

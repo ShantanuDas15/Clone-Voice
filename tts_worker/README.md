@@ -70,7 +70,7 @@ Nano is not in the PyPI release of `chatterbox-tts`, so it is installed from a p
 
 * ~~The Docker image has not been built~~: `.github/workflows/worker-docker-build.yml` builds it and runs it on every change to `tts_worker/` (and weekly): non-root, no baked token, pinned libraries, the Nano model loading on CPU, health, authentication, one real synthesis, and no request text, token or temporary file left behind. **Still unverified:** a GPU run (`TTS_WORKER_DEVICE=cuda`), and any model other than Nano.
 * The image is **6.4 GB** because the lock pulls PyPI's CUDA torch; a CPU-only worker (the plan's Railway option) would be far smaller but is not built.
-* **A reference clip must be longer than 5 seconds** for Turbo and Nano (the model asserts it); the application does not enforce that yet (CHATTERBOX_ROLLOUT_PLAN.md R0.5).
+* **A reference clip must be longer than 5 seconds** for Turbo and Nano (the model asserts it). The worker answers a refused reference with `422` and the detail `the reference audio could not be used`; the application turns exactly that into a fallback to SV2TTS (S4.4b), so a short voice is served, but by the lower-quality engine.
 * The fallback was exercised against a killed and restarted worker, not against a network that drops packets.
 * No hosting provider has been chosen (plan question Q1); nothing here is deployed.
 * The model's training data is undisclosed (`SPEECH_QUALITY_STUDY.md`), an owner decision before it serves real users.

@@ -16,6 +16,7 @@ from backend.services.chatterbox_engine import ChatterboxEngine, CircuitBreaker
 from backend.services.tts_engine import (
     EngineBusyError,
     EngineCapabilities,
+    EngineRejectedReferenceError,
     EngineUnavailableError,
     SynthesisResult,
     TTSEngine,
@@ -319,6 +320,7 @@ def _install(monkeypatch, engine):
         (EngineUnavailableError("down"), "unavailable"),
         (EngineBusyError("busy"), "busy"),
         (EngineUnavailableError("skipped", reason="circuit_open"), "circuit_open"),
+        (EngineRejectedReferenceError("too short"), "reference"),
     ],
 )
 def test_an_unavailable_primary_is_served_by_sv2tts_and_counted(
@@ -515,3 +517,174 @@ def test_a_refused_attempt_is_counted_as_retried_then_refused(monkeypatch, mock_
         _run()
     assert count("gate_retried") == retried + 1
     assert count("gate_refused") == refused + 1
+
+
+# --- R0.5: a voice the engine cannot use falls back, and is not an outage ---------
+
+
+REFERENCE_REPLY = httpx.Response(
+    422, json={"detail": "the reference audio could not be used"}
+)
+
+
+def test_a_rejected_reference_never_opens_the_circuit(engine):
+    handler = _handler([REFERENCE_REPLY])
+    engine.transport = httpx.MockTransport(handler)
+    for _ in range(10):
+        with pytest.raises(EngineRejectedReferenceError) as error:
+            _call(engine)
+        assert error.value.reason == "reference"
+    assert engine.breaker.state == "closed" and len(handler.calls) == 10
+
+
+def test_a_rejected_reference_resets_the_failure_count(engine):
+    """The worker answered, so earlier outages must not add up with later rejections."""
+    engine.transport = httpx.MockTransport(
+        _handler([503, 503, REFERENCE_REPLY, 503, 503, 503])
+    )
+    for _ in range(2):
+        with pytest.raises(EngineUnavailableError):
+            _call(engine)
+    with pytest.raises(EngineRejectedReferenceError):
+        _call(engine)
+    for _ in range(2):
+        with pytest.raises(EngineUnavailableError):
+            _call(engine)
+    assert engine.breaker.state == "closed"  # 2 + 2 outages, never 3 in a row
+
+
+def test_a_voice_the_worker_cannot_use_is_served_by_sv2tts_and_counted_apart(
+    monkeypatch, mock_sv2tts, tmp_path
+):
+    """End to end over HTTP: a real worker app answers 422, the engine maps it, SV2TTS serves."""
+    ref = tmp_path / "ref.wav"
+    sf.write(str(ref), _tone(3.0), SR)
+    model, server = _real_worker(monkeypatch)
+    model.error = ValueError("the reference audio could not be used")
+    unavailable = _sample(
+        "clonevoice_engine_synthesis_total", engine=PRIMARY, outcome="unavailable"
+    )
+    rejected = _sample(
+        "clonevoice_engine_synthesis_total",
+        engine=PRIMARY,
+        outcome="reference_rejected",
+    )
+    before = _count("reference")
+    try:
+        path, duration = asyncio.run(
+            tts_pipeline.run_inference_pipeline(
+                "Hello.", EMB, "u", reference_audio_path=str(ref)
+            )
+        )
+    finally:
+        server.stop()
+
+    assert sf.info(path).samplerate == settings.VOCODER_SAMPLE_RATE and duration > 0
+    assert _count("reference") == before + 1
+    assert (
+        _sample(
+            "clonevoice_engine_synthesis_total",
+            engine=PRIMARY,
+            outcome="reference_rejected",
+        )
+        == rejected + 1
+    )
+    assert (  # the worker's health measure is untouched
+        _sample(
+            "clonevoice_engine_synthesis_total", engine=PRIMARY, outcome="unavailable"
+        )
+        == unavailable
+    )
+    assert get_engine().breaker.state == "closed"
+
+
+def test_with_the_fallback_off_a_rejected_reference_reaches_the_caller(
+    monkeypatch, mock_sv2tts
+):
+    monkeypatch.setattr(settings, "TTS_FALLBACK_ENGINE", "none")
+    _install(monkeypatch, _FlakyEngine(EngineRejectedReferenceError("too short")))
+    with pytest.raises(EngineRejectedReferenceError):
+        _run()
+
+
+def _upload_and_headers(client, email):
+    client.post(
+        "/api/v1/auth/signup",
+        json={"email": email, "password": "Password123!", "name": "R"},
+    )
+    token = client.post(
+        "/api/v1/auth/login", json={"email": email, "password": "Password123!"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    profile = client.post(
+        "/api/v1/voice/upload",
+        headers=headers,
+        data={"name": "R", "consent_confirmed": "true"},
+        files={"file": ("a.wav", _wav(_tone(4.0, amp=0.5)), "audio/wav")},
+    ).json()["id"]
+    return headers, profile
+
+
+def test_the_api_serves_a_voice_whose_reference_the_worker_refuses(
+    client: TestClient, db_session, monkeypatch
+):
+    from backend.models.generation import Generation
+
+    headers, profile = _upload_and_headers(client, "ref1@example.com")
+    model, server = _real_worker(monkeypatch)
+    model.error = ValueError("the reference audio could not be used")
+    try:
+        response = client.post(
+            "/api/v1/synthesize",
+            headers=headers,
+            json={"voice_profile_id": profile, "text": "Served by the backup"},
+        )
+    finally:
+        server.stop()
+
+    assert response.status_code == 200
+    assert (
+        sf.info(io.BytesIO(response.content)).samplerate == settings.VOCODER_SAMPLE_RATE
+    )
+    assert response.headers["X-Voice-Engine"] == "sv2tts"
+    assert response.headers["X-Voice-Engine-Fallback"] == PRIMARY
+    row = (
+        db_session.query(Generation)
+        .filter(Generation.input_text == "Served by the backup")
+        .one()
+    )
+    assert (row.status, row.engine, row.engine_fallback_from) == (
+        "completed",
+        "sv2tts",
+        PRIMARY,
+    )
+
+
+def test_the_api_says_what_would_help_when_there_is_no_fallback(
+    client: TestClient, db_session, monkeypatch
+):
+    """Retrying cannot fix a short recording, so the answer is a 422 naming the remedy, not a 503."""
+    from backend.models.generation import Generation
+
+    headers, profile = _upload_and_headers(client, "ref2@example.com")
+    monkeypatch.setattr(settings, "TTS_FALLBACK_ENGINE", "none")
+    model, server = _real_worker(monkeypatch)
+    model.error = ValueError("the reference audio could not be used")
+    try:
+        response = client.post(
+            "/api/v1/synthesize",
+            headers=headers,
+            json={"voice_profile_id": profile, "text": "Nobody to serve this"},
+        )
+    finally:
+        server.stop()
+
+    assert response.status_code == 422
+    assert "too short" in response.json()["detail"]
+    assert "10 seconds" in response.json()["detail"]
+    row = (
+        db_session.query(Generation)
+        .filter(Generation.input_text == "Nobody to serve this")
+        .one()
+    )
+    assert row.status == "failed"

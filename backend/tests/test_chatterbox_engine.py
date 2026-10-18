@@ -21,12 +21,22 @@ from fastapi.testclient import TestClient
 
 from backend.core.config import Settings, settings
 from backend.services import audio_processing, tts_engine, tts_pipeline
-from backend.services.chatterbox_engine import (MAX_CHARS, SAMPLE_RATE,
-                                                VARIANTS, ChatterboxEngine)
-from backend.services.tts_engine import (EngineUnavailableError,
-                                         SynthesisStyle, UnsupportedStyleError,
-                                         VoiceConditioning, WrongEngineError,
-                                         get_engine)
+from backend.services.chatterbox_engine import (
+    MAX_CHARS,
+    REFERENCE_REJECTED_DETAIL,
+    SAMPLE_RATE,
+    VARIANTS,
+    ChatterboxEngine,
+)
+from backend.services.tts_engine import (
+    EngineRejectedReferenceError,
+    EngineUnavailableError,
+    SynthesisStyle,
+    UnsupportedStyleError,
+    VoiceConditioning,
+    WrongEngineError,
+    get_engine,
+)
 from tts_worker.app import create_app
 
 SR = 16000
@@ -300,9 +310,47 @@ def test_a_model_crash_in_the_worker_is_unavailable(worker, model, engine):
         _synth(engine)
 
 
-def test_a_bad_reference_is_a_rejection_not_unavailable(worker, model, engine):
-    model.error = ValueError("the reference audio could not be used")
-    with pytest.raises(RuntimeError, match="rejected"):
+def test_a_reference_the_model_cannot_use_asks_for_a_fallback(worker, model, engine):
+    """R0.5: a real worker's 422 for an unusable reference is a fallback reason, not a failure."""
+    model.error = ValueError(REFERENCE_REJECTED_DETAIL)
+    with pytest.raises(EngineRejectedReferenceError) as error:
+        _synth(engine)
+    assert isinstance(error.value, EngineUnavailableError)
+    assert error.value.reason == "reference"
+
+
+def test_any_other_bad_request_is_still_a_plain_rejection(worker, model, engine):
+    model.error = ValueError("some other complaint")
+    with pytest.raises(RuntimeError, match="rejected") as error:
+        _synth(engine)
+    assert not isinstance(error.value, EngineUnavailableError)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        httpx.Response(422),  # no body
+        httpx.Response(422, content=b"not json"),
+        httpx.Response(422, json={"detail": 7}),
+        httpx.Response(422, json={"detail": ["a", "list"]}),
+        httpx.Response(422, json={"detail": "reference must be a WAV file"}),
+        httpx.Response(409, json={"detail": REFERENCE_REJECTED_DETAIL}),
+    ],
+)
+def test_only_the_workers_exact_reference_message_triggers_a_fallback(
+    engine, monkeypatch, reply
+):
+    """Anything else (other 422s, other statuses, odd bodies) stays a plain rejection."""
+    _mock(lambda request: reply, engine, monkeypatch)
+    with pytest.raises(RuntimeError, match="rejected") as error:
+        _synth(engine)
+    assert not isinstance(error.value, EngineUnavailableError)
+
+
+def test_the_mock_transport_reference_reply_is_recognised(engine, monkeypatch):
+    reply = httpx.Response(422, json={"detail": REFERENCE_REJECTED_DETAIL})
+    _mock(lambda request: reply, engine, monkeypatch)
+    with pytest.raises(EngineRejectedReferenceError):
         _synth(engine)
 
 
