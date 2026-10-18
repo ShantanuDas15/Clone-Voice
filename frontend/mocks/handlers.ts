@@ -49,6 +49,10 @@ export const handlers = [
   http.get(`${API}/auth/me`, () => HttpResponse.json(fixtures.user)),
   http.patch(`${API}/auth/me`, () => HttpResponse.json(fixtures.user)),
   http.delete(`${API}/auth/me`, () => new HttpResponse(null, { status: 204 })),
+  http.post(
+    `${API}/auth/me/export`,
+    () => new HttpResponse(new Blob(["PK"]), { headers: { "content-type": "application/zip" } }),
+  ),
   http.post(`${API}/auth/verify-email`, () => HttpResponse.json({ detail: "Email verified" })),
   http.post(`${API}/auth/resend-verification`, () =>
     HttpResponse.json({ detail: "Verification email sent" }, { status: 202 }),

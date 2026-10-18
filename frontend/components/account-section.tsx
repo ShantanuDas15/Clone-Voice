@@ -13,6 +13,7 @@ import { ResendVerification } from "@/components/resend-verification";
 import * as authApi from "@/lib/api/auth";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
+import { saveBlob } from "@/lib/download";
 import { formatDate } from "@/lib/format";
 import { DELETE_CONFIRMATION, type NameValues, nameSchema } from "@/lib/validation/auth";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,96 @@ function NameForm() {
         {isSubmitting ? "Saving…" : "Save name"}
       </Button>
     </form>
+  );
+}
+
+function ExportData() {
+  const { user } = useAuth();
+  const inFlight = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (!user) return null;
+  const needsPassword = user.has_password;
+
+  function cancel() {
+    setOpen(false);
+    setPassword("");
+    setError(null);
+  }
+
+  async function onExport() {
+    if (inFlight.current) return;
+    if (needsPassword && !password) {
+      setError("Enter your password to confirm.");
+      return;
+    }
+    inFlight.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const blob = await authApi.exportAccountData(needsPassword ? password : undefined);
+      saveBlob(blob, `clonevoice-export-${new Date().toISOString().slice(0, 10)}.zip`);
+      notify.success("Your data export has been downloaded.");
+      cancel();
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      if (e.kind === "BAD_PASSWORD") setError("That password is incorrect.");
+      else if (e.kind === "RATE_LIMITED")
+        setError(e.retryAfterSec ? rateLimitMessage(e) : e.message);
+      else setError(e.message);
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm">
+        Download a zip with your account details, your voices and recordings, and everything you
+        have generated. It doesn&apos;t include your password or sign-in sessions.
+      </p>
+      <Button variant="secondary" onClick={() => setOpen(true)} aria-haspopup="dialog">
+        Download my data…
+      </Button>
+      {open && (
+        <Dialog titleId="export-data-title" onClose={cancel} closeDisabled={busy}>
+          <h3 id="export-data-title" className="font-medium">
+            Download your data?
+          </h3>
+          <p className="text-sm">
+            This can take a little while if you have a lot of audio. Keep the file private: it
+            contains your voice recordings.
+          </p>
+          {needsPassword ? (
+            <TextField
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          ) : (
+            <p className="text-sm">
+              You signed in with Google, so no password is needed. Your current session confirms
+              it&apos;s you.
+            </p>
+          )}
+          {error && <Alert tone="danger">{error}</Alert>}
+          <div className="flex gap-2">
+            <Button onClick={() => void onExport()} disabled={busy}>
+              {busy ? "Preparing…" : "Download"}
+            </Button>
+            <Button variant="secondary" disabled={busy} onClick={cancel}>
+              Cancel
+            </Button>
+          </div>
+        </Dialog>
+      )}
+    </div>
   );
 }
 
@@ -228,6 +319,12 @@ export function AccountSection() {
         <dd>{formatDate(user.created_at)}</dd>
       </dl>
       <NameForm />
+      <section aria-labelledby="export" className="space-y-3 border-t border-border pt-6">
+        <h2 id="export" className="font-medium">
+          Your data
+        </h2>
+        <ExportData />
+      </section>
       <section aria-labelledby="danger" className="space-y-3 border-t border-border pt-6">
         <h2 id="danger" className="font-medium">
           Delete account

@@ -1,4 +1,4 @@
-import { http } from "@/lib/api/http";
+import { http, longRequest } from "@/lib/api/http";
 import { plainClient } from "@/lib/api/plain";
 
 export interface User {
@@ -84,4 +84,16 @@ export async function updateName(name: string): Promise<User> {
  */
 export async function deleteAccount(password?: string): Promise<void> {
   await http.delete("/auth/me", { data: password ? { password } : {} });
+}
+
+/**
+ * Download everything the account holds as a zip (voices, clips, generations, audio).
+ * The password is required for accounts that have one; Google-only accounts omit it.
+ */
+export async function exportAccountData(password?: string): Promise<Blob> {
+  const { data } = await http.post<Blob>("/auth/me/export", password ? { password } : {}, {
+    ...longRequest,
+    responseType: "blob",
+  });
+  return data;
 }

@@ -50,3 +50,28 @@ test("the account page shows the verification state, and updates once the email 
   await expect(details.getByText("Verified", { exact: true })).toBeVisible();
   await expect(page.getByText("Not verified")).toHaveCount(0);
 });
+
+test("download my data: a wrong password is refused, the right one saves a zip", async ({
+  page,
+}) => {
+  await signUp(page, uniqueEmail("export"));
+  await page.goto("/account");
+  await page.getByRole("button", { name: /download my data/i }).click();
+
+  await page.getByLabel("Password", { exact: true }).fill("wrong-password-xx");
+  await page.getByRole("button", { name: "Download", exact: true }).click();
+  await expect(page.getByText("That password is incorrect.")).toBeVisible();
+
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download", exact: true }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^clonevoice-export-\d{4}-\d{2}-\d{2}\.zip$/);
+  const path = await download.path();
+  const { readFileSync } = await import("node:fs");
+  const bytes = readFileSync(path);
+  expect(bytes.subarray(0, 2).toString()).toBe("PK"); // a zip
+  expect(bytes.includes(Buffer.from("account.json"))).toBe(true);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});

@@ -1,6 +1,6 @@
 # CloneVoice — Account Data Export Plan
 
-> **Status**: 🟡 E1 landed (`a5b166b`); E2 not started. **Last Reviewed**: 2026-10-18
+> **Status**: 🟡 E1 landed (`a5b166b`); E2 landed (`1c6a40b`) 2026-10-18. **Last Reviewed**: 2026-10-18
 > **Rule that orders this work**: backend first (CLAUDE.md §2). E1 (backend) is merged and verified before E2 (frontend).
 > **Why**: erasure exists (`DELETE /auth/me`, voice and generation delete) but a user cannot take their data with them. For a product that stores voice recordings, a self-service export is the missing half of data-subject access/portability.
 
@@ -44,7 +44,7 @@
 - *Boundary*: user with no data (valid zip, empty lists); 10-clip profile; password at max length.
 - *Gateway*: `curl -sS -X POST -H "Authorization: Bearer $T" -H 'content-type: application/json' -d '{"password":"…"}' localhost:8000/api/v1/auth/me/export -o export.zip && unzip -l export.zip` → 200, `application/zip`; wrong password → 403.
 
-### E2 — Frontend: "Download my data" on Account (after E1 merges)
+### E2 — Frontend: "Download my data" on Account ✅
 
 Button in the Account data section beside erase, password field when `has_password`, blob download via the existing authed fetch, busy and error states (403, 429), vitest + e2e + visual baselines per the FE-UX gotchas.
 
@@ -53,4 +53,6 @@ Button in the Account data section beside erase, password field when `has_passwo
 | Milestone | Status | Commit |
 |---|---|---|
 | E1 backend export | ✅ Done | `a5b166b` |
-| E2 frontend button | ⬜ Not started | — |
+| E2 frontend button | ✅ Done | `1c6a40b` |
+
+**E2 verified (2026-10-18):** frontend 688 vitest tests pass (8 new in `history-account.test.tsx`: password required, body shape, dated zip name, Google-only, wrong password, busy 429, 5xx without echoing server text, in-flight guard, password cleared on cancel); typecheck, lint and prettier clean; real-backend Chromium e2e: wrong password refused, right password saves a real zip that starts with `PK` and contains `account.json`; axe audit of the new dialog in light and dark; all 8 account baselines refreshed with `--update-snapshots=all` and the full Chromium visual suite (102) passes. Not run: Firefox/WebKit, and no export of an account that has voices through the browser (backend tests cover that).
