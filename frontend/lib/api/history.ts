@@ -1,6 +1,8 @@
 import { http } from "@/lib/api/http";
 
 export const HISTORY_PAGE_SIZE = 50;
+/** The longest search the server accepts (backend `HISTORY_SEARCH_MAX_LENGTH`). */
+export const HISTORY_SEARCH_MAX_LENGTH = 200;
 
 export interface Generation {
   id: string;
@@ -50,11 +52,15 @@ export async function fetchHistory(
   signal?: AbortSignal,
   limit: number = HISTORY_PAGE_SIZE,
   voiceProfileId?: string,
+  search?: string,
 ): Promise<HistoryPage> {
   const response = await http.get<Generation[]>("/synthesize/history", {
-    params: voiceProfileId
-      ? { limit, offset, voice_profile_id: voiceProfileId }
-      : { limit, offset },
+    params: {
+      limit,
+      offset,
+      ...(voiceProfileId ? { voice_profile_id: voiceProfileId } : {}),
+      ...(search ? { q: search } : {}),
+    },
     signal,
   });
   const raw = Number.parseInt(String(response.headers["x-total-count"] ?? ""), 10);

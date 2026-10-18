@@ -126,3 +126,37 @@ test("filter History by voice: two voices, each row and count follows the choice
   await expect(page.getByText("2 generations.")).toBeVisible();
   await expect(page.getByText("Spoken by the first.")).toBeVisible();
 });
+
+test("search History by the text typed: matches, no match, clear, literal wildcard", async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  await signUpVerified(page, "genfind");
+  await createVoice(page, "Find voice");
+  for (const text of ["Happy birthday to you.", "The weather is mild."]) {
+    await page.goto("/generate");
+    await page.getByLabel("Voice").selectOption({ label: "Find voice" });
+    await page.getByLabel("Text").fill(text);
+    await page.getByRole("button", { name: "Generate speech" }).click();
+    await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached({
+      timeout: 300_000,
+    });
+  }
+
+  await page.goto("/history");
+  await expect(page.getByText("2 generations.")).toBeVisible();
+  const search = page.getByLabel("Search your text");
+  await search.fill("BIRTHDAY");
+  await expect(page.getByText("1 generation found.")).toBeVisible();
+  await expect(page.getByText("Happy birthday to you.")).toBeVisible();
+  await expect(page.getByText("The weather is mild.")).toHaveCount(0);
+
+  await search.fill("zebra");
+  await expect(page.getByText(/match “zebra”/)).toBeVisible();
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(search).toHaveValue("");
+  await expect(page.getByText("2 generations.")).toBeVisible();
+
+  await search.fill("100%"); // a wildcard is a literal, so it matches nothing here
+  await expect(page.getByText(/match “100%”/)).toBeVisible();
+});

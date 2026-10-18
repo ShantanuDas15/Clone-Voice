@@ -6,10 +6,16 @@ import { useEffect, useState } from "react";
 import { ExpandableText } from "@/components/expandable-text";
 import { Take } from "@/components/take";
 import { flattenHistory, useDeleteGeneration, useHistory } from "@/hooks/use-history";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { useProfiles } from "@/hooks/use-voice-profiles";
 import { useTerms } from "@/hooks/use-terms";
-import { type Generation, fetchGenerationAudio, isFailedGeneration } from "@/lib/api/history";
+import {
+  type Generation,
+  HISTORY_SEARCH_MAX_LENGTH,
+  fetchGenerationAudio,
+  isFailedGeneration,
+} from "@/lib/api/history";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { generationDetails } from "@/lib/generation-details";
@@ -18,7 +24,7 @@ import { describeRetention, expiresSoon } from "@/lib/retention";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Select } from "@/components/ui/field";
+import { Input, Select } from "@/components/ui/field";
 import { notify } from "@/lib/toast";
 
 const PREVIEW_CHARS = 140;
@@ -212,14 +218,39 @@ function DeleteDialog({
   );
 }
 
-/** Past generations, newest first; an "All voices" filter appears once there are 2+ voices. */
+const SEARCH_DELAY_MS = 300;
+
+/**
+ * Past generations, newest first. A search box finds rows by the text that was typed (shown while
+ * the history loads and whenever it has rows); an "All voices" filter appears once there are 2+ voices.
+ */
 export function HistoryList() {
   const voices = useProfiles().data ?? [];
   const [chosen, setChosen] = useState("");
+  const [typed, setTyped] = useState("");
+  const search = useDebouncedValue(typed.trim(), SEARCH_DELAY_MS);
+  // Unfiltered, this is the same cache entry the list below uses, so it costs no extra request.
+  const everything = useHistory();
+  const hasHistory =
+    everything.isPending ||
+    (everything.data?.pages[0]?.total ?? everything.data?.pages[0]?.items.length ?? 0) > 0;
   // A voice deleted meanwhile falls back to all voices instead of a filter nobody can clear.
   const voiceId = voices.some((v) => v.id === chosen) ? chosen : "";
   return (
     <div className="space-y-3">
+      {hasHistory && (
+        <label className="block text-sm font-medium">
+          Search your text
+          <Input
+            type="search"
+            value={typed}
+            maxLength={HISTORY_SEARCH_MAX_LENGTH}
+            autoComplete="off"
+            placeholder="Find a generation by what you typed"
+            onChange={(e) => setTyped(e.target.value)}
+          />
+        </label>
+      )}
       {voices.length >= 2 && (
         <label className="block text-sm font-medium">
           Voice
@@ -233,15 +264,28 @@ export function HistoryList() {
           </Select>
         </label>
       )}
-      <HistoryBody key={voiceId} voiceId={voiceId} />
+      <HistoryBody
+        key={voiceId}
+        voiceId={voiceId}
+        search={search}
+        onClearSearch={() => setTyped("")}
+      />
     </div>
   );
 }
 
 /** One (optionally filtered) list with load-more, per-row playback and expiry handling. */
-function HistoryBody({ voiceId }: { voiceId: string }) {
+function HistoryBody({
+  voiceId,
+  search,
+  onClearSearch,
+}: {
+  voiceId: string;
+  search: string;
+  onClearSearch: () => void;
+}) {
   const { data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } =
-    useHistory(voiceId || undefined);
+    useHistory(voiceId || undefined, search || undefined);
   const retention = describeRetention(useTerms().data?.output_retention_days);
   const [announcement, setAnnouncement] = useState("");
   const remove = useDeleteGeneration();
@@ -289,6 +333,18 @@ function HistoryBody({ voiceId }: { voiceId: string }) {
   }
 
   const items = flattenHistory(data.pages);
+  if (items.length === 0 && search) {
+    return (
+      <div className="space-y-3">
+        <p className="text-muted-foreground" role="status">
+          No generations{voiceId ? " with this voice" : ""} match &ldquo;{search}&rdquo;.
+        </p>
+        <Button variant="secondary" onClick={onClearSearch}>
+          Clear search
+        </Button>
+      </div>
+    );
+  }
   if (items.length === 0 && voiceId) {
     return (
       <p className="text-muted-foreground">
@@ -321,8 +377,8 @@ function HistoryBody({ voiceId }: { voiceId: string }) {
     total === null
       ? null
       : items.length < total
-        ? `Showing ${items.length} of ${total}.`
-        : `${total} ${total === 1 ? "generation" : "generations"}.`;
+        ? `Showing ${items.length} of ${total}${search ? " matches" : ""}.`
+        : `${total} ${total === 1 ? "generation" : "generations"}${search ? " found" : ""}.`;
 
   async function loadMore() {
     const before = items.length;
@@ -336,7 +392,11 @@ function HistoryBody({ voiceId }: { voiceId: string }) {
 
   return (
     <div className="space-y-3">
-      {count && <p className="text-sm text-muted-foreground">{count}</p>}
+      {count && (
+        <p className="text-sm text-muted-foreground" role={search ? "status" : undefined}>
+          {count}
+        </p>
+      )}
       {retention && (
         <p className="text-sm text-muted-foreground">
           Audio is kept for {retention}. The text and date stay here after the audio expires.
