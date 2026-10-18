@@ -2,6 +2,7 @@
 
 import {
   type InfiniteData,
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
@@ -32,14 +33,22 @@ export function flattenHistory(pages: readonly HistoryPage[]): Generation[] {
 }
 
 /**
- * Paged history, newest first, optionally narrowed to one voice. The key extends HISTORY_KEY, so
- * invalidating HISTORY_KEY (after synthesis, delete) refreshes every filtered list as well.
+ * Paged history, newest first, optionally narrowed to one voice and/or to rows whose text contains
+ * `search`. The key extends HISTORY_KEY, so invalidating HISTORY_KEY (after synthesis, delete)
+ * refreshes every filtered list as well. While a new search loads, the previous list stays on
+ * screen instead of flashing a skeleton on every keystroke.
  */
-export function useHistory(voiceProfileId?: string) {
+export function useHistory(voiceProfileId?: string, search?: string) {
   return useInfiniteQuery({
-    queryKey: voiceProfileId ? [...HISTORY_KEY, voiceProfileId] : HISTORY_KEY,
+    queryKey: search
+      ? [...HISTORY_KEY, voiceProfileId ?? "", "q", search]
+      : voiceProfileId
+        ? [...HISTORY_KEY, voiceProfileId]
+        : HISTORY_KEY,
     initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) => fetchHistory(pageParam, signal, undefined, voiceProfileId),
+    placeholderData: keepPreviousData,
+    queryFn: ({ pageParam, signal }) =>
+      fetchHistory(pageParam, signal, undefined, voiceProfileId, search),
     getNextPageParam: (last) =>
       hasMoreHistory(last) ? last.offset + last.items.length : undefined,
   });
