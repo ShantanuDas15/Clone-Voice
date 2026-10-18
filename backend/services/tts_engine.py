@@ -207,12 +207,26 @@ def canary_bucket(user_id: str, salt: str = "") -> int:
     return int.from_bytes(digest[:8], "big") % 100
 
 
-def get_engine_for_user(user_id: str) -> TTSEngine:
-    """The engine that serves ``user_id``: the canary engine for the canary share, else ``get_engine()``."""
-    if (
+def _in_canary(user_id: str) -> bool:
+    """True when ``user_id`` falls in the canary share (a stable bucket, so it never flips)."""
+    return (
         settings.TTS_CANARY_PERCENT > 0
         and canary_bucket(user_id) < settings.TTS_CANARY_PERCENT
-    ):
+    )
+
+
+def engine_name_for_user(user_id: str) -> str:
+    """The name of the engine that serves ``user_id``, without building it.
+
+    The canary engine for the canary share, else ``TTS_ENGINE``. Cheap and side-effect free, so
+    code that only needs the name (the per-engine rate limit) never loads an engine.
+    """
+    return settings.TTS_CANARY_ENGINE if _in_canary(user_id) else settings.TTS_ENGINE
+
+
+def get_engine_for_user(user_id: str) -> TTSEngine:
+    """The engine that serves ``user_id``: the canary engine for the canary share, else ``get_engine()``."""
+    if _in_canary(user_id):
         return _build(settings.TTS_CANARY_ENGINE)
     return get_engine()
 

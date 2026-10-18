@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.db_errors import db_unavailable, is_transient_db_error
-from backend.core.rate_limit import limiter, synthesize_limit
+from backend.core.rate_limit import limiter, synthesize_key, synthesize_limit
 from backend.core.security import get_current_user, get_verified_user
 from backend.models.generation import Generation
 from backend.models.user import User
@@ -187,7 +187,7 @@ def _output_file(output_path: Optional[str]) -> Optional[str]:
 
 
 @router.post("", response_class=FileResponse)
-@limiter.limit(synthesize_limit)
+@limiter.limit(synthesize_limit, key_func=synthesize_key)
 async def synthesize(
     request: Request,
     req: SynthesizeRequest,
