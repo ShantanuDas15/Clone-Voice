@@ -1,6 +1,6 @@
 # CloneVoice — Free-text History Search Plan
 
-> **Status**: 🟡 H1 in progress. **Last Reviewed**: 2026-10-18
+> **Status**: 🟡 H1 landed (`487bbf0`); H2 not started. **Last Reviewed**: 2026-10-18
 > **Rule that orders this work**: backend first (CLAUDE.md §2). H1 (backend) merges before H2 (frontend).
 > **Why**: History is paged 50 at a time and can only be filtered by voice. A user looking for "the birthday message" has to scroll and expand rows.
 
@@ -26,7 +26,9 @@
 
 ## 3. Milestones
 
-### H1 — Backend `q` parameter
+### H1 — Backend `q` parameter ✅
+
+**Verified (2026-10-18):** full suite 1902 passed, 1 skipped, 11 warnings (26 new: 14 in `test_history_search.py`, 12 in `test_log_redaction.py`); live curl on a real server with seeded rows: `q=birthday` 2 rows/total 2, `q=50%25` only the literal `50%` row, `q=zebra` empty/0, blank = all 3, 201 chars 422, no token 401; the real uvicorn access log shows `?q=[redacted]` and the typed text appears nowhere in it. SQLite `LIKE` is case-insensitive for ASCII only (Postgres `ILIKE` handles all of Unicode); the Unicode test therefore matches same-case text. No real-Postgres run of the new query.
 
 **Tests (CLAUDE.md §4.1)**: substring and case-insensitive match; no match gives `[]` and total 0; `%`/`_`/`\` literal; whitespace-only and empty `q` ignored; leading/trailing spaces trimmed; composes with `voice_profile_id`, `limit`/`offset` and total; never returns another user's, soft-deleted, erased or deleted-voice rows; 201-char `q` is 422; unicode text matches; no token 401. **Gateway**: `curl -H "Authorization: Bearer $T" "localhost:8000/api/v1/synthesize/history?q=birthday"` → 200 with only matching rows and a matching `X-Total-Count`.
 
@@ -38,5 +40,5 @@ Search field on History (debounced, keeps the previous list while fetching), "No
 
 | Milestone | Status | Commit |
 |---|---|---|
-| H1 backend `q` | 🟡 In progress | — |
+| H1 backend `q` | ✅ Done | `487bbf0` |
 | H2 frontend search | ⬜ Not started | — |
