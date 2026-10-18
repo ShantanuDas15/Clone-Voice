@@ -72,6 +72,10 @@ class DeleteAccountRequest(BaseModel):
     password: Optional[str] = Field(None, max_length=LOGIN_PASSWORD_MAX_LENGTH)
 
 
+class ExportAccountRequest(DeleteAccountRequest):
+    """Re-authentication for the data export; same shape as account erasure."""
+
+
 class MessageResponse(BaseModel):
     detail: str
 
