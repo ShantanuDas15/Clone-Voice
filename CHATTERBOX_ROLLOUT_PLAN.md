@@ -43,7 +43,7 @@
 | R0.3 | Draft the consent/terms text (D4); bump `TERMS_VERSION`; frontend terms page; tests | You approved the text |
 | R0.1 ✅ | **Worker image built and run in CI** (`worker-docker-build.yml`; real Docker, Nano on CPU, one real synthesis). Done 2026-10-18. It found two real problems, both fixed here: the lock could not be installed with `pip` (`ResolutionImpossible`: chatterbox-tts and the lock name resemble-perth by different Git URLs; now `pip install --no-deps` + `pip check`), and the worker swallowed the reason a reference was rejected (now logs the failure's class only). | CI green: image 6426 MB, torch 2.6.0+cu124, `/health` ready, 401/401/409/422 checks, 200 audio at 24 kHz, nothing private in logs or `/tmp` |
 | R0.5 | **Reference clips must be longer than 5 s for Turbo and Nano** (found by R0.1, from the pinned model source: `assert len(wav)/sr > 5.0`; a 5.0 s clip gets a 422). Uploads accept 2 s of voice, `REFERENCE_MIN_SECONDS` is 1 s, and a worker 422 becomes a `RuntimeError` (a failed generation), not a fallback. Options: build the reference from several stored clips up to 20 s; treat this 422 as "unavailable" so the user still gets SV2TTS; advise 8 s or more at upload. **Decided 2026-10-18: fall back first** (done, S4.4b `1bceddf`): such a voice is now served by SV2TTS, counted as `reason="reference"`, never opening the breaker; with fallback off the API answers a 422 naming the remedy. **Still open:** making short clips usable on the better engine (several clips, or longer-recording advice at upload), and showing the real reason in History. | tests with a 3 s and a 6 s profile; no failed generation |
-| R0.6 | **CPU-only worker image** (found by R0.1): the lock pulls PyPI's CUDA torch, so the image is 6.4 GB; the Railway/CPU option (D2-A) wants a CPU-only build like the backend's (`--index-url https://download.pytorch.org/whl/cpu`). Needs its own lock or a `--build-arg`; re-run R0.1's smoke on it | image size drop; same smoke passes |
+| R0.6 ✅ | **CPU-only worker image** (found by R0.1; done 2026-10-18): `--build-arg TORCH_BACKEND=cpu` installs torch and torchaudio from PyTorch's CPU index and drops the 13 `nvidia-*` packages and `triton` from the lock at build time (no second lock to maintain; the default stays the CUDA image). **Measured in CI: 1954 MB against 6426 MB (70% smaller)**; `torch 2.6.0+cpu`, `torch.version.cuda` is None, no `nvidia` or `triton` package, and the same smoke passes (Nano loads on CPU, `/health` ready, one real 200 synthesis at 24 kHz). | CI matrix green for both backends; size limit 2560 MB |
 | R0.4 | Runbook `CHATTERBOX_RUNBOOK.md`: env vars, how to flip, how to roll back, what to watch | reviewed |
 
 ### R1 — Stand up the worker (staging, no user traffic)
@@ -109,7 +109,7 @@ Ship (R3) only when **D1 accepted** and D4 text live, **R1 gates pass**, and **R
 | R0.3 consent/terms text | ⬜ Needs D4 | — |
 | R0.4 runbook | ⬜ Not started | — |
 | R0.5 reference clip must exceed 5 s (new, found by R0.1) | 🟡 Fallback done (`1bceddf`); making short clips usable not started | `1bceddf` |
-| R0.6 CPU-only worker image (new, found by R0.1) | ⬜ Not started | — |
+| R0.6 CPU-only worker image (new, found by R0.1) | ✅ Done | `094a5c9`, `ddf6def` |
 | R1 worker on staging + measurements + fallback drills | ⬜ Needs D2 | — |
 | R2 listening test + independent similarity | ⬜ Needs speakers and raters | — |
 | R3 canary ramp | ⬜ Blocked on R1, R2, D1, D4 | — |
