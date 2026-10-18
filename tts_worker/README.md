@@ -60,13 +60,17 @@ A busy reply falls back but never opens the circuit. Set `TTS_FALLBACK_ENGINE=no
 ## Dependencies
 
 `requirements.txt` holds the direct pins; `requirements.lock.txt` is the resolved set (no hashes, because
-two requirements install from Git commits, which pip cannot hash-check). Regenerate with
+two requirements install from Git commits, which pip cannot hash-check). Install it with `pip install --no-deps -r`
+followed by `pip check`: pip cannot *resolve* it (chatterbox-tts asks for resemble-perth from Git `master` while the
+lock pins a commit, `ResolutionImpossible`), but nothing needs resolving, since every package is pinned. Regenerate with
 `uv pip compile tts_worker/requirements.txt --python-version 3.11 --python-platform linux -o tts_worker/requirements.lock.txt`.
 Nano is not in the PyPI release of `chatterbox-tts`, so it is installed from a pinned commit.
 
 ## Not yet verified
 
-* The Docker image has not been built (Docker was unavailable), and CI does not build it.
+* ~~The Docker image has not been built~~: `.github/workflows/worker-docker-build.yml` builds it and runs it on every change to `tts_worker/` (and weekly): non-root, no baked token, pinned libraries, the Nano model loading on CPU, health, authentication, one real synthesis, and no request text, token or temporary file left behind. **Still unverified:** a GPU run (`TTS_WORKER_DEVICE=cuda`), and any model other than Nano.
+* The image is **6.4 GB** because the lock pulls PyPI's CUDA torch; a CPU-only worker (the plan's Railway option) would be far smaller but is not built.
+* **A reference clip must be longer than 5 seconds** for Turbo and Nano (the model asserts it); the application does not enforce that yet (CHATTERBOX_ROLLOUT_PLAN.md R0.5).
 * The fallback was exercised against a killed and restarted worker, not against a network that drops packets.
 * No hosting provider has been chosen (plan question Q1); nothing here is deployed.
 * The model's training data is undisclosed (`SPEECH_QUALITY_STUDY.md`), an owner decision before it serves real users.

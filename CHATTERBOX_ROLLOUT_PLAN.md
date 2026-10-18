@@ -1,6 +1,6 @@
 # CloneVoice — Chatterbox Engine Rollout Plan
 
-> **Status**: 📝 Planned, nothing started. **Last Reviewed**: 2026-10-18
+> **Status**: 🟡 R0.1 done (`1d4660a`); the rest not started. **Last Reviewed**: 2026-10-18
 > **Scope**: put a Chatterbox engine in front of real users, behind a canary, with SV2TTS as the fallback and kill switch. This is a rollout plan; the engine, worker, fallback, canary, metrics, watermark and per-engine rate limit are already built and merged (`SPEECH_QUALITY_PLAN.md` S4.3, S4.4, S7.1–S7.4). What is missing is decisions, a deployed worker, evidence from real listeners, and a runbook.
 > **Rule**: backend and rollout work follow CLAUDE.md §3 (branch, tests, PR). Nothing in this plan changes the default `TTS_ENGINE=sv2tts` until the go/no-go in §6.
 
@@ -41,6 +41,9 @@
 | R0.1 | **Build the worker image in CI** (`docker build tts_worker/` job, like `docker-build.yml` for the backend) and smoke-test `/health` and one synthesis with the stub path | CI job green; image runs |
 | R0.2 | If D3=b: narrow private-network allow-list in `Settings` + tests (accepts `x.railway.internal` over http, still rejects any other plain-http host; token still required) | tests incl. boundary hosts (`evilrailway.internal`, `railway.internal.evil.com`) |
 | R0.3 | Draft the consent/terms text (D4); bump `TERMS_VERSION`; frontend terms page; tests | You approved the text |
+| R0.1 ✅ | **Worker image built and run in CI** (`worker-docker-build.yml`; real Docker, Nano on CPU, one real synthesis). Done 2026-10-18. It found two real problems, both fixed here: the lock could not be installed with `pip` (`ResolutionImpossible`: chatterbox-tts and the lock name resemble-perth by different Git URLs; now `pip install --no-deps` + `pip check`), and the worker swallowed the reason a reference was rejected (now logs the failure's class only). | CI green: image 6426 MB, torch 2.6.0+cu124, `/health` ready, 401/401/409/422 checks, 200 audio at 24 kHz, nothing private in logs or `/tmp` |
+| R0.5 | **Reference clips must be longer than 5 s for Turbo and Nano** (found by R0.1, from the pinned model source: `assert len(wav)/sr > 5.0`; a 5.0 s clip gets a 422). Uploads accept 2 s of voice, `REFERENCE_MIN_SECONDS` is 1 s, and a worker 422 becomes a `RuntimeError` (a failed generation), not a fallback. Options: build the reference from several stored clips up to 20 s; treat this 422 as "unavailable" so the user still gets SV2TTS; advise 8 s or more at upload. Needs a decision before R3. | tests with a 3 s and a 6 s profile; no failed generation |
+| R0.6 | **CPU-only worker image** (found by R0.1): the lock pulls PyPI's CUDA torch, so the image is 6.4 GB; the Railway/CPU option (D2-A) wants a CPU-only build like the backend's (`--index-url https://download.pytorch.org/whl/cpu`). Needs its own lock or a `--build-arg`; re-run R0.1's smoke on it | image size drop; same smoke passes |
 | R0.4 | Runbook `CHATTERBOX_RUNBOOK.md`: env vars, how to flip, how to roll back, what to watch | reviewed |
 
 ### R1 — Stand up the worker (staging, no user traffic)
@@ -101,10 +104,12 @@ Ship (R3) only when **D1 accepted** and D4 text live, **R1 gates pass**, and **R
 
 | Milestone | Status | Commit |
 |---|---|---|
-| R0.1 worker image in CI | ⬜ Not started | — |
+| R0.1 worker image in CI | ✅ Done | `1d4660a` |
 | R0.2 private-network allow-list (if D3=b) | ⬜ Not started | — |
 | R0.3 consent/terms text | ⬜ Needs D4 | — |
 | R0.4 runbook | ⬜ Not started | — |
+| R0.5 reference clip must exceed 5 s (new, found by R0.1) | ⬜ Not started | — |
+| R0.6 CPU-only worker image (new, found by R0.1) | ⬜ Not started | — |
 | R1 worker on staging + measurements + fallback drills | ⬜ Needs D2 | — |
 | R2 listening test + independent similarity | ⬜ Needs speakers and raters | — |
 | R3 canary ramp | ⬜ Blocked on R1, R2, D1, D4 | — |

@@ -3,9 +3,9 @@
 # CloneVoice inference worker (SPEECH_QUALITY_PLAN.md S4.3). Build from the REPO ROOT:
 #   docker build -f tts_worker/Dockerfile -t clonevoice-tts-worker .
 #
-# NOT BUILT OR RUN IN CI YET: Docker was unavailable where this was written. The same lock file was
-# installed into a fresh virtualenv and the worker ran from it (see tts_worker/README.md); the image
-# itself is unverified. Needs an NVIDIA GPU host with nvidia-container-toolkit for TTS_WORKER_DEVICE=cuda.
+# Built and smoke-tested on real Docker by .github/workflows/worker-docker-build.yml (non-root, no
+# baked token, pinned libraries, health, authentication and one real CPU synthesis). A GPU run is not
+# covered: TTS_WORKER_DEVICE=cuda needs an NVIDIA host with nvidia-container-toolkit.
 FROM python:3.11-slim
 
 # git: two requirements are installed from commits (chatterbox-tts and resemble-perth).
@@ -15,7 +15,12 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY tts_worker/requirements.lock.txt /tmp/requirements.lock.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.lock.txt
+# The lock is already fully resolved, so pip must not resolve again: chatterbox-tts asks for
+# resemble-perth from Git `master` while the lock pins it to a commit, and pip refuses two URLs for one
+# package (ResolutionImpossible; uv accepts it). --no-deps installs exactly what is pinned, and
+# `pip check` then proves every installed package's requirements are met.
+RUN pip install --no-cache-dir --no-deps -r /tmp/requirements.lock.txt \
+    && pip check
 
 COPY tts_worker /app/tts_worker
 
