@@ -85,3 +85,18 @@ and the layout are. Only the original `chatterbox` engine reports emotion contro
   machine may answer 422 "Could not process this audio file").
 - The rate-limit overrides above only exist so a fast suite is not throttled; the real limits are
   covered by the backend tests and the MSW integration tests.
+
+## Cross-browser results (2026-10-18, after the account export and History search features)
+
+Real backend and real weights; recipes as above.
+
+| Engine                 | Command                                                               | Result                                    |
+| ---------------------- | --------------------------------------------------------------------- | ----------------------------------------- |
+| Firefox                | `E2E_BACKEND_LOG=… npx playwright test --project=firefox`             | 50 passed, 16 skipped, 0 failed (6.8 min) |
+| WebKit (HTTPS recipe)  | `E2E_BACKEND_LOG=… npx playwright test -c playwright.https.config.ts` | 48 passed, 18 skipped, 0 failed (5.4 min) |
+| Both, structural smoke | `npm run test:cross-browser`                                          | 32 passed                                 |
+
+Skips are expected: the layout-shift and expressive layout-shift specs are Chromium-only (layout-shift
+API); the CSP reporting spec needs `E2E_FRONTEND_LOG` and was not run; WebKit also skips the two
+real-microphone specs (no `getUserMedia`). The `NEXT_PUBLIC_API_BASE_URL` exported for the WebKit build
+must be unset before `npm run test:cross-browser`, which builds its own app against `localhost:8000`.
