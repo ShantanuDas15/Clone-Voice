@@ -65,6 +65,11 @@ class ChatterboxSynthesizer:
                 try:
                     self._tts.prepare_conditionals(path)
                 except Exception as error:
+                    # Only the kind of failure: neither the audio, the text nor the message.
+                    logger.warning(
+                        "The model rejected the reference audio (%s)",
+                        type(error).__name__,
+                    )
                     raise ValueError("the reference audio could not be used") from error
                 wav = self._tts.generate(text, **options)
         finally:

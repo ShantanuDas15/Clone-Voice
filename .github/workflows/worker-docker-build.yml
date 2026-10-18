@@ -28,6 +28,10 @@ permissions:
 env:
   IMAGE: clonevoice-tts-worker
   SMOKE_TEXT: "Continuous integration smoke test for the worker image."
+  # Chatterbox Turbo and Nano assert `len(reference) / sr > 5.0` ("Audio prompt must be longer than
+  # 5 seconds"), so a 5-second clip is rejected with a 422. The repository has no speech sample, so
+  # the job makes a speech-like signal of this length.
+  REFERENCE_SECONDS: "8"
 
 jobs:
   image-and-synthesis:
@@ -93,10 +97,30 @@ jobs:
           assert health == {"ready": True, "model": "nano", "device": "cpu", "sample_rate": 24000}, health
           PY
 
+      - name: Make a reference clip longer than the model's 5 second minimum
+        run: |
+          python3 - <<'PY'
+          import math, os, struct, wave
+          rate, seconds = 16000, int(os.environ["REFERENCE_SECONDS"])
+          frames = bytearray()
+          phase = 0.0
+          for n in range(rate * seconds):
+              t = n / rate
+              f0 = 120 + 25 * math.sin(2 * math.pi * 0.5 * t)       # a drifting voice pitch
+              phase += 2 * math.pi * f0 / rate
+              syllable = 0.5 * (1 + math.sin(2 * math.pi * 3.5 * t))  # about 3.5 syllables a second
+              sample = sum(math.sin(k * phase) / k for k in range(1, 12)) * syllable * 0.22
+              frames += struct.pack("<h", int(max(-1.0, min(1.0, sample)) * 32767))
+          with wave.open("ref.wav", "wb") as out:
+              out.setnchannels(1); out.setsampwidth(2); out.setframerate(rate)
+              out.writeframes(bytes(frames))
+          print(f"ref.wav: {seconds} s at {rate} Hz")
+          PY
+
       - name: Authentication and request checks answer before any synthesis
         run: |
           url=http://127.0.0.1:8100/v1/synthesize
-          ref="reference=@backend/tests/fixtures/sample_5sec.wav;type=audio/wav"
+          ref="reference=@ref.wav;type=audio/wav"
           code() { curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$@"; }
           test "$(code -X POST "$url" -F text=hi -F model=nano -F "$ref")" = "401"
           test "$(code -X POST "$url" -H 'Authorization: Bearer wrong' -F text=hi -F model=nano -F "$ref")" = "401"
@@ -109,9 +133,9 @@ jobs:
             -X POST http://127.0.0.1:8100/v1/synthesize \
             -H "Authorization: Bearer $TOKEN" \
             -F "text=$SMOKE_TEXT" -F model=nano -F truncation_retries=0 \
-            -F "reference=@backend/tests/fixtures/sample_5sec.wav;type=audio/wav")
+            -F "reference=@ref.wav;type=audio/wav")
           echo "status $code"; cat headers.txt
-          test "$code" = "200"
+          if [ "$code" != "200" ]; then echo "response body:"; cat out.wav; echo; exit 1; fi
           grep -qi '^content-type: audio/wav' headers.txt
           grep -qi '^x-sample-rate: 24000' headers.txt
           python3 - <<'PY'

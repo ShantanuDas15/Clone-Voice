@@ -106,7 +106,8 @@ def test_the_request_checks_cover_auth_model_and_reference(steps):
 def test_it_makes_one_real_synthesis_and_inspects_the_audio(steps):
     synthesis = _run(steps, "One real synthesis")
 
-    assert "/v1/synthesize" in synthesis and "sample_5sec.wav" in synthesis
+    assert "/v1/synthesize" in synthesis and "reference=@ref.wav" in synthesis
+    assert "response body" in synthesis  # a failure shows the worker's reason
     assert "x-sample-rate: 24000" in synthesis.lower()
     assert "(3, 1, 24000, 32)" in synthesis  # 32-bit float, mono, 24 kHz
 
@@ -123,8 +124,16 @@ def test_cleanup_and_diagnostics_run_even_after_a_failure(steps):
     assert steps["Worker logs (diagnostics)"]["if"] == "always()"
 
 
-def test_the_smoke_reference_clip_exists():
-    assert (REPO_ROOT / "backend/tests/fixtures/sample_5sec.wav").is_file()
+def test_the_smoke_reference_is_longer_than_the_models_five_second_minimum(
+    workflow, steps
+):
+    """Turbo and Nano assert `len(reference) / sr > 5.0`: a 5.0 second clip is rejected (422)."""
+    seconds = int(workflow["env"]["REFERENCE_SECONDS"])
+    make = _run(steps, "Make a reference clip")
+
+    assert seconds > 5
+    assert "REFERENCE_SECONDS" in make and "ref.wav" in make
+    assert "sample_5sec" not in WORKFLOW.read_text(encoding="utf-8")
 
 
 def test_the_dockerfile_matches_what_the_workflow_assumes():

@@ -450,3 +450,16 @@ def test_the_worker_does_not_share_the_applications_requirements():
     with open(app_reqs, encoding="utf-8") as handle:
         text = handle.read()
     assert "chatterbox" not in text and "transformers" not in text
+
+
+def test_a_rejected_reference_logs_only_the_kind_of_failure(fake_chatterbox, caplog):
+    """A 422 with no trace is undiagnosable; the audio, the text and the message must stay out."""
+    synth = fake_chatterbox("nano", "cpu")
+    _FakeModel.instances[0].fail_prepare = True
+    with caplog.at_level("WARNING", logger="tts_worker"):
+        with pytest.raises(ValueError):
+            synth.synthesize("A private sentence.", _wav_bytes(), 0)
+
+    assert "RuntimeError" in caplog.text
+    assert "bad audio" not in caplog.text  # the library's message is not logged
+    assert "private sentence" not in caplog.text
