@@ -12,6 +12,8 @@ from typing import Optional, Tuple
 
 import numpy as np
 
+from tts_worker.app import REFERENCE_REJECTED_DETAIL
+
 logger = logging.getLogger("tts_worker")
 
 MODELS = ("original", "turbo", "nano")
@@ -70,7 +72,7 @@ class ChatterboxSynthesizer:
                         "The model rejected the reference audio (%s)",
                         type(error).__name__,
                     )
-                    raise ValueError("the reference audio could not be used") from error
+                    raise ValueError(REFERENCE_REJECTED_DETAIL) from error
                 wav = self._tts.generate(text, **options)
         finally:
             try:

@@ -991,8 +991,13 @@ async def run_inference_pipeline(
                             truncation_retries=truncation_retries,
                             **seed_args(which, attempt - 1),
                         )
-                except EngineUnavailableError:
-                    metrics.ENGINE_SYNTHESIS.labels(which.name, "unavailable").inc()
+                except EngineUnavailableError as error:
+                    # A voice the engine cannot use is not the engine being down: counted apart so
+                    # the "unavailable" rate stays a measure of the worker's health.
+                    outcome = (
+                        "reference_rejected" if error.reason == "reference" else "unavailable"
+                    )
+                    metrics.ENGINE_SYNTHESIS.labels(which.name, outcome).inc()
                     raise
                 wav, rate = result.waveform, result.sample_rate
                 emotions_used = result.sentence_emotions
@@ -1117,16 +1122,17 @@ async def run_inference_pipeline(
             try:
                 wav, sample_rate = await synthesize_checked(engine, conditioning)
             except EngineUnavailableError as error:
-                # S4.4: the worker is down, timing out, refusing or busy. Serve the request with
+                # S4.4: the worker is down, timing out, refusing or busy, or cannot use this voice's reference. Serve the request with
                 # the in-process engine rather than fail it; a quality refusal or a bad request
                 # is not an outage and is not retried elsewhere.
                 fallback = get_fallback_engine(engine)
                 if fallback is None:
                     raise
                 logger.warning(
-                    "%s is unavailable (%s): serving this request with %s",
+                    "%s cannot serve this request (%s, reason %s): serving it with %s",
                     engine.name,
                     error,
+                    error.reason,
                     fallback.name,
                 )
                 metrics.ENGINE_FALLBACKS.labels(

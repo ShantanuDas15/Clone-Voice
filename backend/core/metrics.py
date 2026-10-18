@@ -48,7 +48,7 @@ QUALITY_GATE_FAILURES = Counter(
 ENGINE_FALLBACKS = Counter(
     "clonevoice_engine_fallback_total",
     "Requests served by the fallback engine because the primary one was unavailable.",
-    ["primary", "fallback", "reason"],  # reason: unavailable | busy | circuit_open
+    ["primary", "fallback", "reason"],  # reason: unavailable | busy | circuit_open | reference
     registry=registry,
 )
 # Real-time factor = seconds spent synthesizing / seconds of audio produced (lower is faster;
@@ -66,7 +66,7 @@ ENGINE_RTF = Histogram(
 ENGINE_SYNTHESIS = Counter(
     "clonevoice_engine_synthesis_total",
     "Synthesis attempts by engine and outcome (S7.3a).",
-    ["engine", "outcome"],  # ok | gate_retried | gate_refused | unavailable
+    ["engine", "outcome"],  # ok | gate_retried | gate_refused | unavailable | reference_rejected
     registry=registry,
 )
 

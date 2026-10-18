@@ -38,6 +38,9 @@ PATH_HEALTH = "/health"
 HEADER_SAMPLE_RATE = "X-Sample-Rate"
 HEADER_TRUNCATED = "X-Truncated-Decodes"
 HEADER_MODEL = "X-Model"
+# The 422 `detail` for a reference clip the model cannot use (too short, undecodable). The client
+# turns exactly this into a fallback instead of a failed request; a test keeps both sides in step.
+REFERENCE_REJECTED_DETAIL = "the reference audio could not be used"
 
 MAX_TEXT_CHARS = 1000
 MAX_REFERENCE_BYTES = 2_000_000

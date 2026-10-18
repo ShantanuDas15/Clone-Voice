@@ -24,6 +24,7 @@ from backend.core.config import settings
 from backend.services.audio_processing import load_reference_audio
 from backend.services.tts_engine import (NEUTRAL, EngineBusyError,
                                          EngineCapabilities,
+                                         EngineRejectedReferenceError,
                                          EngineUnavailableError, StageRunner,
                                          SynthesisResult, SynthesisStyle,
                                          TTSEngine, VoiceConditioning,
@@ -37,6 +38,8 @@ PATH_HEALTH = "/health"
 HEADER_SAMPLE_RATE = "X-Sample-Rate"
 HEADER_TRUNCATED = "X-Truncated-Decodes"
 HEADER_MODEL = "X-Model"
+# The worker's 422 detail for a reference clip it cannot use (mirrored in tts_worker/app.py).
+REFERENCE_REJECTED_DETAIL = "the reference audio could not be used"
 
 # Engine id (the TTS_ENGINE value) to the model the worker must be serving.
 VARIANTS = {
@@ -52,12 +55,18 @@ NONVERBAL = ("laugh", "chuckle", "cough")
 HEALTH_TIMEOUT_SECONDS = 2.0
 
 
+def _detail(response: httpx.Response) -> Optional[str]:
+    """The ``detail`` text of a worker error reply, or None when it has none."""
+    try:
+        detail = response.json().get("detail")
+    except (ValueError, AttributeError):
+        return None
+    return detail if isinstance(detail, str) else None
+
+
 def _is_busy(response: httpx.Response) -> bool:
     """True for the worker's own 'busy' reply (a 503 that says so), not any 503."""
-    try:
-        return response.json().get("detail") == "busy"
-    except (ValueError, AttributeError):
-        return False
+    return _detail(response) == "busy"
 
 
 class CircuitBreaker:
@@ -231,7 +240,7 @@ class ChatterboxEngine(TTSEngine):
             result = self._post_synthesis(
                 text, reference, truncation_retries, exaggeration
             )
-        except EngineBusyError:
+        except (EngineBusyError, EngineRejectedReferenceError):
             self.breaker.success()  # it answered, so it is alive
             raise
         except EngineUnavailableError:
@@ -278,6 +287,10 @@ class ChatterboxEngine(TTSEngine):
             raise EngineUnavailableError("the inference worker refused the request")
         if status == 503 and _is_busy(response):
             raise EngineBusyError("the inference worker is busy")
+        if status == 422 and _detail(response) == REFERENCE_REJECTED_DETAIL:
+            raise EngineRejectedReferenceError(
+                "the inference worker cannot use this voice's reference audio"
+            )
         if status >= 500:
             raise EngineUnavailableError(f"the inference worker failed ({status})")
         if status != 200:
