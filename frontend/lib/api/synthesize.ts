@@ -11,6 +11,10 @@ export interface SynthesisResult {
   emotions: string[];
   /** Sound tags the engine could not make (`X-Voice-Tags-Dropped`). */
   tagsDropped: string[];
+  /** The engine that spoke (`X-Voice-Engine`); null when the header is absent. */
+  engine: string | null;
+  /** The engine that was asked for but unavailable (`X-Voice-Engine-Fallback`), else null. */
+  engineFallbackFrom: string | null;
 }
 
 export interface SynthesisInput {
@@ -40,6 +44,11 @@ export function parseList(value: unknown): string[] {
         .map((v) => v.trim())
         .filter(Boolean)
     : [];
+}
+
+/** A header value as trimmed text, or null when absent or blank. */
+function headerText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 const FILENAME_RE = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i;
@@ -87,5 +96,7 @@ export async function synthesize(
         : response.headers["x-voice-style"] === "applied",
     emotions: parseList(response.headers["x-voice-emotions"]),
     tagsDropped: parseList(response.headers["x-voice-tags-dropped"]),
+    engine: headerText(response.headers["x-voice-engine"]),
+    engineFallbackFrom: headerText(response.headers["x-voice-engine-fallback"]),
   };
 }

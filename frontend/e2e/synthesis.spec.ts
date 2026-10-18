@@ -23,6 +23,10 @@ test("generate → play → download → history → replay from history (real w
   const player = page.locator('audio[aria-label="Generated speech"]');
   await expect(player).toBeAttached({ timeout: 300_000 }); // the <audio> has no UI of its own
   expect(synthRequests).toBe(1);
+  // The Standard engine is the default, so the result card says nothing about engines.
+  await expect(
+    page.getByRole("region", { name: /your audio/i }).getByText(/voice engine/i),
+  ).toHaveCount(0);
 
   // The blob is real, decodable WAV audio.
   const meta = await player.evaluate(async (el: HTMLAudioElement) => {
