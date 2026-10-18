@@ -15,7 +15,12 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY tts_worker/requirements.lock.txt /tmp/requirements.lock.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.lock.txt
+# The lock is already fully resolved, so pip must not resolve again: chatterbox-tts asks for
+# resemble-perth from Git `master` while the lock pins it to a commit, and pip refuses two URLs for one
+# package (ResolutionImpossible; uv accepts it). --no-deps installs exactly what is pinned, and
+# `pip check` then proves every installed package's requirements are met.
+RUN pip install --no-cache-dir --no-deps -r /tmp/requirements.lock.txt \
+    && pip check
 
 COPY tts_worker /app/tts_worker
 

@@ -137,6 +137,17 @@ def test_the_dockerfile_matches_what_the_workflow_assumes():
     assert "NOT BUILT" not in dockerfile
 
 
+def test_the_lock_is_installed_as_pinned_and_then_checked():
+    """Resolving again fails (chatterbox-tts and the lock name resemble-perth by different URLs)."""
+    dockerfile = re.sub(r"#.*", "", DOCKERFILE.read_text(encoding="utf-8"))
+
+    assert (
+        "pip install --no-cache-dir --no-deps -r /tmp/requirements.lock.txt"
+        in dockerfile
+    )
+    assert "pip check" in dockerfile
+
+
 def test_the_lock_pins_the_versions_the_workflow_asserts():
     lock = (REPO_ROOT / "tts_worker/requirements.lock.txt").read_text(encoding="utf-8")
 
