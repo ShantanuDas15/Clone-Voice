@@ -26,7 +26,6 @@ permissions:
   contents: read
 
 env:
-  IMAGE: clonevoice-tts-worker
   SMOKE_TEXT: "Continuous integration smoke test for the worker image."
   # Chatterbox Turbo and Nano assert `len(reference) / sr > 5.0` ("Audio prompt must be longer than
   # 5 seconds"), so a 5-second clip is rejected with a 422. The repository has no speech sample, so
@@ -35,8 +34,23 @@ env:
 
 jobs:
   image-and-synthesis:
+    # Both images run the same smoke test on CPU: `cuda` is the GPU host's image (PyPI torch with its
+    # CUDA runtime), `cpu` is the small one for a CPU-only host (CHATTERBOX_ROLLOUT_PLAN.md R0.6).
+    name: image-and-synthesis (${{ matrix.torch_backend }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - torch_backend: cuda
+            size_limit_mb: 8192
+          - torch_backend: cpu
+            size_limit_mb: 2560
+    env:
+      IMAGE: clonevoice-tts-worker:${{ matrix.torch_backend }}
+      TORCH_BACKEND: ${{ matrix.torch_backend }}
+      SIZE_LIMIT_MB: ${{ matrix.size_limit_mb }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,12 +62,16 @@ jobs:
           df -h /
 
       - name: Build the worker image
-        run: docker build -f tts_worker/Dockerfile -t "$IMAGE" .
+        run: docker build -f tts_worker/Dockerfile --build-arg TORCH_BACKEND="$TORCH_BACKEND" -t "$IMAGE" .
 
+      # The CUDA image is about 6.4 GB (PyPI's CUDA torch); the limit catches a runaway, and the CPU
+      # image must stay well below it. Raise a limit deliberately, not by accident.
       - name: Image size
         run: |
           size=$(docker image inspect "$IMAGE" --format '{{.Size}}')
-          echo "Worker image size: $((size / 1024 / 1024)) MB" | tee -a "$GITHUB_STEP_SUMMARY"
+          mb=$((size / 1024 / 1024))
+          echo "Worker image ($TORCH_BACKEND) size: ${mb} MB (limit ${SIZE_LIMIT_MB} MB)" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$mb" -le "$SIZE_LIMIT_MB"
 
       - name: Image is non-root, holds no secret, and has the pinned libraries
         run: |
@@ -61,14 +79,24 @@ jobs:
           if docker image inspect "$IMAGE" --format '{{json .Config.Env}}' | grep -qi 'TTS_WORKER_TOKEN'; then
             echo "TTS_WORKER_TOKEN must not be baked into the image"; exit 1
           fi
-          docker run --rm -i "$IMAGE" python - <<'PY'
+          docker run --rm -i -e TORCH_BACKEND "$IMAGE" python - <<'PY'
           import importlib.metadata as md
+          import importlib.util
+          import os
           import pkg_resources  # resemble-perth imports it; setuptools 81 removed it
           import perth, chatterbox, torch, transformers
           assert torch.__version__.startswith("2.6.0"), torch.__version__
           assert transformers.__version__ == "5.2.0", transformers.__version__
-          print("torch", torch.__version__, "| transformers", transformers.__version__,
-                "| setuptools", md.version("setuptools"))
+          if os.environ["TORCH_BACKEND"] == "cpu":
+              # No CUDA runtime, no triton: nothing a CPU host would load.
+              assert torch.__version__.endswith("+cpu"), torch.__version__
+              assert torch.version.cuda is None, torch.version.cuda
+              assert importlib.util.find_spec("nvidia") is None, "CUDA runtime packages are installed"
+              assert importlib.util.find_spec("triton") is None, "triton is installed"
+          else:
+              assert torch.version.cuda and torch.version.cuda.startswith("12."), torch.version.cuda
+          print("torch", torch.__version__, "| cuda", torch.version.cuda,
+                "| transformers", transformers.__version__, "| setuptools", md.version("setuptools"))
           PY
 
       - name: Start the worker on CPU (downloads the Nano weights)

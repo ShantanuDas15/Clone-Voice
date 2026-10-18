@@ -27,6 +27,15 @@ The application talks to it through `backend/services/chatterbox_engine.py`. The
 Errors: `401` bad token (checked before the body is read), `409` the worker serves another model,
 `413` too large (reference over 2 MB), `422` bad text or reference, `503` busy, `500` model failure.
 
+## Building the image
+
+```bash
+docker build -f tts_worker/Dockerfile -t clonevoice-tts-worker .                                  # GPU host
+docker build -f tts_worker/Dockerfile --build-arg TORCH_BACKEND=cpu -t clonevoice-tts-worker:cpu .  # CPU host (about 2 GB)
+```
+
+Run the CPU image with `TTS_WORKER_DEVICE=cpu` and `OMP_NUM_THREADS` set to the real core count.
+
 ## Running it
 
 ```bash
@@ -69,7 +78,7 @@ Nano is not in the PyPI release of `chatterbox-tts`, so it is installed from a p
 ## Not yet verified
 
 * ~~The Docker image has not been built~~: `.github/workflows/worker-docker-build.yml` builds it and runs it on every change to `tts_worker/` (and weekly): non-root, no baked token, pinned libraries, the Nano model loading on CPU, health, authentication, one real synthesis, and no request text, token or temporary file left behind. **Still unverified:** a GPU run (`TTS_WORKER_DEVICE=cuda`), and any model other than Nano.
-* The image is **6.4 GB** because the lock pulls PyPI's CUDA torch; a CPU-only worker (the plan's Railway option) would be far smaller but is not built.
+* Two images, one Dockerfile: the default `TORCH_BACKEND=cuda` (PyPI's torch with its CUDA runtime, **6.4 GB**, for a GPU host) and `--build-arg TORCH_BACKEND=cpu` (torch and torchaudio from PyTorch's CPU index, no `nvidia-*` packages or `triton`, **about 2.0 GB**). Both are built and run in CI. The CPU build has not been run on the real target host (Railway) or timed there.
 * **A reference clip must be longer than 5 seconds** for Turbo and Nano (the model asserts it). The worker answers a refused reference with `422` and the detail `the reference audio could not be used`; the application turns exactly that into a fallback to SV2TTS (S4.4b), so a short voice is served, but by the lower-quality engine.
 * The fallback was exercised against a killed and restarted worker, not against a network that drops packets.
 * No hosting provider has been chosen (plan question Q1); nothing here is deployed.
