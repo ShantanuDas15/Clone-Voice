@@ -25,7 +25,27 @@ describe("generationDetails", () => {
   it("names a backup engine", () => {
     expect(
       generationDetails(gen({ engine: "sv2tts", engine_fallback_from: "chatterbox" })),
-    ).toEqual(["Made by the backup voice engine (chatterbox was unavailable)"]);
+    ).toEqual(["Made by the backup voice engine (Expressive was unavailable)"]);
+  });
+
+  it("names the engine for any row not made by the standard one", () => {
+    expect(generationDetails(gen({ engine: "chatterbox" }))).toEqual(["Voice engine: Expressive"]);
+    expect(generationDetails(gen({ engine: "chatterbox_nano" }))).toEqual([
+      "Voice engine: Expressive Nano",
+    ]);
+    expect(generationDetails(gen({ engine: "sv2tts" }))).toEqual([]);
+  });
+
+  it("never shows an engine id it does not know", () => {
+    const facts = generationDetails(gen({ engine: "zonos_v9", engine_fallback_from: "zonos_v8" }));
+    expect(facts).toEqual(["Made by the backup voice engine (another was unavailable)"]);
+    expect(generationDetails(gen({ engine: "zonos_v9" })).join(" ")).not.toMatch(/zonos/);
+  });
+
+  it("says the backup once, not also the engine line", () => {
+    expect(
+      generationDetails(gen({ engine: "chatterbox_turbo", engine_fallback_from: "chatterbox" })),
+    ).toHaveLength(1);
   });
 
   it("reports the requested delivery and whether it took effect", () => {

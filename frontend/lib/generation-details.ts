@@ -1,18 +1,23 @@
 import type { Generation } from "@/lib/api/history";
 import { EMOTIONS } from "@/lib/emotion";
+import { STANDARD_ENGINE, engineName } from "@/lib/engine-names";
 
 const emotionLabel = (value: string): string =>
   EMOTIONS.find((e) => e.value === value)?.label ?? value;
 
 /**
- * Short, plain facts about how a generation was made, for the history row: a backup engine, the
- * requested delivery and whether it took effect, per-sentence readings, sound tags that were left
+ * Short, plain facts about how a generation was made, for the history row: the voice engine (a
+ * backup, or any but the standard one), the requested delivery and whether it took effect, per-sentence readings, sound tags that were left
  * out, and a seed. Empty when the row recorded nothing worth saying (old rows, plain requests).
  */
 export function generationDetails(gen: Generation): string[] {
   const facts: string[] = [];
   if (gen.engine_fallback_from) {
-    facts.push(`Made by the backup voice engine (${gen.engine_fallback_from} was unavailable)`);
+    facts.push(
+      `Made by the backup voice engine (${engineName(gen.engine_fallback_from)} was unavailable)`,
+    );
+  } else if (gen.engine && gen.engine !== STANDARD_ENGINE) {
+    facts.push(`Voice engine: ${engineName(gen.engine)}`);
   }
   if (gen.emotion && gen.emotion !== "auto") {
     const strength = gen.intensity != null ? ` at ${Math.round(gen.intensity * 100)}%` : "";
