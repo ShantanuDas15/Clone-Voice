@@ -90,11 +90,11 @@ and the layout are. Only the original `chatterbox` engine reports emotion contro
 
 Real backend and real weights; recipes as above.
 
-| Engine | Command | Result |
-|---|---|---|
-| Firefox | `E2E_BACKEND_LOG=… npx playwright test --project=firefox` | 50 passed, 16 skipped, 0 failed (6.8 min) |
-| WebKit (HTTPS recipe) | `E2E_BACKEND_LOG=… npx playwright test -c playwright.https.config.ts` | 48 passed, 18 skipped, 0 failed (5.4 min) |
-| Both, structural smoke | `npm run test:cross-browser` | 32 passed |
+| Engine                 | Command                                                               | Result                                    |
+| ---------------------- | --------------------------------------------------------------------- | ----------------------------------------- |
+| Firefox                | `E2E_BACKEND_LOG=… npx playwright test --project=firefox`             | 50 passed, 16 skipped, 0 failed (6.8 min) |
+| WebKit (HTTPS recipe)  | `E2E_BACKEND_LOG=… npx playwright test -c playwright.https.config.ts` | 48 passed, 18 skipped, 0 failed (5.4 min) |
+| Both, structural smoke | `npm run test:cross-browser`                                          | 32 passed                                 |
 
 Skips are expected: the layout-shift and expressive layout-shift specs are Chromium-only (layout-shift
 API); the CSP reporting spec needs `E2E_FRONTEND_LOG` and was not run; WebKit also skips the two
