@@ -168,6 +168,7 @@ backend/
 | `POST` | `/api/v1/auth/refresh` | ❌ (cookie) | Rotate the refresh cookie, return a new access token |
 | `POST` | `/api/v1/auth/logout` | ❌ (cookie) | Revoke the refresh token |
 | `GET` / `PATCH` / `DELETE` | `/api/v1/auth/me` | ✅ | Current user / rename / delete account (password in body) |
+| `POST` | `/api/v1/auth/me/export` | ✅ | Download a zip of the account, voices, generations and audio (password in body for password accounts; no credentials or embeddings; 429 when busy) |
 | `POST` | `/api/v1/auth/verify-email`, `/resend-verification` | ❌ / ✅ | Email verification |
 | `POST` | `/api/v1/auth/forgot-password`, `/reset-password` | ❌ | Password reset by emailed single-use token |
 | `GET` | `/api/v1/auth/google`, `/google/callback` | ❌ | Google OAuth |

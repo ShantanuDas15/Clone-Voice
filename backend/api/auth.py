@@ -3,6 +3,7 @@
 import asyncio
 import hmac
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,9 +12,10 @@ from urllib.parse import urlencode
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import (APIRouter, BackgroundTasks, Cookie, Depends,
                      HTTPException, Request, Response, status)
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -32,11 +34,14 @@ from backend.core.security import (EMAIL_VERIFICATION_TOKEN_TYPE,
                                    verify_password, verify_password_or_dummy)
 from backend.models.user import User
 from backend.models.user_identity import UserIdentity
-from backend.schemas.auth import (DeleteAccountRequest, ForgotPasswordRequest,
-                                  LoginRequest, MessageResponse,
-                                  ResetPasswordRequest, SignupRequest,
-                                  TokenResponse, UpdateUserRequest, UserOut,
+from backend.schemas.auth import (DeleteAccountRequest, ExportAccountRequest,
+                                  ForgotPasswordRequest, LoginRequest,
+                                  MessageResponse, ResetPasswordRequest,
+                                  SignupRequest, TokenResponse,
+                                  UpdateUserRequest, UserOut,
                                   VerifyEmailRequest)
+from backend.services.account_export import (EXPORT_RETRY_AFTER_SECONDS,
+                                             EXPORT_SLOTS, build_export)
 from backend.services.email_service import (send_password_reset_email,
                                             send_verification_email)
 from backend.services.erasure import erase_account, remove_user_storage
@@ -588,6 +593,48 @@ def update_me(
         db.commit()
         db.refresh(current_user)
     return current_user
+
+
+@router.post("/me/export", response_class=FileResponse)
+@limiter.limit(settings.AUTH_LOGIN_RATE_LIMIT)
+def export_me(
+    request: Request,
+    body: Optional[ExportAccountRequest] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download a zip of the account, its voices, generations and audio.
+
+    Re-authenticated like erasure: an account with a password must repeat it, a
+    Google-only account relies on its signed-in session. Credentials and
+    embeddings are not included.
+    """
+    identity = user_identity(current_user.id)
+    ensure_not_throttled(identity)
+    if current_user.hashed_password:
+        password = body.password if body else None
+        if not verify_password_or_dummy(password or "", current_user.hashed_password):
+            record_failure(identity)
+            raise HTTPException(status_code=403, detail="Incorrect password")
+        clear_failures(identity)
+
+    if not EXPORT_SLOTS.acquire(blocking=False):
+        raise HTTPException(
+            status_code=429,
+            detail="Another export is running, try again shortly",
+            headers={"Retry-After": str(EXPORT_RETRY_AFTER_SECONDS)},
+        )
+    try:
+        zip_path = build_export(db, current_user)
+    finally:
+        EXPORT_SLOTS.release()
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=f"clonevoice-export-{datetime.now(timezone.utc):%Y%m%d}.zip",
+        headers={"Cache-Control": "no-store"},
+        background=BackgroundTask(os.unlink, zip_path),
+    )
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
