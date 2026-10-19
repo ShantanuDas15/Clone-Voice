@@ -608,7 +608,10 @@ def synthesize_speech(
     if not segments:
         # let the single-chunk path handle degenerate input
         return _synthesize_chunk(text, embedding)
-    mels = [_synthesize_chunk(segment.text, embedding) for segment in segments]
+    if settings.TTS_CHUNK_CONTINUITY == "off":
+        mels = [_synthesize_chunk(segment.text, embedding) for segment in segments]
+    else:
+        mels = _synthesize_chained(segments, embedding)
     if len(mels) == 1:
         return mels[0]
 
@@ -628,8 +631,42 @@ def synthesize_speech(
     return np.concatenate(parts, axis=1)
 
 
+def _synthesize_chained(segments: list, embedding: np.ndarray) -> list[np.ndarray]:
+    """Decode the segments in order, each seeded from the end of the one before.
+
+    ``TTS_CHUNK_CONTINUITY`` picks what is carried (SPEECH_QUALITY_PLAN.md S1.6): the
+    last mel frame only, or that frame plus the decoder's residual LSTM states.
+    """
+    mels: list[np.ndarray] = []
+    prior: dict = {}
+    for segment in segments:
+        mel, state = _decode_chunk(segment.text, embedding, prior)
+        mels.append(mel)
+        prior = _carry_over(state)
+    return mels
+
+
+def _carry_over(state: dict) -> dict:
+    """Pick the parts of a finished decode's ``state`` the next chunk starts from."""
+    if settings.TTS_CHUNK_CONTINUITY == "frame":
+        return {"frame": state["frame"]}
+    return state
+
+
 def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
-    """Generate a mel spectrogram from one chunk of text and a speaker embedding.
+    """Generate a mel spectrogram from one chunk of text and a speaker embedding."""
+    return _decode_chunk(text, embedding, None)[0]
+
+
+def _decode_chunk(
+    text: str, embedding: np.ndarray, prior: Optional[dict]
+) -> tuple[np.ndarray, dict]:
+    """Decode one chunk, optionally seeded by ``prior``; return the mel and the end state.
+
+    The mel is the one ``_synthesize_chunk`` has always returned. The state's ``frame`` is
+    the last mel frame kept after the stop-token trim, so the next chunk continues from
+    sound the listener actually hears. ``prior=None`` is the plain decode (no state kept);
+    ``{}`` decodes from a cold start but keeps the state for the next chunk.
 
     Text is converted to model input IDs via the vendored SV2TTS symbol
     table and cleaner pipeline (`sv2tts.synthesizer.utils.text`), matching
@@ -654,9 +691,19 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
             0
         )
         emb_tensor = torch.from_numpy(embedding).float().to(device).unsqueeze(0)
-        _, mel_tensor, _ = _synthesizer.generate(
-            text_tensor, emb_tensor, steps=synth_hparams.max_mel_frames
-        )
+        if prior is None:
+            _, mel_tensor, _ = _synthesizer.generate(
+                text_tensor, emb_tensor, steps=synth_hparams.max_mel_frames
+            )
+            state: dict = {}
+        else:
+            _, mel_tensor, _, state = _synthesizer.generate(
+                text_tensor,
+                emb_tensor,
+                steps=synth_hparams.max_mel_frames,
+                prior_state=prior,
+                return_state=True,
+            )
         result = mel_tensor.squeeze(0).cpu().numpy().astype(np.float32)
 
     # Reaching the step cap means the stop token never fired, so the decode
@@ -682,7 +729,9 @@ def _synthesize_chunk(text: str, embedding: np.ndarray) -> np.ndarray:
     while result.shape[1] > 1 and np.max(result[:, -1]) < stop_threshold:
         result = result[:, :-1]
 
-    return result
+    if state:
+        state = {**state, "frame": torch.from_numpy(result[:, -1]).float().unsqueeze(0)}
+    return result, state
 
 
 def _synthesize_counting_truncation(
@@ -1217,11 +1266,25 @@ class _MockSynthesizer(torch.nn.Module):
     """
 
     def generate(
-        self, text_ids: torch.Tensor, speaker_emb: torch.Tensor, steps: int = 2000
+        self,
+        text_ids: torch.Tensor,
+        speaker_emb: torch.Tensor,
+        steps: int = 2000,
+        prior_state: Optional[dict] = None,
+        return_state: bool = False,
     ):
-        """Return ``(None, mel, None)``, a zero mel spectrogram capped at ``steps``."""
+        """Return ``(None, mel, None)``, a zero mel spectrogram capped at ``steps``.
+
+        With ``return_state`` a fourth item, the end-of-decode state, is appended;
+        ``prior_state`` is accepted and ignored (the mock has no decoder to seed).
+        """
         T = min(text_ids.shape[1] * 5, steps)
-        return None, torch.zeros(1, 80, T), None
+        mel = torch.zeros(1, 80, T)
+        if return_state:
+            zeros = torch.zeros(1, 1024)
+            state = {"frame": mel[:, :, -1], "rnn": (zeros, zeros, zeros, zeros)}
+            return None, mel, None, state
+        return None, mel, None
 
 
 class _MockVocoder(torch.nn.Module):

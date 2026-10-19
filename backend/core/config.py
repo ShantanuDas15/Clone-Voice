@@ -187,6 +187,13 @@ class Settings(BaseSettings):
     # separately. ~150 chars is about 10 s of speech, inside the checkpoint's
     # 900-frame training length.
     TTS_CHUNK_MAX_CHARS: int = 150
+    # SPEECH_QUALITY_PLAN.md S1.6: each chunk is decoded from a cold start, so pitch and
+    # energy reset at every chunk edge. "frame" starts a chunk from the previous chunk's
+    # last mel frame instead of zeros; "state" also carries the decoder's two residual LSTM
+    # states (the attention state always restarts: it indexes the new text). "off" keeps
+    # the reference behaviour; leave it off until `evaluate_synthesis` shows WER and the
+    # truncation rate do not regress.
+    TTS_CHUNK_CONTINUITY: Literal["off", "frame", "state"] = "off"
     # Silence inserted after a chunk, in seconds, keyed by how the chunk ended
     # (statement, question, exclamation, ellipsis, clause, comma, word, paragraph).
     # Supply only the keys to change; the rest keep their defaults. As an env var:
