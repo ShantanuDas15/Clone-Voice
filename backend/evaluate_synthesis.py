@@ -30,10 +30,22 @@ multi-sentence stimuli and reports, per speaker:
 
 Whisper needs ``pip install faster-whisper`` (evaluation only, not a runtime dependency).
 
-Not here yet (plan S0.1, S0.3): an encoder independent of the one that conditions the model,
-predicted MOS and the emotion classifier. ``secs`` below is therefore
-judged by the *same* resemblyzer encoder that conditions the synthesizer, which flatters the
-model; read it as a relative number, never as an absolute one.
+With ``--emotion-classifier superb`` (plan S0.3) it also synthesizes the neutral, happy, sad and
+angry sentences of the expressive set and has a speech-emotion classifier label each one:
+
+* ``emotion_accuracy``        share of sentences whose label is the intended one (chance is 0.25)
+* ``emotion_recall_<label>``  the same, per intended emotion
+* ``emotion_confusion``       (report level) intended label against heard label, all speakers
+
+The classifier is ``superb/wav2vec2-base-superb-er`` (Apache-2.0 model card; trained on acted
+IEMOCAP speech, four classes), which needs ``pip install transformers`` and a one-off download.
+It judges acted English, so it is a relative measure between engines and settings, never a proof
+that a voice sounds angry; the listening test decides. Without emotion control the pipeline is
+expected to score near chance: that is the baseline to beat.
+
+Not here yet: ``secs`` below is judged by the *same* resemblyzer encoder that conditions the
+synthesizer, which flatters the model; read it as a relative number, never as an absolute one
+(``score_engine_outputs.py`` repeats it with an independent encoder and adds predicted MOS).
 
 The metric functions are pure and unit-tested; the dataset is never committed.
 """
@@ -72,6 +84,15 @@ EMOTIONS = ("neutral", "happy", "sad", "angry")
 PAUSE_MIN_SECONDS = 0.2
 PAUSE_TOP_DB = 35.0
 Transcriber = Callable[[np.ndarray], str]
+# Maps a 16 kHz mono waveform to one of EMOTIONS.
+EmotionClassifier = Callable[[np.ndarray], str]
+# The classifier's own short labels, as its model card lists them.
+SUPERB_EMOTION_LABELS = {
+    "neu": "neutral",
+    "hap": "happy",
+    "sad": "sad",
+    "ang": "angry",
+}
 
 # --- Metrics (pure) ----------------------------------------------------------
 
@@ -299,6 +320,28 @@ def pause_profile(
     return gaps
 
 
+def emotion_accuracy(pairs: Sequence[Tuple[str, str]]) -> Optional[float]:
+    """Share of ``(intended, heard)`` pairs that agree; ``None`` when there are none."""
+    if not pairs:
+        return None
+    return float(np.mean([intended == heard for intended, heard in pairs]))
+
+
+def emotion_recall(pairs: Sequence[Tuple[str, str]], label: str) -> Optional[float]:
+    """Of the sentences meant to be ``label``, the share heard as ``label``."""
+    return emotion_accuracy([pair for pair in pairs if pair[0] == label])
+
+
+def emotion_confusion(
+    pairs: Sequence[Tuple[str, str]],
+) -> Dict[str, Dict[str, int]]:
+    """Counts of heard label (inner key) for each intended label (outer key), all labels shown."""
+    table = {a: {b: 0 for b in EMOTIONS} for a in EMOTIONS}
+    for intended, heard in pairs:
+        table[intended][heard] += 1
+    return table
+
+
 def bootstrap_ci(
     values: Sequence[float], n_boot: int = 2000, seed: int = 0, alpha: float = 0.05
 ) -> Tuple[float, float, float]:
@@ -439,6 +482,46 @@ def make_whisper_transcriber(model_name: str = "small.en") -> Transcriber:
         return " ".join(segment.text.strip() for segment in segments).strip()
 
     return transcribe
+
+
+def make_emotion_classifier(
+    model_name: str = "superb/wav2vec2-base-superb-er",
+) -> EmotionClassifier:
+    """Return a function that labels 16 kHz mono speech neutral, happy, sad or angry.
+
+    Uses the model's four IEMOCAP classes; a class outside ``EMOTIONS`` is a configuration
+    error and stops the run rather than being scored as a miss.
+    """
+    try:
+        import torch
+        from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+    except ImportError:
+        raise SystemExit(
+            "transformers is required for --emotion-classifier: pip install transformers "
+            "(evaluation only), or pass --emotion-classifier none"
+        )
+    extractor = AutoFeatureExtractor.from_pretrained(model_name)
+    model = AutoModelForAudioClassification.from_pretrained(model_name).eval()
+    names = {
+        index: SUPERB_EMOTION_LABELS.get(str(name), str(name))
+        for index, name in model.config.id2label.items()
+    }
+    if set(names.values()) != set(EMOTIONS):
+        raise SystemExit(
+            f"{model_name} has classes {sorted(names.values())}, expected {list(EMOTIONS)}"
+        )
+
+    def classify(audio: np.ndarray) -> str:
+        inputs = extractor(
+            np.asarray(audio, dtype=np.float32),
+            sampling_rate=SAMPLE_RATE,
+            return_tensors="pt",
+        )
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        return names[int(logits.argmax(dim=-1))]
+
+    return classify
 
 
 def load_groups(path: Optional[Path]) -> Dict[str, str]:
@@ -868,6 +951,35 @@ def _run_degradation_study(args, dataset, groups, stems, encoder) -> int:
     return 0
 
 
+def evaluate_emotions(
+    embedding: np.ndarray,
+    speaker: str,
+    seed: int,
+    sentences: Sequence[Mapping[str, str]],
+    classify: EmotionClassifier,
+) -> Dict[str, object]:
+    """Synthesize each sentence's four emotional renderings and have ``classify`` label them.
+
+    Only the wording differs between the four (the pipeline has no emotion input unless the
+    S5 flags are on), and every rendering has its own seed. Returns the per-speaker accuracy,
+    per-label recall and the raw ``(intended, heard)`` pairs for the confusion table.
+    """
+    pairs: List[Tuple[str, str]] = []
+    for k, item in enumerate(sentences):
+        for j, emotion in enumerate(EMOTIONS):
+            audio = _synthesize(
+                item[emotion], embedding, speaker, seed + 900 + 10 * k + j
+            )
+            pairs.append((emotion, classify(audio)))
+    result: Dict[str, object] = {
+        "emotion_accuracy": emotion_accuracy(pairs),
+        "emotion_pairs": [list(pair) for pair in pairs],
+    }
+    for label in EMOTIONS:
+        result[f"emotion_recall_{label}"] = emotion_recall(pairs, label)
+    return result
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run the study and print a summary; write the full results as JSON."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -889,6 +1001,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--whisper-model",
         default="small.en",
         help="faster-whisper model for word error rate, or 'none' to skip it",
+    )
+    parser.add_argument(
+        "--emotion-classifier",
+        choices=("none", "superb"),
+        default="none",
+        help="also label the emotional sentences with a speech-emotion classifier (needs "
+        "transformers)",
+    )
+    parser.add_argument(
+        "--emotions",
+        type=int,
+        default=10,
+        metavar="N",
+        help="emotional sentences (four renderings each) per speaker for --emotion-classifier",
     )
     parser.add_argument(
         "--best-of",
@@ -950,6 +1076,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.whisper_model.lower() == "none"
         else make_whisper_transcriber(args.whisper_model)
     )
+    classify = (
+        make_emotion_classifier() if args.emotion_classifier == "superb" else None
+    )
+    emotional = load_sentences(args.sentences)[: args.emotions]
     chosen = select_speakers(dataset, groups, args.speakers)
 
     rows = []
@@ -966,6 +1096,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                 embedding, speaker, args.seed + 1000 * n, paragraphs, typed, transcribe
             )
         )
+        if classify is not None:
+            row.update(
+                evaluate_emotions(
+                    embedding, speaker, args.seed + 1000 * n, emotional, classify
+                )
+            )
         rows.append(row)
         logger.info("scored speaker %d/%d (%s)", n + 1, len(chosen), speaker)
 
@@ -982,6 +1118,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "para_pause_mean_s",
         "typed_wer",
     )
+    if classify is not None:
+        metrics += (
+            "emotion_accuracy",
+            *(f"emotion_recall_{label}" for label in EMOTIONS),
+        )
     report = {
         "judge": "resemblyzer (same encoder as the model: not independent)",
         "asr": None if transcribe is None else f"faster-whisper {args.whisper_model}",
@@ -989,6 +1130,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "rows": rows,
         "per_group": {metric: group_report(rows, metric) for metric in metrics},
     }
+    if classify is not None:
+        report["emotion_classifier"] = "superb/wav2vec2-base-superb-er"
+        report["emotion_confusion"] = emotion_confusion(
+            [tuple(pair) for row in rows for pair in row["emotion_pairs"]]
+        )
     args.out.write_text(json.dumps(report, indent=2))
     print(json.dumps(report["per_group"], indent=2))
     return 0
