@@ -8,9 +8,13 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from backend.tests.test_email_verification import _signup  # noqa: F401
-from backend.tests.test_email_verification import (PASSWORD, _token_in, _user,
-                                                   outbox)
+from backend.tests.test_email_verification import (
+    PASSWORD,
+    _signup,  # noqa: F401
+    _token_in,
+    _user,
+    outbox,
+)
 
 EMAIL = "both@example.com"
 NEW_PASSWORD = "BrandNewPass456!"

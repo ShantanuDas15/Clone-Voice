@@ -6,8 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from unidecode import unidecode
 
 from backend.services import style_markup
-from backend.services.sv2tts.synthesizer.utils.symbols import \
-    symbols as _sv2tts_symbols
+from backend.services.sv2tts.synthesizer.utils.symbols import symbols as _sv2tts_symbols
 from backend.services.text_normalization import clean_text
 
 # The real Tacotron2 checkpoint's embedding table only has one row per symbol

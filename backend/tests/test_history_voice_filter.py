@@ -6,8 +6,7 @@ import pytest
 
 from backend.models.voice_profile import VoiceProfile
 from backend.services.tts_pipeline import load_mock_models
-from backend.tests.test_fe2_contract import (_generation, _headers,
-                                             _user_and_profile)
+from backend.tests.test_fe2_contract import _generation, _headers, _user_and_profile
 from backend.tests.test_synthesize import upload_profile
 
 URL = "/api/v1/synthesize/history"

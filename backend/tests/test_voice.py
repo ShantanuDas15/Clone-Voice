@@ -13,8 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
 from backend.services.audio_processing import preprocess_audio
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError)
+from backend.services.tts_pipeline import InferenceQueueFullError, InferenceTimeoutError
 
 
 @pytest.fixture
@@ -150,8 +149,7 @@ def test_failed_profile_also_records_consent(
     """The audit trail must cover failed uploads too: the file was received
     under the same attestation, so the `failed` row keeps the timestamp."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.services.tts_pipeline.embed_speaker_async",
-        side_effect=RuntimeError("boom"),
+        "backend.services.tts_pipeline.embed_speaker_async", side_effect=RuntimeError("boom")
     ):
         response = client.post(
             "/api/v1/voice/upload",
@@ -186,8 +184,7 @@ def test_failed_profile_also_records_terms_version(
 ):
     """A failed upload was received under the same terms, so it keeps them."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.services.tts_pipeline.embed_speaker_async",
-        side_effect=RuntimeError("boom"),
+        "backend.services.tts_pipeline.embed_speaker_async", side_effect=RuntimeError("boom")
     ):
         client.post(
             "/api/v1/voice/upload",
@@ -310,8 +307,7 @@ def test_upload_embedding_failure_deletes_orphaned_file(
 ):
     """A failed embedding extraction must not leave the uploaded file on disk."""
     with patch("backend.core.config.settings.UPLOAD_DIR", str(tmp_path)), patch(
-        "backend.services.tts_pipeline.embed_speaker_async",
-        side_effect=RuntimeError("boom"),
+        "backend.services.tts_pipeline.embed_speaker_async", side_effect=RuntimeError("boom")
     ):
         wav_data = create_dummy_wav()
         files = {"file": ("fail.wav", wav_data, "audio/wav")}

@@ -1044,9 +1044,7 @@ async def run_inference_pipeline(
                     # A voice the engine cannot use is not the engine being down: counted apart so
                     # the "unavailable" rate stays a measure of the worker's health.
                     outcome = (
-                        "reference_rejected"
-                        if error.reason == "reference"
-                        else "unavailable"
+                        "reference_rejected" if error.reason == "reference" else "unavailable"
                     )
                     metrics.ENGINE_SYNTHESIS.labels(which.name, outcome).inc()
                     raise

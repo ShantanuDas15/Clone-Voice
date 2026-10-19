@@ -3,10 +3,12 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import (OAUTH_STATE_MAX_AGE_SECONDS, app,
-                          session_cookie_options)
-from backend.tests.test_rate_limit import _disable_limiter  # noqa: F401
-from backend.tests.test_rate_limit import _enable_limiter, fresh_limiter
+from backend.main import OAUTH_STATE_MAX_AGE_SECONDS, app, session_cookie_options
+from backend.tests.test_rate_limit import (
+    _disable_limiter,  # noqa: F401
+    _enable_limiter,
+    fresh_limiter,
+)
 
 
 @pytest.mark.parametrize("app_env", ["production", "staging", ""])

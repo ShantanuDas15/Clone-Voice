@@ -61,9 +61,7 @@ def _post(client, headers, embeddings=None, count=3, *, field="files", extra=Non
         return client.post(
             "/api/v1/voice/upload", headers=headers, data=data, files=files
         )
-    with patch(
-        "backend.services.tts_pipeline.embed_speaker_async", side_effect=embeddings
-    ):
+    with patch("backend.services.tts_pipeline.embed_speaker_async", side_effect=embeddings):
         return client.post(
             "/api/v1/voice/upload", headers=headers, data=data, files=files
         )

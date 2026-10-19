@@ -10,11 +10,17 @@ from fastapi import Request
 
 from backend.core import rate_limit
 from backend.core.config import settings
-from backend.core.security import (create_access_token, create_refresh_token,
-                                   decode_token)
+from backend.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+)
 from backend.models.user import User
-from backend.services.tts_engine import (canary_bucket, engine_name_for_user,
-                                         get_engine_for_user)
+from backend.services.tts_engine import (
+    canary_bucket,
+    engine_name_for_user,
+    get_engine_for_user,
+)
 from backend.tests.test_rate_limit import fresh_limiter  # noqa: F401
 
 CANARY = "chatterbox_nano"

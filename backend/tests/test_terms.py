@@ -2,8 +2,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from backend.tests.test_voice import \
-    auth_headers  # noqa: F401  (pytest fixture)
+from backend.tests.test_voice import auth_headers  # noqa: F401  (pytest fixture)
 from backend.tests.test_voice import create_dummy_wav
 
 

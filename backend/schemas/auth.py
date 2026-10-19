@@ -2,8 +2,7 @@ from datetime import datetime
 from typing import Annotated, Optional
 from uuid import UUID
 
-from pydantic import (AfterValidator, BaseModel, EmailStr, Field,
-                      field_validator)
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, field_validator
 
 from backend.core.validators import require_nonblank_name
 

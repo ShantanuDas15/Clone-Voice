@@ -10,10 +10,13 @@ import pytest
 
 from backend.core.config import DEFAULT_TTS_PAUSE_SECONDS, settings
 from backend.services import tts_pipeline
-from backend.services.sv2tts.synthesizer.hparams import \
-    hparams as synth_hparams
-from backend.services.text_chunking import (Boundary, Segment, classify_ending,
-                                            split_into_segments)
+from backend.services.sv2tts.synthesizer.hparams import hparams as synth_hparams
+from backend.services.text_chunking import (
+    Boundary,
+    Segment,
+    classify_ending,
+    split_into_segments,
+)
 
 EMB = np.zeros(256, dtype=np.float32)
 

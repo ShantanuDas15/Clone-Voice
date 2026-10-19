@@ -8,8 +8,7 @@ from uuid import UUID
 
 import numpy as np
 import torch
-from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
-                     Response, status)
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -22,19 +21,24 @@ from backend.core.security import get_current_user, get_verified_user
 from backend.models.generation import Generation
 from backend.models.user import User
 from backend.models.voice_profile import VoiceProfile
-from backend.schemas.synthesize import (GenerationOut,
-                                        SynthesisCapabilitiesOut,
-                                        SynthesizeRequest)
+from backend.schemas.synthesize import (
+    GenerationOut,
+    SynthesisCapabilitiesOut,
+    SynthesizeRequest,
+)
 from backend.services import style_markup, styled_synthesis
 from backend.services.erasure import erase_generation, remove_files
 from backend.services.text_analysis import StyleOverride
 from backend.services.tts_engine import (EngineRejectedReferenceError,
                                          EngineUnavailableError,
                                          get_engine_for_user)
-from backend.services.tts_pipeline import (InferenceQueueFullError,
-                                           InferenceTimeoutError,
-                                           OutputQualityError, free_gpu_memory,
-                                           run_inference_pipeline)
+from backend.services.tts_pipeline import (
+    InferenceQueueFullError,
+    InferenceTimeoutError,
+    OutputQualityError,
+    free_gpu_memory,
+    run_inference_pipeline,
+)
 from backend.services.voice_embedding import EMBEDDING_VERSION
 
 logger = logging.getLogger(__name__)

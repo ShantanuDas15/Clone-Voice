@@ -14,8 +14,12 @@ from backend.models.refresh_token import RefreshToken
 from backend.models.user import User
 from backend.models.user_identity import UserIdentity
 from backend.models.voice_profile import VoiceProfile
-from backend.services.erasure import (ERASED_NAME, ERASED_TEXT, remove_files,
-                                      remove_user_storage)
+from backend.services.erasure import (
+    ERASED_NAME,
+    ERASED_TEXT,
+    remove_files,
+    remove_user_storage,
+)
 from backend.services.storage_cleanup import get_protected_paths
 
 PASSWORD = "Password123!"

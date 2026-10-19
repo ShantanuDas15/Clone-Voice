@@ -14,8 +14,7 @@ from typing import Dict
 
 import inflect
 
-from backend.services.sv2tts.synthesizer.hparams import \
-    hparams as synth_hparams
+from backend.services.sv2tts.synthesizer.hparams import hparams as synth_hparams
 from backend.services.sv2tts.synthesizer.utils import cleaners
 
 _inflect = inflect.engine()

@@ -21,15 +21,22 @@ from fastapi.testclient import TestClient
 
 from backend.core.config import Settings, settings
 from backend.services import audio_processing, tts_engine, tts_pipeline
-from backend.services.chatterbox_engine import (MAX_CHARS,
-                                                REFERENCE_REJECTED_DETAIL,
-                                                SAMPLE_RATE, VARIANTS,
-                                                ChatterboxEngine)
-from backend.services.tts_engine import (EngineRejectedReferenceError,
-                                         EngineUnavailableError,
-                                         SynthesisStyle, UnsupportedStyleError,
-                                         VoiceConditioning, WrongEngineError,
-                                         get_engine)
+from backend.services.chatterbox_engine import (
+    MAX_CHARS,
+    REFERENCE_REJECTED_DETAIL,
+    SAMPLE_RATE,
+    VARIANTS,
+    ChatterboxEngine,
+)
+from backend.services.tts_engine import (
+    EngineRejectedReferenceError,
+    EngineUnavailableError,
+    SynthesisStyle,
+    UnsupportedStyleError,
+    VoiceConditioning,
+    WrongEngineError,
+    get_engine,
+)
 from tts_worker.app import create_app
 
 SR = 16000
