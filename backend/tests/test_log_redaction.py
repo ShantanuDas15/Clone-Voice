@@ -5,7 +5,8 @@ import logging
 import pytest
 
 from backend.core.config import settings
-from backend.core.log_redaction import REDACTED, RedactSearchFilter, redact_search
+from backend.core.log_redaction import (REDACTED, RedactSearchFilter,
+                                        redact_search)
 from backend.main import configure_logging
 
 

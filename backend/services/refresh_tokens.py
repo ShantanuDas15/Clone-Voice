@@ -10,7 +10,8 @@ from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
-from backend.core.security import REFRESH_TOKEN_TYPE, create_refresh_token, decode_token
+from backend.core.security import (REFRESH_TOKEN_TYPE, create_refresh_token,
+                                   decode_token)
 from backend.models.refresh_token import RefreshToken
 
 logger = logging.getLogger(__name__)

@@ -499,7 +499,22 @@ class Tacotron(nn.Module):
 
         return mel_outputs, linear, attn_scores, stop_outputs
 
-    def generate(self, x, speaker_embedding=None, steps=2000):
+    def generate(
+        self,
+        x,
+        speaker_embedding=None,
+        steps=2000,
+        prior_state=None,
+        return_state=False,
+    ):
+        """Decode a mel; ``prior_state`` seeds the decoder from the previous chunk.
+
+        CloneVoice addition (SPEECH_QUALITY_PLAN.md S1.6), off unless asked for.
+        ``prior_state`` may hold ``frame`` (the <GO> prenet input) and ``rnn``
+        (``(rnn1_hidden, rnn2_hidden, rnn1_cell, rnn2_cell)``); the attention state
+        always starts fresh because it indexes the new text. ``return_state`` appends
+        the same dict, taken at the end of this decode, to the returned tuple.
+        """
         self.eval()
         device = next(self.parameters()).device  # use same device as parameters
 
@@ -518,6 +533,16 @@ class Tacotron(nn.Module):
 
         # Need a <GO> Frame for start of decoder loop
         go_frame = torch.zeros(batch_size, self.n_mels, device=device)
+
+        if prior_state:
+            if "frame" in prior_state:
+                go_frame = prior_state["frame"].to(device)
+            if "rnn" in prior_state:
+                rnn1_hidden, rnn2_hidden, rnn1_cell, rnn2_cell = (
+                    tensor.to(device) for tensor in prior_state["rnn"]
+                )
+                hidden_states = (attn_hidden, rnn1_hidden, rnn2_hidden)
+                cell_states = (rnn1_cell, rnn2_cell)
 
         # Need an initial context vector
         context_vec = torch.zeros(
@@ -569,6 +594,12 @@ class Tacotron(nn.Module):
 
         self.train()
 
+        if return_state:
+            state = {
+                "frame": mel_outputs[:, :, -1],
+                "rnn": (hidden_states[1], hidden_states[2], *cell_states),
+            }
+            return mel_outputs, linear, attn_scores, state
         return mel_outputs, linear, attn_scores
 
     def init_model(self):

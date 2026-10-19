@@ -198,10 +198,8 @@ def _fresh_session(with_version_table: bool, version: str | None = None):
 
 
 def test_head_revision_matches_latest_migration_file() -> None:
-    from backend.core.migrations import get_head_revision
-
     # Whatever the head is, a migration file must declare it (the head is derived from the files).
-    from backend.core.migrations import ALEMBIC_DIR
+    from backend.core.migrations import ALEMBIC_DIR, get_head_revision
 
     declared = {
         line.split('"')[1]

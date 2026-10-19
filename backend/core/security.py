@@ -3,8 +3,8 @@
 import hashlib
 import hmac
 import uuid
-from functools import lru_cache
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Optional
 
 import jwt
@@ -72,7 +72,9 @@ def _dummy_password_hash() -> str:
     return hash_password("not-a-real-password-timing-equaliser")
 
 
-def verify_password_or_dummy(plain_password: str, hashed_password: Optional[str]) -> bool:
+def verify_password_or_dummy(
+    plain_password: str, hashed_password: Optional[str]
+) -> bool:
     """Verify a password; with no stored hash, spend the same time and return False.
 
     Without this, login answers in milliseconds for an unknown email and in

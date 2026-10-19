@@ -3,11 +3,8 @@
 import numpy as np
 import pytest
 
-from backend.services.voice_embedding import (
-    aggregate_embeddings,
-    clip_agreement,
-    find_outliers,
-)
+from backend.services.voice_embedding import (aggregate_embeddings,
+                                              clip_agreement, find_outliers)
 
 
 def _vec(*values: float) -> np.ndarray:

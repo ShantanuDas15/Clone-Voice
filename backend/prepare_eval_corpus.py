@@ -142,9 +142,8 @@ def write_corpus(
     by_speaker: Mapping[str, Sequence[Tuple[Clip, bytes]]], speakers: int, out: Path
 ) -> Dict[str, object]:
     """Write the chosen speakers' clips, ``groups.json`` and ``manifest.json``; return the manifest."""
-    from backend.evaluate_synthesis import (  # the same tracker the study scores with
-        f0_track,
-    )
+    from backend.evaluate_synthesis import \
+        f0_track  # the same tracker the study scores with
 
     chosen = choose_speakers(
         {s: [c for c, _ in rows] for s, rows in by_speaker.items()}, speakers
