@@ -670,10 +670,66 @@ Limits: the room is simulated (a real recording room differs), mild reverb (RT60
 missed, thresholds were chosen and checked on the same corpus, and clone similarity is judged by the
 model's own encoder.
 
+## Emotion accuracy of the SV2TTS baseline (S0.3, 2026-10-20)
+
+First real run of the emotion classifier (`superb/wav2vec2-base-superb-er`, 4 classes) on the
+20-speaker LibriSpeech corpus (10 `adult_low_f0`, 10 `adult_high_f0`, rebuilt with
+`prepare_eval_corpus`), current `main` (`05d7633`), CPU, real weights, seed 1234:
+
+```bash
+python -m backend.evaluate_synthesis --data-dir <corpus> --groups <corpus>/groups.json --speakers 20 \
+  --stems 5 --emotions 10 --emotion-classifier superb --whisper-model none --paragraphs 0 --typed 0
+```
+
+Each speaker clones 10 emotional sentences in their neutral, happy, sad and angry renderings (40 clips;
+800 in all). SV2TTS has no emotion input, so the four renderings differ only in wording.
+
+| | All (n=20) | adult_low_f0 | adult_high_f0 | Plan target |
+|---|---|---|---|---|
+| **Emotion accuracy** | **0.314** (251 / 800) | 0.348 [0.305, 0.390] | 0.280 [0.235, 0.332] | ≥ 0.70 |
+| Recall: neutral | 0.15 | 0.22 | 0.08 | |
+| Recall: happy | 0.52 | 0.72 | 0.32 | |
+| Recall: sad | 0.19 | 0.22 | 0.16 | |
+| Recall: angry | 0.40 | 0.23 | 0.56 | |
+
+Confusion (rows = requested, columns = heard; 200 clips per row):
+
+| requested \ heard | neutral | happy | sad | angry |
+|---|---:|---:|---:|---:|
+| neutral | 30 | 103 | 1 | 66 |
+| happy | 11 | 104 | 4 | 81 |
+| sad | 8 | 74 | 38 | 80 |
+| angry | 3 | 109 | 9 | 79 |
+
+### What this shows
+
+* **Baseline recorded: 31% against a 25% chance level and a 70% target.** SV2TTS cannot be told what
+  to feel, and the number agrees: the text alone moves the heard emotion very little.
+* **The classifier mostly answers "happy" or "angry"** (390 and 306 of 800 predictions; only 52 each for
+  neutral and sad), whatever was requested. So the per-label recalls are shaped by that bias as much as
+  by the voice. A sad sentence is heard as sad 19% of the time and as happy or angry 77%.
+* **The two voice groups answer differently** (low voices are heard as happy, high voices as angry),
+  which is a classifier-by-pitch interaction, not evidence about the synthesiser.
+* The accuracy is the figure to beat for S5; read gains against this baseline, not against 70%.
+
+### Limits
+
+* **The classifier is a coarse, biased judge.** It is trained on acted English speech (IEMOCAP), 4 classes,
+  and gives near-constant answers on this synthetic speech. It has no positive control: it was not run on
+  real emotional recordings here, so its own accuracy on natural speech is unknown.
+* Adults only, one seed, n = 10 per group (intervals are over speakers).
+* **The other metrics in this run did not match the S0.4 record** (similarity 0.74 against 0.760, `?` rise
+  0.40 against 0.52, pitch range ratio in the high group 0.89 against 0.62). This run is on current `main`
+  (S1 to S3 changes since `f4d8cbe`: pauses, loudness, limiter, quality gate with retries) and a different
+  stimulus mix, so it is not a reproducibility failure. Determinism was checked on a subset only: two runs of
+  2 speakers with the same seed gave identical rows and confusion; the full 20-speaker run was not repeated.
+* No predicted MOS, RTF, WER or independent encoder in this run (`faster-whisper` and `speechbrain` are
+  not installed here).
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
-2. A predicted-naturalness model, an emotion classifier, and an **independent** speaker encoder
+2. ~~An emotion classifier~~ (done, S0.3 above), a predicted-naturalness model, and an **independent** speaker encoder
    (plan S0.1 and S0.3, still open), and a first blind listening test of the S1 pause lengths.
 3. A positive control for the question metric (natural questions).
 4. Child and elderly speech from a source whose licence and consent terms have been verified.
