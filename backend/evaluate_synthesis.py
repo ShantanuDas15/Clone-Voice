@@ -56,6 +56,7 @@ import logging
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -534,6 +535,40 @@ def load_groups(path: Optional[Path]) -> Dict[str, str]:
     return {str(k): str(v) for k, v in data.items()}
 
 
+class SynthesisRecorder:
+    """Pools the compute time (and optionally the predicted MOS) of the syntheses of one speaker."""
+
+    def __init__(self) -> None:
+        """Start empty, with no MOS predictor."""
+        self.predict_mos: Optional[Callable[[np.ndarray], float]] = None
+        self.reset()
+
+    def reset(self) -> None:
+        """Forget everything recorded so far."""
+        self.compute_seconds = 0.0
+        self.audio_seconds = 0.0
+        self.mos_scores: List[float] = []
+
+    def record(self, audio: np.ndarray, compute_seconds: float) -> None:
+        """Add one synthesis: its wall time, its audio length and, if enabled, its MOS."""
+        self.compute_seconds += compute_seconds
+        self.audio_seconds += len(audio) / SAMPLE_RATE
+        if self.predict_mos is not None and len(audio):
+            self.mos_scores.append(float(self.predict_mos(audio)))
+
+    def summary(self) -> Dict[str, Optional[float]]:
+        """``rtf`` (compute seconds per audio second, pooled) and ``mos`` (mean), or ``None``."""
+        rtf = (
+            self.compute_seconds / self.audio_seconds
+            if self.audio_seconds > 0
+            else None
+        )
+        return {"rtf": rtf, "mos": _mean(self.mos_scores)}
+
+
+recorder = SynthesisRecorder()
+
+
 def _synthesize(
     text: str, embedding: np.ndarray, speaker: str, seed: int
 ) -> np.ndarray:
@@ -546,14 +581,18 @@ def _synthesize(
     from backend.services.tts_pipeline import run_inference_pipeline
 
     torch.manual_seed(seed)
+    started = time.perf_counter()
     out_path, _ = asyncio.run(
         run_inference_pipeline(text, embedding, f"study-{speaker}")
     )
+    elapsed = time.perf_counter() - started
     try:
         wav, _ = sf.read(out_path, dtype="float32")
     finally:
         os.remove(out_path)
-    return np.asarray(wav, dtype=np.float32)
+    audio = np.asarray(wav, dtype=np.float32)
+    recorder.record(audio, elapsed)
+    return audio
 
 
 def reference_embedding(encoder, reference: str) -> np.ndarray:
@@ -1010,6 +1049,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         "transformers)",
     )
     parser.add_argument(
+        "--mos",
+        choices=("none", "utmos"),
+        default="none",
+        help="also predict naturalness (UTMOS22, needs torch and a weights download)",
+    )
+    parser.add_argument(
         "--emotions",
         type=int,
         default=10,
@@ -1081,10 +1126,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     emotional = load_sentences(args.sentences)[: args.emotions]
     chosen = select_speakers(dataset, groups, args.speakers)
+    if args.mos == "utmos":
+        from backend.score_engine_outputs import make_utmos_predictor
+
+        recorder.predict_mos = make_utmos_predictor()
 
     rows = []
     for n, speaker in enumerate(chosen):
         files, group = dataset[speaker], groups.get(speaker, "ungrouped")
+        recorder.reset()
         if args.skip_single:
             row: Dict[str, object] = {"speaker": speaker, "group": group}
             embedding = reference_embedding(encoder, files[0])
@@ -1102,6 +1152,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     embedding, speaker, args.seed + 1000 * n, emotional, classify
                 )
             )
+        row.update(recorder.summary())
         rows.append(row)
         logger.info("scored speaker %d/%d (%s)", n + 1, len(chosen), speaker)
 
@@ -1117,7 +1168,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "para_pause_count",
         "para_pause_mean_s",
         "typed_wer",
+        "rtf",
     )
+    if recorder.predict_mos is not None:
+        metrics += ("mos",)
     if classify is not None:
         metrics += (
             "emotion_accuracy",

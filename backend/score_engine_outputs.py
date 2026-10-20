@@ -222,6 +222,34 @@ def make_ecapa_encoder() -> _EcapaEncoder:
     return _EcapaEncoder()
 
 
+def _install_resample_stub() -> None:
+    """Stand in for ``torchaudio`` when it is missing: UTMOS only calls ``functional.resample``.
+
+    No torchaudio build exists for every torch release, and the study's audio is already at
+    UTMOS's 16 kHz, where ``resample`` is the identity. Any other rate is refused, not guessed.
+    """
+    import importlib.machinery
+    import sys
+    import types
+
+    def resample(wave, orig_freq: int, new_freq: int):
+        """Return ``wave`` unchanged when the rates match; raise otherwise."""
+        if orig_freq != new_freq:
+            raise ValueError(
+                "torchaudio is not installed: only 16 kHz audio can be scored"
+            )
+        return wave
+
+    functional = types.ModuleType("torchaudio.functional")
+    functional.resample = resample
+    functional.__spec__ = importlib.machinery.ModuleSpec("torchaudio.functional", None)
+    module = types.ModuleType("torchaudio")
+    module.functional = functional
+    module.__spec__ = importlib.machinery.ModuleSpec("torchaudio", None)
+    sys.modules["torchaudio"] = module
+    sys.modules["torchaudio.functional"] = functional
+
+
 def make_utmos_predictor() -> Callable[[np.ndarray], float]:
     """A predicted-MOS function (UTMOS22 strong, via torch.hub) for 16 kHz mono audio.
 
@@ -232,6 +260,10 @@ def make_utmos_predictor() -> Callable[[np.ndarray], float]:
         import torch
     except ImportError:
         raise SystemExit("torch is required for --mos utmos")
+    try:
+        import torchaudio  # noqa: F401
+    except ImportError:
+        _install_resample_stub()
     model = torch.hub.load(
         "tarepan/SpeechMOS:v1.2.0", "utmos22_strong", trust_repo=True
     )

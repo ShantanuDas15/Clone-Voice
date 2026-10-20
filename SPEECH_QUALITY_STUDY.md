@@ -722,14 +722,59 @@ Confusion (rows = requested, columns = heard; 200 clips per row):
   0.40 against 0.52, pitch range ratio in the high group 0.89 against 0.62). This run is on current `main`
   (S1 to S3 changes since `f4d8cbe`: pauses, loudness, limiter, quality gate with retries) and a different
   stimulus mix, so it is not a reproducibility failure. Determinism was checked on a subset only: two runs of
-  2 speakers with the same seed gave identical rows and confusion; the full 20-speaker run was not repeated.
+  2 speakers with the same seed gave identical rows and confusion. The full 20-speaker run was then
+  repeated (S0.1e below) and matched on every seeded metric and every emotion label.
 * No predicted MOS, RTF, WER or independent encoder in this run (`faster-whisper` and `speechbrain` are
   not installed here).
+
+## Predicted naturalness and real-time factor of the SV2TTS baseline (S0.1e, 2026-10-20)
+
+The S0.3 run repeated with `--mos utmos` on the same 20-speaker corpus, current `main` (`c6e716a`) plus the
+new `rtf` and `mos` columns, CPU (16 threads), real weights, seed 1234, 816 syntheses:
+
+```bash
+python -m backend.evaluate_synthesis --data-dir <corpus> --groups <corpus>/groups.json --speakers 20 \
+  --stems 5 --emotions 10 --emotion-classifier superb --whisper-model none --paragraphs 0 --typed 0 --mos utmos
+```
+
+| | All (n=20) | adult_low_f0 | adult_high_f0 | Plan target |
+|---|---|---|---|---|
+| **Predicted MOS** (UTMOS22, mean per speaker over its clips) | **3.01** (2.31 to 3.49) | 3.15 [3.02, 3.27] | 2.88 [2.68, 3.07] | ≥ 3.8 |
+| **RTF** (compute seconds per audio second, pooled per speaker) | **3.02** (2.44 to 3.66) | 3.07 [2.83, 3.28] | 2.98 [2.71, 3.24] | within `INFERENCE_CALL_TIMEOUT_SECONDS` at the maximum text length |
+
+Group gap in MOS is 0.27 (the fairness limit in the plan is stated for similarity, 0.05; there is no MOS limit).
+
+**Determinism:** every seeded metric (similarity, pitch error, pitch range, spectrum distance, `?` and `!`
+contrast, emotion labels) is identical to the S0.3 run for all 20 speakers, so the fixed-seed gate holds on the
+full run. RTF and MOS are timings and a model output, not seeded; MOS was not repeated.
+
+### What this shows
+
+* **SV2TTS is 0.8 MOS below the plan's naturalness target** (3.01 against 3.8), and high voices are rated
+  lower than low voices (2.88 against 3.15). The S0.1d score of the 240 S4.2 outputs (SV2TTS 2.49, Chatterbox
+  4.1) used other texts and speakers, so it is not the same number; both say the baseline engine is the weak one.
+* **On this CPU the pipeline takes about 3 s of compute per second of speech.** Speech
+  takes about three times as long to generate as to play, so any text longer than a few seconds of audio
+  is slower than real time on this machine (whether that breaks `INFERENCE_CALL_TIMEOUT_SECONDS`, 30 s per
+  stage, at the maximum text length was not measured here). It includes the quality gate's retries and the pipeline's own file write, so it is
+  the latency a request sees, not the vocoder alone. It does not include the UTMOS or emotion scoring.
+
+### Limits
+
+* **A predicted MOS is not a listening test.** UTMOS is trained on synthetic-speech ratings, cannot judge
+  identity or expressiveness, and its weights have no stated licence (evaluation only).
+* **RTF is one machine**: a 16-thread development CPU, with nothing else running. The target host (Railway) is
+  unmeasured, and the number moves with thread count. Clips are short
+  (single sentences), so fixed per-request costs weigh more than they would on paragraphs. The S0.3 run was not timed.
+* A two-speaker smoke run measured 2.3 here against 3.0 over the full run, so run-to-run spread is wide; treat
+  the third digit as noise. One seed, adults only, n = 10 per group.
+* `torchaudio` has no build for this venv's torch (2.13), so a stub stands in for its `resample` (identity at
+  16 kHz); UTMOS scores were not checked against a real `torchaudio`.
 
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
-2. ~~An emotion classifier~~ (done, S0.3 above), a predicted-naturalness model, and an **independent** speaker encoder
+2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), and an **independent** speaker encoder
    (plan S0.1 and S0.3, still open), and a first blind listening test of the S1 pause lengths.
 3. A positive control for the question metric (natural questions).
 4. Child and elderly speech from a source whose licence and consent terms have been verified.
