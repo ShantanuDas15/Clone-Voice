@@ -771,6 +771,51 @@ full run. RTF and MOS are timings and a model output, not seeded; MOS was not re
 * `torchaudio` has no build for this venv's torch (2.13), so a stub stands in for its `resample` (identity at
   16 kHz); UTMOS scores were not checked against a real `torchaudio`.
 
+## Word error rate of the SV2TTS baseline on the full corpus (S0.4b, 2026-10-21)
+
+The multi-sentence stimuli of S0.1c run on the full 20-speaker corpus with Whisper `small.en`, current `main`
+(`e8426e3`), CPU (16 threads, otherwise idle), real weights, seed 1234, 160 syntheses (4 paragraphs and 4 typed
+texts per speaker), with `--mos utmos` so the same run also gives MOS and RTF on longer texts:
+
+```bash
+python -m backend.evaluate_synthesis --data-dir <corpus> --groups <corpus>/groups.json --speakers 20 \
+  --skip-single --paragraphs 4 --typed 4 --mos utmos --whisper-model small.en --seed 1234
+```
+
+| | All (n=20) | adult_low_f0 | adult_high_f0 | Plan target |
+|---|---|---|---|---|
+| **WER, paragraphs** (mean per speaker) | **4.7 %** (0 to 24.6 %) | 3.0 % [1.0, 5.4] | 6.5 % [2.4, 11.3] | ≤ 5 % |
+| **WER, typed texts** (numbers, abbreviations) | **9.6 %** (3.4 to 19.2 %) | 7.8 % [6.7, 9.3] | 11.4 % [8.6, 14.2] | ≤ 5 % |
+| **Predicted MOS** (UTMOS22) | **2.77** (2.23 to 3.34) | 2.93 [2.79, 3.07] | 2.61 [2.42, 2.81] | ≥ 3.8 |
+| **RTF** | **2.27** (1.75 to 2.74) | 2.36 [2.23, 2.48] | 2.17 [2.01, 2.35] | within `INFERENCE_CALL_TIMEOUT_SECONDS` |
+| Speaking rate (s per word) | 0.352 | 0.352 | 0.352 | |
+| Pauses per paragraph / mean pause (s) | 2.14 / 0.50 | 2.05 / 0.51 | 2.23 / 0.50 | |
+
+Group gaps: WER 3.5 points (paragraphs) and 3.6 points (typed), both within the plan's limit; MOS 0.31 and RTF
+0.19, both over it (there is no limit for either in the plan).
+
+### What this shows
+
+* **Paragraph WER meets the 5 % target on average, but not for every voice.** The median speaker is at 1.8 %;
+  the mean is pulled up by a few speakers, the worst being 237 (24.6 % on paragraphs, high F0). High voices are
+  at 6.5 % against 3.0 % for low voices, and the intervals overlap, so the gap is a lead, not a finding.
+* **Typed texts are twice as hard (9.6 %) and miss the target for both groups.** These are the texts with
+  numbers and abbreviations; how much of that error is the synthesiser and how much is Whisper normalising
+  digits and spellings differently from the reference was not separated.
+* **MOS and RTF on paragraphs differ from the single-sentence numbers of S0.1e** (2.77 against 3.01, 2.27
+  against 3.02): different texts, so the two runs are not comparable. The same ordering holds (high voices rated
+  lower), and SV2TTS stays about 1 MOS under the 3.8 target.
+
+### Limits
+
+* **WER is measured by one ASR model** (`small.en`), which has its own errors; a clean speaker at 0 % and a
+  worst case at 24.6 % come from 4 paragraphs each, so a single bad take moves a speaker's mean a lot.
+* **The speaker-similarity judge is the model's own encoder** (`resemblyzer`), not independent; similarity
+  is not in this run's output (the single-sentence study that reports it was skipped with `--skip-single`).
+* **RTF is one machine**, as in S0.1e. One seed, adults only, n = 10 per group.
+* Not repeated: this run was not compared with a second run of the same seed, so determinism of WER was not
+  re-checked here (the seeded gate was held in S0.4 and S0.1e).
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
