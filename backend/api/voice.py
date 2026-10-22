@@ -86,6 +86,7 @@ async def _cleanup_failed_upload(
     user_id: uuid.UUID,
     name: str,
     consent_confirmed_at: datetime,
+    adult_confirmed_at: Optional[datetime] = None,
 ) -> None:
     """Remove every orphaned file and persist a `status="failed"` profile row.
 
@@ -108,6 +109,7 @@ async def _cleanup_failed_upload(
         embedding_path="",
         status="failed",
         consent_confirmed_at=consent_confirmed_at,
+        adult_confirmed_at=adult_confirmed_at,
         terms_version=settings.TERMS_VERSION,
     )
     try:
@@ -252,7 +254,11 @@ async def _save_profile_embedding(
     return path
 
 
-def _check_terms(consent_confirmed: bool, terms_version: Optional[str]) -> None:
+def _check_terms(
+    consent_confirmed: bool,
+    terms_version: Optional[str],
+    speaker_is_adult: bool = False,
+) -> None:
     """Raise 422/409 unless the uploader attested to the current terms."""
     # Responsible-use safeguard: require an explicit attestation that the
     # uploader has the right to use this voice sample, before any file work.
@@ -270,6 +276,13 @@ def _check_terms(consent_confirmed: bool, terms_version: Optional[str]) -> None:
             status_code=409,
             detail="The terms have changed (current version "
             f"{settings.TERMS_VERSION}). Review them and confirm again.",
+        )
+    # Decision Q4: children's voices are out of scope. Checked here, before any
+    # file work, so a refused clip is never written to disk.
+    if settings.REQUIRE_ADULT_CONFIRMATION and not speaker_is_adult:
+        raise HTTPException(
+            status_code=422,
+            detail="You must confirm the speaker is an adult (18 or older).",
         )
 
 
@@ -313,6 +326,7 @@ def _build_profile(
     clips: List[_Clip],
     profile_embedding_path: str,
     agreement: List[float],
+    adult_confirmed_at: Optional[datetime] = None,
 ) -> VoiceProfile:
     """Build the ready profile row with one sample row per clip."""
     return VoiceProfile(
@@ -323,6 +337,7 @@ def _build_profile(
         embedding_version=EMBEDDING_VERSION,
         status="ready",
         consent_confirmed_at=consent_confirmed_at,
+        adult_confirmed_at=adult_confirmed_at,
         terms_version=settings.TERMS_VERSION,
         samples=[
             VoiceProfileSample(
@@ -348,6 +363,7 @@ async def upload_audio(
     name: str = Form(..., min_length=1, max_length=255),
     consent_confirmed: bool = Form(...),
     terms_version: Optional[str] = Form(None, max_length=50),
+    speaker_is_adult: bool = Form(False),
     file: Optional[UploadFile] = File(None),
     files: Optional[List[UploadFile]] = File(None),
     current_user: User = Depends(get_verified_user),
@@ -366,9 +382,10 @@ async def upload_audio(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error))
 
-    _check_terms(consent_confirmed, terms_version)
+    _check_terms(consent_confirmed, terms_version, speaker_is_adult)
     uploads = _collect_uploads(file, files)
     consent_confirmed_at = datetime.now(timezone.utc)
+    adult_confirmed_at = consent_confirmed_at if speaker_is_adult else None
 
     # HARDENING_PLAN.md finding P2-M1: release the connection the auth lookup
     # left open in a transaction before the slow decode/embedding work. The
@@ -382,7 +399,7 @@ async def upload_audio(
         user_id,
         created,
         lambda: _cleanup_failed_upload(
-            db, created, user_id, name, consent_confirmed_at
+            db, created, user_id, name, consent_confirmed_at, adult_confirmed_at
         ),
     )
 
@@ -404,7 +421,13 @@ async def upload_audio(
         )
 
     profile = _build_profile(
-        user_id, name, consent_confirmed_at, clips, profile_embedding_path, agreement
+        user_id,
+        name,
+        consent_confirmed_at,
+        clips,
+        profile_embedding_path,
+        agreement,
+        adult_confirmed_at,
     )
     try:
         await asyncio.to_thread(_persist_profile, db, profile)
@@ -563,6 +586,7 @@ async def add_samples(
     profile_id: str,
     consent_confirmed: bool = Form(...),
     terms_version: Optional[str] = Form(None, max_length=50),
+    speaker_is_adult: bool = Form(False),
     file: Optional[UploadFile] = File(None),
     files: Optional[List[UploadFile]] = File(None),
     current_user: User = Depends(get_verified_user),
@@ -578,7 +602,7 @@ async def add_samples(
         pid = uuid.UUID(profile_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid profile ID format")
-    _check_terms(consent_confirmed, terms_version)
+    _check_terms(consent_confirmed, terms_version, speaker_is_adult)
     uploads = _collect_uploads(file, files)
 
     user_id = current_user.id

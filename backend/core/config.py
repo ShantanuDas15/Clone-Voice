@@ -303,6 +303,11 @@ class Settings(BaseSettings):
     # Where the terms text is published (shown by the client next to the
     # consent checkbox). Blank until the page exists.
     TERMS_URL: str = ""
+    # Decision Q4 (SPEECH_QUALITY_PLAN.md): children's voices are out of scope.
+    # When true, an upload or add-a-clip must also carry `speaker_is_adult=true`.
+    # Off by default so a client that does not send it yet keeps working; turn
+    # it on once the frontend shows the checkbox.
+    REQUIRE_ADULT_CONFIRMATION: bool = False
     # HARDENING_PLAN.md finding L5: the engine previously had no
     # pool_pre_ping, pool sizing, or connect timeout, so a stale pooled
     # connection (e.g. after a DB restart or an idle-connection reap by the

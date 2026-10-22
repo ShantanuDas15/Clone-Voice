@@ -28,6 +28,9 @@ class VoiceProfile(Base):
     # timestamp *is* the record of consent — there is no unconsented row, so
     # no separate boolean is needed alongside it.
     consent_confirmed_at = Column(DateTime(timezone=True), nullable=False)
+    # When the uploader attested the speaker is an adult (decision Q4). Null for
+    # rows that predate the question or whose client did not send it.
+    adult_confirmed_at = Column(DateTime(timezone=True), nullable=True)
     # The acceptable-use terms version the uploader attested to (RU-2). Rows
     # that predate versioning carry the literal "legacy".
     terms_version = Column(
