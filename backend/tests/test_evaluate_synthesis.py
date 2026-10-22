@@ -312,6 +312,62 @@ def test_evaluate_speaker_reports_every_metric_and_leaves_no_files(
     assert sorted(p.name for p in speaker_dir.iterdir()) == ["0.wav", "1.wav", "2.wav"]
 
 
+class _OtherEncoder:
+    """Embeds audio by its length, so it disagrees with ``_FakeEncoder`` and is visibly used."""
+
+    def embed_utterance(self, y):
+        return np.array([1.0, len(y) / 16000.0, 2.0])
+
+
+def _speaker_files(tmp_path):
+    speaker_dir = tmp_path / "spk"
+    speaker_dir.mkdir()
+    files = []
+    for i in range(3):
+        path = speaker_dir / f"{i}.wav"
+        sf.write(path, tone(180.0 + 5 * i, 190.0, seconds=4.0, amp=0.3), SR)
+        files.append(str(path))
+    return files
+
+
+def test_evaluate_speaker_adds_the_independent_similarity_only_when_given(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        es,
+        "_synthesize",
+        lambda text, embedding, speaker, seed: tone(180.0, seconds=1.0),
+    )
+    files = _speaker_files(tmp_path)
+    stems = ["It is late"]
+
+    without = es.evaluate_speaker(_FakeEncoder(), "spk", files, "g", 0, 1234, stems)
+    with_ind = es.evaluate_speaker(
+        _FakeEncoder(), "spk", files, "g", 0, 1234, stems, _OtherEncoder()
+    )
+
+    assert "ecapa" not in without
+    assert -1.0 <= with_ind["ecapa"] <= 1.0
+    assert with_ind["secs"] == without["secs"]
+    assert with_ind["ecapa"] != with_ind["secs"]
+
+
+def test_independent_encoder_is_rejected_with_skip_single(tmp_path, monkeypatch):
+    monkeypatch.setattr(es, "load_dataset", lambda path: {})
+    monkeypatch.setattr(es, "load_groups", lambda path: {})
+    monkeypatch.setattr(es, "load_sentences", lambda path: [{"stem": "It is late"}])
+    with pytest.raises(SystemExit, match="skip-single"):
+        es.main(
+            [
+                "--data-dir",
+                str(tmp_path),
+                "--independent-encoder",
+                "ecapa",
+                "--skip-single",
+            ]
+        )
+
+
 def test_synthesize_removes_its_output_file(tmp_path, monkeypatch):
     out = tmp_path / "out.wav"
     sf.write(out, tone(200.0, seconds=0.2), SR)

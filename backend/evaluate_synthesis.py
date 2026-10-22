@@ -43,9 +43,11 @@ It judges acted English, so it is a relative measure between engines and setting
 that a voice sounds angry; the listening test decides. Without emotion control the pipeline is
 expected to score near chance: that is the baseline to beat.
 
-Not here yet: ``secs`` below is judged by the *same* resemblyzer encoder that conditions the
-synthesizer, which flatters the model; read it as a relative number, never as an absolute one
-(``score_engine_outputs.py`` repeats it with an independent encoder and adds predicted MOS).
+``secs`` below is judged by the *same* resemblyzer encoder that conditions the synthesizer, which
+flatters the model; read it as a relative number, never as an absolute one. ``--independent-encoder
+ecapa`` adds ``ecapa``, the same similarity under SpeechBrain ECAPA-TDNN (a different model and
+training set; needs speechbrain and a torch that has a matching torchaudio), per speaker in the
+single-sentence study.
 
 The metric functions are pure and unit-tested; the dataset is never committed.
 """
@@ -610,6 +612,7 @@ def evaluate_speaker(
     index: int,
     seed: int,
     stems: Sequence[str],
+    independent=None,
 ) -> Dict[str, object]:
     """Clone one speaker from their first clip and score it against their other clips."""
     reference, held_out = files[0], files[1:]
@@ -618,6 +621,14 @@ def evaluate_speaker(
     target = np.mean(
         [encoder.embed_utterance(np.asarray(y, np.float32)) for y in real], axis=0
     )
+    independent_target = (
+        None
+        if independent is None
+        else np.mean(
+            [independent.embed_utterance(np.asarray(y, np.float32)) for y in real],
+            axis=0,
+        )
+    )
     real_f0 = np.concatenate([f0_track(y) for y in real])
     real_audio = np.concatenate(real)
 
@@ -625,6 +636,8 @@ def evaluate_speaker(
     base_seed = seed + 1000 * index
     clone = _synthesize(stems[0] + ".", embedding, speaker, base_seed)
     row["secs"] = secs(encoder.embed_utterance(clone), target)
+    if independent is not None:
+        row["ecapa"] = secs(independent.embed_utterance(clone), independent_target)
     clone_f0 = f0_track(clone)
     row["f0_error_semitones"] = f0_error_semitones(real_f0, clone_f0)
     row["f0_range_ratio"] = f0_range_ratio(real_f0, clone_f0)
@@ -1100,6 +1113,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     stems = [item["stem"] for item in load_sentences(args.sentences)][: args.stems]
     if not stems:
         raise SystemExit("--stems must be at least 1")
+    if args.independent_encoder != "none" and args.skip_single:
+        raise SystemExit(
+            "--independent-encoder scores the single-sentence study; drop --skip-single"
+        )
 
     from resemblyzer import VoiceEncoder
 
@@ -1130,6 +1147,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         from backend.score_engine_outputs import make_utmos_predictor
 
         recorder.predict_mos = make_utmos_predictor()
+    independent = None
+    if args.independent_encoder == "ecapa":
+        from backend.score_engine_outputs import make_ecapa_encoder
+
+        independent = make_ecapa_encoder()
 
     rows = []
     for n, speaker in enumerate(chosen):
@@ -1139,7 +1161,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             row: Dict[str, object] = {"speaker": speaker, "group": group}
             embedding = reference_embedding(encoder, files[0])
         else:
-            row = evaluate_speaker(encoder, speaker, files, group, n, args.seed, stems)
+            row = evaluate_speaker(
+                encoder, speaker, files, group, n, args.seed, stems, independent
+            )
             embedding = reference_embedding(encoder, files[0])
         row.update(
             evaluate_stimuli(
@@ -1170,6 +1194,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "typed_wer",
         "rtf",
     )
+    if independent is not None and not args.skip_single:
+        metrics += ("ecapa",)
     if recorder.predict_mos is not None:
         metrics += ("mos",)
     if classify is not None:
@@ -1178,7 +1204,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             *(f"emotion_recall_{label}" for label in EMOTIONS),
         )
     report = {
-        "judge": "resemblyzer (same encoder as the model: not independent)",
+        "judge": "resemblyzer (same encoder as the model: not independent)"
+        + (" and ECAPA-TDNN (independent)" if independent is not None else ""),
         "asr": None if transcribe is None else f"faster-whisper {args.whisper_model}",
         "speakers": len(rows),
         "rows": rows,
