@@ -34,6 +34,11 @@
             ],
             "title": "Files"
           },
+          "speaker_is_adult": {
+            "default": false,
+            "title": "Speaker Is Adult",
+            "type": "boolean"
+          },
           "terms_version": {
             "anyOf": [
               {
@@ -91,6 +96,11 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "speaker_is_adult": {
+            "default": false,
+            "title": "Speaker Is Adult",
+            "type": "boolean"
           },
           "terms_version": {
             "anyOf": [
