@@ -60,7 +60,7 @@ warning rather than a finding.
 * **Questions are at roughly chance** (0.52; a coin flip would give about 0.5): the final pitch is no more
   likely to rise for `?` than for `.`. This is consistent with a model that has no question input.
   The metric itself has **not been validated on natural speech** (a known question rendered by a human),
-  so treat this row as indicative until it has a positive control.
+  so treat this row as indicative until it has a positive control (since run, S0.3b below: it separates real yes/no questions from statements with an AUC of 0.67).
 
 ## Reproducibility (the S0 gate)
 
@@ -866,9 +866,49 @@ column has no earlier run to compare with.
 * Only the single-sentence study carries `ecapa`; the independent column is rejected with `--skip-single`
   instead of being silently dropped.
 
+## Positive control for the question metric (S0.3b, 2026-10-22)
+
+The `?` metric (final pitch slope over the last 0.3 s) reads about chance on SV2TTS output (52 %). That reading
+only means something if the metric separates real questions from real statements, so it was run on **human**
+speech: LibriSpeech test-clean (`0000.parquet`, 2620 utterances) with `python -m backend.question_control`.
+LibriSpeech transcripts have no punctuation, so the labels are a heuristic on the words: **question** = 4 to 15
+words, opens with an auxiliary and a pronoun ("DO YOU", "IS IT"), no speech attribution ("SAID", "ASKED"); **statement**
+= 4 to 15 words, opens with neither an auxiliary nor a wh-word, no attribution (a seeded sample of 300).
+Wh-questions are left out on purpose, they often fall in pitch.
+
+| | n | Mean final slope (semitones/s) | Share rising | AUC, question above statement |
+|---|---|---|---|---|
+| **Yes/no questions** | 21 | -0.4 [-12.1, 8.6] | **76 %** | **0.67** [0.53, 0.79] |
+| Statements | 297 | -6.1 [-8.3, -3.7] | 38 % | |
+
+Sensitivity (decided after reading the 21 labelled questions, so post hoc): dropping the 3 subjunctive wishes
+("WERE I BUT...", "MAY YOU...") gives n = 18, AUC 0.69 [0.56, 0.81]; also dropping the 2 whose question is followed
+by a few words of narration ("...I SUSPECT", "...I WENT ON") gives n = 16, AUC 0.74 [0.61, 0.85]. The interval stays
+above 0.5 in every variant.
+
+### What this shows
+
+* **The metric separates real questions from real statements, but only moderately.** A question ends on a
+  higher slope than a statement about two times in three (AUC 0.67 to 0.74); 76 % of the questions rise
+  against 38 % of the statements. It is not chance, so the 52 % on SV2TTS is not just a broken metric.
+* **Read the 52 % as "SV2TTS does not mark the question", with a caveat.** Real speech, which the metric sees
+  as roughly 0.7, is the reference the model should be compared with; the model's 52 % is a different
+  statistic (the same sentence typed with `?` against `.`), so the two numbers are not on one scale.
+* **The plan's target of 80 % for `?` is above what real speech reaches here** (76 % of labelled questions
+  rise): it is a ceiling the metric may not be able to show, so recalibrate it before treating a miss as a model fault.
+
+### Limits
+
+* **The labels are a word heuristic on unpunctuated text:** 21 questions, a few of them not questions or
+  ending in narration. The interval is wide (0.53 to 0.79).
+* **Book reading is not conversation.** Readers voice questions flatter than speakers do, which would
+  understate the contrast; the result applies to this metric on read English only.
+* Yes/no questions only; wh-questions and tag questions were not tested. Adult readers, one file, one seed.
+* A cleaner control needs punctuated read speech (for example LibriTTS, CC BY 4.0, a download), which was not fetched.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
 2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
-3. A positive control for the question metric (natural questions).
+3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
 4. Child and elderly speech from a source whose licence and consent terms have been verified.
