@@ -9,7 +9,7 @@
  */
 import { BRAND_NAME } from "@/lib/brand";
 
-export const TERMS_VERSION = "2026-09-30";
+export const TERMS_VERSION = "2026-10-23";
 export const TERMS_STATUS: "draft" | "published" = "draft";
 
 export interface TermsSection {
@@ -21,6 +21,10 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     heading: "Only use voices you may use",
     body: "Before a voice sample is accepted you confirm that you have the right to use that voice. Do not clone a voice without the permission of the person it belongs to.",
+  },
+  {
+    heading: "Adult voices only",
+    body: "Before a voice sample is accepted you also confirm that the speaker is 18 or older. Do not upload a child's voice: it is not supported, and nothing is promised about how it will sound.",
   },
   {
     heading: "What is stored",

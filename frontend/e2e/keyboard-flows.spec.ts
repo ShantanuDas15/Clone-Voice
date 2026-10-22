@@ -112,6 +112,8 @@ test("create a voice by file, generate, replay from history, delete it, then del
   await tabTo(page, page.getByRole("checkbox", { name: /right to use this voice/i }));
   await expectFocusRing(page);
   await page.keyboard.press("Space");
+  await tabTo(page, page.getByRole("checkbox", { name: /speaker is 18 or older/i }));
+  await page.keyboard.press("Space");
   await pressOn(page, page.getByRole("button", { name: "Create voice" }));
   await expect(page.getByText("Voice “Keyboard voice” created.")).toBeVisible({
     timeout: 120_000,

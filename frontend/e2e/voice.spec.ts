@@ -10,6 +10,7 @@ test("an unverified user cannot create a voice and is told why", async ({ page }
   await page.getByLabel("Voice name").fill("Nope");
   await page.locator("input[type=file]").setInputFiles(SAMPLE_WAV);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("checkbox", { name: /speaker is 18 or older/i }).check();
   const create = page.getByRole("button", { name: "Create voice" });
   await expect(create).toBeDisabled();
   await expect(page.getByText("Verify your email first.")).toBeVisible();
@@ -44,6 +45,7 @@ test("an empty file and a non-audio file are refused", async ({ page }) => {
   });
   await page.getByLabel("Voice name").fill("Fake");
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("checkbox", { name: /speaker is 18 or older/i }).check();
   await page.getByRole("button", { name: "Create voice" }).click();
   await expect(page.getByRole("alert").filter({ hasText: /.+/ }).first()).toBeVisible({
     timeout: 30_000,
@@ -66,6 +68,25 @@ test("consent is required: no request is made without it", async ({ page }) => {
   expect(uploads).toBe(0);
 });
 
+test("the speaker must be confirmed as an adult: no request is made without it", async ({
+  page,
+}) => {
+  await signUpVerified(page, "adultonly");
+  await page.goto("/voices");
+  let uploads = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith("/voice/upload")) uploads += 1;
+  });
+  await page.getByLabel("Voice name").fill("No adult confirmation");
+  await page.locator("input[type=file]").setInputFiles(SAMPLE_WAV);
+  await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("button", { name: "Create voice" }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Confirm the speaker is 18 or older" }),
+  ).toBeVisible();
+  expect(uploads).toBe(0);
+});
+
 test("two clips become one voice, with the recording advice shown", async ({ page }) => {
   await signUpVerified(page, "twoclips");
   await page.goto("/voices");
@@ -77,6 +98,7 @@ test("two clips become one voice, with the recording advice shown", async ({ pag
   ]);
   await expect(page.getByTestId("selected-file")).toHaveCount(2);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("checkbox", { name: /speaker is 18 or older/i }).check();
   await page.getByRole("button", { name: "Create voice" }).click();
   await expect(page.getByText("Voice “Two clips” created.")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByRole("region", { name: "Recording quality" })).toBeVisible();
@@ -94,7 +116,8 @@ test("add a clip to a voice, then remove it again", async ({ page }) => {
   await form
     .getByLabel("Voice sample")
     .setInputFiles({ name: "more.wav", mimeType: "audio/wav", buffer: readFileSync(SAMPLE_WAV) });
-  await form.getByRole("checkbox").check();
+  await form.getByRole("checkbox", { name: /right to use these samples/i }).check();
+  await form.getByRole("checkbox", { name: /speaker is 18 or older/i }).check();
   await form.getByRole("button", { name: "Add clips" }).click();
   await expect(row.getByText("Clip 2")).toBeVisible({ timeout: 120_000 });
 

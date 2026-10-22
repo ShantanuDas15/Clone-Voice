@@ -76,6 +76,7 @@ export async function createVoice(page: Page, name = "E2E voice"): Promise<void>
     .locator("input[type=file]")
     .setInputFiles(SAMPLE_WAV);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("checkbox", { name: /speaker is 18 or older/i }).check();
   await page.getByRole("button", { name: "Create voice" }).click();
   await expect(page.getByText(`Voice “${name}” created.`)).toBeVisible({ timeout: 120_000 });
 }
