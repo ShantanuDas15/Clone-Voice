@@ -28,6 +28,7 @@ export function ProfileClips({ profile }: { profile: VoiceProfile }) {
   const terms = useQuery({ queryKey: ["terms"], queryFn: fetchTerms, staleTime: 5 * 60_000 });
   const [files, setFiles] = useState<File[]>([]);
   const [consent, setConsent] = useState(false);
+  const [adult, setAdult] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const room = MAX_CLIPS - samples.length;
@@ -39,6 +40,7 @@ export function ProfileClips({ profile }: { profile: VoiceProfile }) {
     setError(null);
     if (files.length === 0) return setError("Choose an audio file");
     if (!consent) return setError("Confirm you have the right to use this voice");
+    if (!adult) return setError("Confirm the speaker is 18 or older");
     if (files.length > room) return setError(`This voice can take ${room} more clip(s).`);
     setProgress(0);
     try {
@@ -51,10 +53,12 @@ export function ProfileClips({ profile }: { profile: VoiceProfile }) {
       notify.success(`Added to “${profile.name}”.`);
       setFiles([]);
       setConsent(false);
+      setAdult(false);
     } catch (err) {
       if (!(err instanceof ApiError)) throw err;
       if (err.kind === "TERMS_CHANGED") {
         setConsent(false);
+        setAdult(false);
         setError("The terms have changed. Please review them and confirm again.");
       } else setError(uploadErrorMessage(err));
     } finally {
@@ -143,6 +147,16 @@ export function ProfileClips({ profile }: { profile: VoiceProfile }) {
                 className="mt-1 h-4 w-4"
               />
               <span>I confirm I have the right to use these samples of this voice.</span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={adult}
+                onChange={(e) => setAdult(e.target.checked)}
+                disabled={busy}
+                className="mt-1 h-4 w-4"
+              />
+              <span>I confirm the speaker is 18 or older.</span>
             </label>
             {progress !== null && (
               <p role="status">

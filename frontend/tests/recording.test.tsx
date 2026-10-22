@@ -271,7 +271,8 @@ describe("UploadVoiceForm recording", () => {
     vi.restoreAllMocks();
 
     await user.type(screen.getByLabelText("Voice name"), "Mine");
-    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("checkbox", { name: /right to use this voice/ }));
+    await user.click(screen.getByRole("checkbox", { name: /speaker is 18 or older/ }));
     await user.click(screen.getByRole("button", { name: "Create voice" }));
     await vi.waitFor(() => expect(uploads).toBe(1));
   });

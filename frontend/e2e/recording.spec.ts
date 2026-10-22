@@ -22,6 +22,7 @@ test("record with a fake microphone, preview, and submit a real WEBM upload", as
   const upload = page.waitForRequest((r) => r.url().endsWith("/voice/upload"));
   await page.getByLabel("Voice name").fill("Recorded");
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("checkbox", { name: /speaker is 18 or older/i }).check();
   await page.getByRole("button", { name: "Create voice" }).click();
   const request = await upload;
 

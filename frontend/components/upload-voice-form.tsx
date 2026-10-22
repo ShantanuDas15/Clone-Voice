@@ -61,6 +61,8 @@ export function UploadVoiceForm() {
   const [fileError, setFileError] = useState<string>();
   const [consent, setConsent] = useState(false);
   const [consentError, setConsentError] = useState<string>();
+  const [adult, setAdult] = useState(false);
+  const [adultError, setAdultError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [created, setCreated] = useState<VoiceProfileUpload | null>(null);
@@ -153,7 +155,8 @@ export function UploadVoiceForm() {
     setNameError(parsed.success ? undefined : parsed.error.issues[0]?.message);
     setFileError(files.length > 0 ? undefined : "Choose an audio file");
     setConsentError(consent ? undefined : "Confirm you have the right to use this voice");
-    if (!parsed.success || files.length === 0 || !consent) {
+    setAdultError(adult ? undefined : "Confirm the speaker is 18 or older");
+    if (!parsed.success || files.length === 0 || !consent || !adult) {
       focusFirstInvalid();
       return;
     }
@@ -168,11 +171,13 @@ export function UploadVoiceForm() {
       setFiles([]);
       setRecorderKey((k) => k + 1); // a fresh recorder for the next voice
       setConsent(false);
+      setAdult(false);
     } catch (err) {
       if (!(err instanceof ApiError)) throw err;
       if (err.kind === "TERMS_CHANGED") {
         // The wording changed under the user: refetch it and ask for consent again.
         setConsent(false);
+        setAdult(false);
         void client.invalidateQueries({ queryKey: ["terms"] });
         setFormError("The terms have changed. Please review them and confirm again.");
       } else if (err.status === 422 && err.fieldErrors.length > 0) {
@@ -292,6 +297,25 @@ export function UploadVoiceForm() {
         {consentError && (
           <Alert tone="danger" className="mt-1">
             {consentError}
+          </Alert>
+        )}
+      </div>
+
+      <div>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={adult}
+            onChange={(e) => setAdult(e.target.checked)}
+            disabled={pending}
+            aria-invalid={adultError ? true : undefined}
+            className="mt-1 h-4 w-4"
+          />
+          <span>I confirm the speaker is 18 or older.</span>
+        </label>
+        {adultError && (
+          <Alert tone="danger" className="mt-1">
+            {adultError}
           </Alert>
         )}
       </div>

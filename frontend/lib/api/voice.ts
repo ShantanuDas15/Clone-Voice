@@ -71,6 +71,7 @@ export async function uploadProfile(
   const form = new FormData();
   form.append("name", input.name);
   form.append("consent_confirmed", "true");
+  form.append("speaker_is_adult", "true"); // the form only submits once this is ticked (decision Q4)
   if (input.termsVersion) form.append("terms_version", input.termsVersion);
   const field = input.files.length === 1 ? "file" : "files";
   for (const f of input.files) form.append(field, canonicalAudioFile(f));
@@ -98,6 +99,7 @@ export async function addClips(
 ): Promise<VoiceProfileUpload> {
   const form = new FormData();
   form.append("consent_confirmed", "true");
+  form.append("speaker_is_adult", "true"); // the form only submits once this is ticked (decision Q4)
   if (input.termsVersion) form.append("terms_version", input.termsVersion);
   const field = input.files.length === 1 ? "file" : "files";
   for (const f of input.files) form.append(field, canonicalAudioFile(f));

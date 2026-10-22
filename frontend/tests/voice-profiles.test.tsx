@@ -173,13 +173,16 @@ describe("UploadVoiceForm", () => {
   const wav = () => new File([new Uint8Array(2000)], "sample.wav", { type: "audio/wav" });
 
   async function fillAndSubmit(
-    opts: { consent?: boolean; file?: File | null; name?: string } = {},
+    opts: { consent?: boolean; adult?: boolean; file?: File | null; name?: string } = {},
   ) {
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText("Voice name"), opts.name ?? "My voice");
     if (opts.file !== null)
       await user.upload(screen.getByLabelText("Voice sample"), opts.file ?? wav());
-    if (opts.consent !== false) await user.click(screen.getByRole("checkbox"));
+    if (opts.consent !== false)
+      await user.click(screen.getByRole("checkbox", { name: /right to use this voice/ }));
+    if (opts.adult !== false)
+      await user.click(screen.getByRole("checkbox", { name: /speaker is 18 or older/ }));
     await user.click(screen.getByRole("button", { name: "Create voice" }));
     return user;
   }
@@ -221,6 +224,7 @@ describe("UploadVoiceForm", () => {
     expect(url).toBe("/voice/upload");
     expect(form.get("name")).toBe("My voice");
     expect(form.get("consent_confirmed")).toBe("true");
+    expect(form.get("speaker_is_adult")).toBe("true");
     expect(form.get("terms_version")).toBe("1");
     expect((form.get("file") as File).name).toBe("sample.wav");
     expect((form.get("file") as File).type).toBe("audio/wav"); // File's own type, never overridden
@@ -237,7 +241,8 @@ describe("UploadVoiceForm", () => {
       wav(),
       new File([new Uint8Array(3000)], "b.wav", { type: "audio/wav" }),
     ]);
-    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("checkbox", { name: /right to use this voice/ }));
+    await user.click(screen.getByRole("checkbox", { name: /speaker is 18 or older/ }));
     await user.click(screen.getByRole("button", { name: "Create voice" }));
     expect(await screen.findByText(/created\./i)).toBeInTheDocument();
     const form = post.mock.calls[0]![1] as FormData;
@@ -324,6 +329,23 @@ describe("UploadVoiceForm", () => {
     expect(calls).toBe(0);
   });
 
+  it("refuses a voice whose speaker is not confirmed as an adult, and says so", async () => {
+    let calls = 0;
+    server.use(
+      mswHttp.post(
+        `${API}/voice/upload`,
+        () => ((calls += 1), HttpResponse.json({}, { status: 201 })),
+      ),
+    );
+    wrap(<UploadVoiceForm />);
+    await fillAndSubmit({ adult: false });
+    expect(await screen.findByText("Confirm the speaker is 18 or older")).toBeInTheDocument();
+    const adult = screen.getByRole("checkbox", { name: /speaker is 18 or older/ });
+    expect(adult).toHaveAttribute("aria-invalid", "true");
+    expect(adult).toHaveFocus();
+    expect(calls).toBe(0);
+  });
+
   it("on 409 terms-changed, resets consent and refetches the terms", async () => {
     let termsFetches = 0;
     server.use(
@@ -344,7 +366,7 @@ describe("UploadVoiceForm", () => {
     wrap(<UploadVoiceForm />);
     await fillAndSubmit();
     expect(await screen.findByText(/terms have changed\. Please review/i)).toBeInTheDocument();
-    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
     await waitFor(() => expect(termsFetches).toBeGreaterThanOrEqual(2));
     expect(await screen.findByRole("link", { name: "read the terms" })).toHaveAttribute(
       "href",
@@ -598,12 +620,19 @@ describe("ProfileClips", () => {
     await user.click(within(form).getByRole("button", { name: "Add clips" }));
     expect(await within(form).findByText(/confirm you have the right/i)).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
-    await user.click(within(form).getByRole("checkbox"));
+    await user.click(within(form).getByRole("checkbox", { name: /right to use these samples/ }));
+    await user.click(within(form).getByRole("button", { name: "Add clips" }));
+    expect(await within(form).findByRole("alert")).toHaveTextContent(
+      "Confirm the speaker is 18 or older",
+    );
+    expect(post).not.toHaveBeenCalled();
+    await user.click(within(form).getByRole("checkbox", { name: /speaker is 18 or older/ }));
     await user.click(within(form).getByRole("button", { name: "Add clips" }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [url, body] = post.mock.calls[0] as [string, FormData];
     expect(url).toBe(`/voice/profiles/${fixtures.profile.id}/samples`);
     expect(body.get("consent_confirmed")).toBe("true");
+    expect(body.get("speaker_is_adult")).toBe("true");
     expect(body.get("terms_version")).toBe("1");
     expect((body.get("file") as File).name).toBe("more.wav");
     post.mockRestore();

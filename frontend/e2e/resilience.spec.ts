@@ -93,6 +93,7 @@ test("going offline during an upload ends in a clear message and a consistent li
   await page.getByLabel("Voice name").fill("Offline voice");
   await page.locator("input[type=file]").setInputFiles(SAMPLE_WAV);
   await page.getByRole("checkbox", { name: /right to use this voice/i }).check();
+  await page.getByRole("checkbox", { name: /speaker is 18 or older/i }).check();
   await page.getByRole("button", { name: "Create voice" }).click();
   await expect(page.getByText(/interrupted/i)).toBeVisible();
   await page.waitForTimeout(2000);
