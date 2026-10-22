@@ -816,10 +816,59 @@ Group gaps: WER 3.5 points (paragraphs) and 3.6 points (typed), both within the 
 * Not repeated: this run was not compared with a second run of the same seed, so determinism of WER was not
   re-checked here (the seeded gate was held in S0.4 and S0.1e).
 
+## Independent speaker similarity of the SV2TTS baseline (S0.1f, 2026-10-22)
+
+The single-sentence study repeated with `--independent-encoder ecapa`, which adds an `ecapa` column: the same
+cosine as `secs`, but computed by SpeechBrain ECAPA-TDNN (VoxCeleb) instead of the encoder that conditions the
+synthesizer. Same 20-speaker corpus, current `main` (`dcecf60`) plus the new column, CPU (16 threads), real
+weights, seed 1234, in a separate venv with torch 2.6 and a real `torchaudio` (the main venv's torch 2.13 has no
+matching build, and a stubbed one gives wrong ECAPA embeddings: cosine 0.02 against the real ones):
+
+```bash
+python -m backend.evaluate_synthesis --data-dir <corpus> --groups <corpus>/groups.json --speakers 20 \
+  --independent-encoder ecapa --whisper-model none --paragraphs 0 --typed 0 --seed 1234
+```
+
+| | All (n=20) | adult_low_f0 | adult_high_f0 | Gap | Plan target |
+|---|---|---|---|---|---|
+| **`secs`**, resemblyzer (the model's own encoder) | **0.710** [0.666, 0.748] (0.50 to 0.82) | 0.753 [0.717, 0.785] | 0.668 [0.604, 0.728] | 0.084 | gap ≤ 0.05 |
+| **`ecapa`**, independent | **0.290** [0.234, 0.341] (-0.01 to 0.49) | 0.337 [0.276, 0.387] | 0.244 [0.152, 0.335] | 0.093 | gap ≤ 0.05 |
+
+Per-speaker correlation of the two scores: r = 0.80. `within_gap_limit` is false for both.
+
+### What this shows
+
+* **The model's own judge flatters it by a wide margin: 0.71 against 0.29.** The two scales are not comparable
+  (S0.1d: read paired differences, not absolute values), but the plan's SECS target is stated on an independent
+  encoder, so the absolute `secs` figures of S0.4 and later say little about it.
+* **Both encoders find the same weakness.** High-pitch voices are cloned worse (gap 0.084 and 0.093), the
+  ordering agrees on 20 speakers (r = 0.80), and the fairness limit of 0.05 is missed under either judge. The
+  intervals overlap at n = 10 per group, so this is a lead, not a finding.
+* **One clone does not sound like its speaker to either judge:** speaker 1284 (high F0) scores 0.50 on
+  resemblyzer, the lowest of the 20, and -0.01 on ECAPA. The next worst on ECAPA are 3729, 4970 and 8224 (0.08
+  to 0.13), all also in the lower half on resemblyzer.
+
+### Reproducibility check
+
+`secs` is 0.710 here, against 0.760 in the S0.4 record and 0.74 in the S0.3 run on the same `main`. The S0.4
+number predates the S1 to S3 changes, which S0.3 already showed move it. The remaining 0.03 against S0.3 may be
+the torch version (2.6 here, 2.13 there); this was **not** isolated, so it is stated as unexplained. The `ecapa`
+column has no earlier run to compare with.
+
+### Limits
+
+* ECAPA was trained on VoxCeleb (celebrity interview speech) and its absolute values are not a percentage of
+  anything; it is a second opinion, not ground truth. Only the listening test decides.
+* The run was in a different environment (torch 2.6, `PYTHONPATH` overlay) from the other S0 runs, so
+  differences in `secs` and the other columns of this report are not attributed to the code.
+* One seed, adults only, n = 10 per group, one reference clip per speaker. `speechbrain` and the 390 MB ECAPA
+  weights are not in `requirements-dev.txt`.
+* Only the single-sentence study carries `ecapa`; the independent column is rejected with `--skip-single`
+  instead of being silently dropped.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
-2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), and an **independent** speaker encoder
-   (plan S0.1 and S0.3, still open), and a first blind listening test of the S1 pause lengths.
+2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
 3. A positive control for the question metric (natural questions).
 4. Child and elderly speech from a source whose licence and consent terms have been verified.
