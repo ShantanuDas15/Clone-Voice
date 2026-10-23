@@ -906,9 +906,57 @@ above 0.5 in every variant.
 * Yes/no questions only; wh-questions and tag questions were not tested. Adult readers, one file, one seed.
 * A cleaner control needs punctuated read speech (for example LibriTTS, CC BY 4.0, a download), which was not fetched.
 
+## Elderly adult speakers against a same-source control (S0.2b/S0.2c, 2026-10-23)
+
+First real run of the Common Voice builder. Data: Common Voice Scripted Speech 26.0, **American English (Male)** subset
+(MDC Curators, CC0-1.0, accents exactly "United States English", gender `male_masculine`), shipped as speaker-disjoint
+`train.tsv`/`dev.tsv`/`test.tsv` with no `validated.tsv`, which `prepare_cv_corpus` now reads (S0.2c, `a23b826`). The
+subset holds 176 speakers in their sixties, 67 in their seventies and 9 in their eighties. Ten speakers per group were
+chosen (`--per-group 10`), named by a hash of `client_id`, and written to a scratch directory outside the repository
+(the licence forbids re-hosting and identifying speakers). `elderly` is sixties and seventies; `cv_adult_control` is
+twenties to forties; both come from the same crowd-sourced recordings, so only age differs. Same recipe and
+environment as S0.1f (torch 2.6, real `torchaudio`, CPU, real weights, seed 1234):
+
+```bash
+python -m backend.evaluate_synthesis --data-dir <corpus> --groups <corpus>/groups.json --speakers 20 \
+  --independent-encoder ecapa --whisper-model none --paragraphs 0 --typed 0 --seed 1234
+```
+
+| | elderly (n=10) | cv_adult_control (n=10) | Gap | Within limit |
+|---|---|---|---|---|
+| `secs`, resemblyzer | 0.699 [0.658, 0.742] | 0.733 [0.702, 0.758] | 0.033 | yes (0.05) |
+| `ecapa`, independent | 0.292 [0.233, 0.349] | 0.319 [0.259, 0.377] | 0.026 | yes (0.05) |
+| spectral distance, dB (lower is better) | 6.52 [5.59, 7.43] | 5.60 [4.56, 6.59] | 0.93 | no |
+| F0 error, semitones | 1.89 [0.56, 3.53] (n=8) | 2.13 [1.22, 3.17] | 0.24 | no |
+| F0 range ratio | 0.652 [0.397, 0.906] (n=8) | 0.561 [0.421, 0.725] | 0.09 | no |
+| question-rise rate | 0.578 [0.467, 0.711] (n=9) | 0.365 [0.260, 0.490] | 0.21 | no |
+| exclamation-lift rate | 0.244 (n=9) | 0.245 | 0.001 | yes |
+| RTF | 3.41 | 3.51 | 0.10 | no |
+
+### What this shows
+
+* **Elderly adult male voices are cloned about as well as younger ones on both judges.** The gaps (0.033 and 0.026)
+  are inside the 0.05 limit, the intervals overlap, and the ECAPA mean (0.292) matches the LibriSpeech baseline
+  (0.290, S0.1f). At n = 10 this is the absence of a detectable difference, not proof of none.
+* **The one lead is spectral distance:** 6.52 dB for elderly against 5.60 dB (gap 0.93 dB, outside the plan's limit,
+  intervals overlapping). It may reflect aged voice quality (breathiness, roughness) being reproduced less well;
+  this was not tested.
+* `secs` here (0.70 to 0.73) is not comparable with the LibriSpeech 0.71 of S0.1f: different corpus, microphones and
+  codec. Only the elderly-against-control contrast is meaningful.
+
+### Limits
+
+* **Adult male speakers only.** The subset is male; nothing here says anything about elderly women, and no claim is
+  made for them. Children remain out of scope (decision Q4).
+* n = 10 per group, one seed, one reference per speaker; most intervals overlap. F0 metrics have 8 or 9 elderly
+  speakers because the pitch tracker returned no value for the others.
+* Age is self-declared and the oldest Common Voice band is the seventies and eighties; speakers with enough clips
+  to qualify may be frequent contributors.
+* No word error rate (`--whisper-model none`), no listening test.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
 2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
 3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
-4. Child and elderly speech from a source whose licence and consent terms have been verified.
+4. ~~Elderly speech from a source with verified licence terms~~ (done, adult males only, section above); an elderly **female** group and child speech remain open (children out of scope, Q4).

@@ -203,7 +203,7 @@ def test_builder_is_deterministic(tmp_path):
 
 
 def test_main_rejects_a_missing_dataset_and_a_bad_count(tmp_path):
-    with pytest.raises(SystemExit, match="validated.tsv"):
+    with pytest.raises(SystemExit, match="no validated.tsv"):
         cv.main(["--cv-dir", str(tmp_path), "--out", str(tmp_path / "o")])
     cv_dir = _make_cv(tmp_path, {"old1": ("sixties", FULL)})
     with pytest.raises(SystemExit, match="per-group"):
@@ -255,3 +255,37 @@ def test_builder_reads_real_mp3_clips_and_the_study_loader_accepts_the_output(tm
     groups = es.load_groups(out / "groups.json")
     assert [len(files) for files in data.values()] == [6]
     assert set(groups.values()) == {"elderly"}
+
+
+def test_a_release_split_into_train_dev_test_is_read_together(tmp_path):
+    cv_dir = _make_cv(
+        tmp_path, {"old1": ("sixties", FULL), "adult1": ("thirties", FULL)}
+    )
+    lines = (cv_dir / "validated.tsv").read_text().splitlines()
+    header, rows = lines[0], lines[1:]
+    (cv_dir / "validated.tsv").unlink()
+    for name, chunk in (("train", rows[:9]), ("dev", rows[9:]), ("test", [])):
+        (cv_dir / f"{name}.tsv").write_text("\n".join([header, *chunk]) + "\n")
+
+    assert [p.name for p in cv.tsv_files(cv_dir)] == [
+        "train.tsv",
+        "dev.tsv",
+        "test.tsv",
+    ]
+    by_group = cv.read_speakers(cv.tsv_files(cv_dir))
+    assert (
+        set(by_group["elderly"]) == {"old1"} and len(by_group["elderly"]["old1"]) == 9
+    )
+    assert set(by_group["cv_adult_control"]) == {"adult1"}
+
+
+def test_a_quote_mark_in_a_sentence_does_not_swallow_the_next_rows(tmp_path):
+    tsv = tmp_path / "validated.tsv"
+    tsv.write_text(
+        "client_id\tpath\tsentence\tage\tgender\n"
+        'a\ta1.mp3\t"He said hello\tsixties\tmale\n'
+        "b\tb1.mp3\tplain\ttwenties\tmale\n"
+    )
+    by_group = cv.read_speakers(tsv)
+    assert set(by_group["elderly"]) == {"a"}
+    assert set(by_group["cv_adult_control"]) == {"b"}
