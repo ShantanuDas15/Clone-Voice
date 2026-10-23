@@ -2,7 +2,8 @@
 
     python -m backend.prepare_cv_corpus --cv-dir <cv-corpus/en> --out <dir> [--per-group 10]
 
-Reads ``validated.tsv`` and the ``clips/`` folder of an English Common Voice release (licence CC0-1.0)
+Reads ``validated.tsv`` (or, for a release split into speaker-disjoint subsets, ``train.tsv``,
+``dev.tsv`` and ``test.tsv``) and the ``clips/`` folder of an English Common Voice release (licence CC0-1.0)
 and writes, per chosen speaker, one *reference* of 10 to 30 s (several of the speaker's own clips
 joined with a short silence) and five *held-out* clips of 3 to 20 s, as 16 kHz mono WAV, in the layout
 ``backend/evaluate_synthesis.py`` reads (``<out>/<speaker>/0_ref.wav``, ``1_<clip>.wav`` ...), plus
@@ -34,7 +35,7 @@ import logging
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import librosa
 import numpy as np
@@ -116,14 +117,30 @@ def plan_speaker(
 # --- Reading and writing (needs the dataset) ---------------------------------
 
 
-def read_speakers(validated: Path) -> Dict[str, Dict[str, List[str]]]:
+SPLIT_FILES = ("train.tsv", "dev.tsv", "test.tsv")
+
+
+def tsv_files(cv_dir: Path) -> List[Path]:
+    """The metadata files of a release: ``validated.tsv``, else the train/dev/test split files."""
+    validated = cv_dir / "validated.tsv"
+    if validated.is_file():
+        return [validated]
+    return [cv_dir / name for name in SPLIT_FILES if (cv_dir / name).is_file()]
+
+
+def read_speakers(
+    tsv: Union[Path, Sequence[Path]],
+) -> Dict[str, Dict[str, List[str]]]:
     """Group the clip paths of every speaker with a usable age: ``{group: {client_id: [paths]}}``."""
+    paths = [tsv] if isinstance(tsv, Path) else list(tsv)
     groups: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
-    with open(validated, newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle, delimiter="\t"):
-            group = age_group(row.get("age"))
-            if group is not None and row.get("client_id") and row.get("path"):
-                groups[group][row["client_id"]].append(row["path"])
+    for path in paths:
+        with open(path, newline="", encoding="utf-8") as handle:
+            # QUOTE_NONE: sentences hold stray quote marks that would otherwise merge rows.
+            for row in csv.DictReader(handle, delimiter="\t", quoting=csv.QUOTE_NONE):
+                group = age_group(row.get("age"))
+                if group is not None and row.get("client_id") and row.get("path"):
+                    groups[group][row["client_id"]].append(row["path"])
     return {g: dict(clients) for g, clients in groups.items()}
 
 
@@ -167,7 +184,7 @@ def choose_speakers(
 def write_corpus(cv_dir: Path, out: Path, per_group: int) -> Dict[str, object]:
     """Write the chosen speakers' audio, ``groups.json`` and ``manifest.json``; return the manifest."""
     clips_dir = cv_dir / "clips"
-    by_group = read_speakers(cv_dir / "validated.tsv")
+    by_group = read_speakers(tsv_files(cv_dir))
     gap = np.zeros(int(JOIN_SILENCE_SECONDS * SAMPLE_RATE), dtype=np.float32)
     groups: Dict[str, str] = {}
     details: Dict[str, object] = {}
@@ -229,8 +246,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     if args.per_group < 1:
         raise SystemExit("--per-group must be at least 1")
-    if not (args.cv_dir / "validated.tsv").is_file():
-        raise SystemExit(f"{args.cv_dir / 'validated.tsv'} not found")
+    if not tsv_files(args.cv_dir):
+        raise SystemExit(
+            f"{args.cv_dir}: no validated.tsv or train/dev/test .tsv files found"
+        )
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     manifest = write_corpus(args.cv_dir, args.out, args.per_group)
     counts: Dict[str, int] = defaultdict(int)
