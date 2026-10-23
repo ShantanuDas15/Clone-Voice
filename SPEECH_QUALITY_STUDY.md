@@ -964,8 +964,9 @@ in their sixties, 41 in their seventies and 6 in their eighties). Ten speakers p
 | `secs`, resemblyzer | 0.669 [0.625, 0.711] | 0.677 [0.640, 0.711] | 0.008 | yes (0.05) |
 | `ecapa`, independent | 0.261 [0.148, 0.362] | 0.203 [0.155, 0.254] | 0.058 | no |
 | spectral distance, dB (lower is better) | 6.10 [5.54, 6.64] | 6.96 [5.90, 8.04] | 0.86 | no |
-| F0 error, semitones | 11.28 [3.86, 20.30] (n=9) | 6.88 [2.28, 12.89] | 4.40 | no |
-| F0 range ratio | 0.900 [0.534, 1.246] (n=9) | 0.668 [0.313, 1.160] | 0.23 | no |
+| F0 error, semitones (guarded, S0.2e) | 10.17 [2.29, 20.39] (n=8) | 1.94 [1.22, 2.76] (n=7) | 8.22 | no |
+| F0 range ratio (guarded) | 1.005 [0.648, 1.310] (n=8) | 0.765 [0.279, 1.428] (n=7) | 0.24 | no |
+| clone voiced fraction | 0.455 [0.277, 0.621] | 0.542 [0.370, 0.697] | 0.09 | no |
 | question-rise rate | 0.553 [0.433, 0.683] | 0.390 [0.310, 0.470] | 0.16 | no |
 | RTF | 3.74 | 3.58 | 0.16 | no |
 
@@ -976,11 +977,18 @@ What this shows:
   women are cloned better; it does show the age effect is not a consistent deficit across the two groups.
 * **Women score lower than men on both judges:** ECAPA 0.20 to 0.26 against 0.29 to 0.32, secs 0.67 to 0.68 against
   0.70 to 0.73. The groups come from different speakers and corpora, so this is a lead, not a gender comparison.
-* **The F0 error is large (6.9 to 11.3 semitones, intervals up to 20) and is not a pitch result.** Checked afterwards (S0.2e):
-  the tracker sits at its 60 Hz floor on one speaker's real recordings, and two re-synthesised clones were mostly unvoiced
-  (8 and 14 voiced frames, pinned at 1000 and 62 Hz) yet passed the old 5-frame minimum. The metric now refuses such
-  tracks (`None`) and reports `clone_voiced_fraction`; the figures above predate that and are not re-scored. The
-  mostly unvoiced clones may be a genuine synthesis fault for those voices; nobody has listened to them.
+* **Re-scored with the F0 guard (S0.2e, same speakers, seed and code otherwise; secs, ECAPA, spectral distance and question rate
+  reproduced to the last digit).** Five of the 20 women's clones (three control, two elderly) now have no F0 error because
+  too little of the clone is voiced (voiced fractions 0.00 to 0.27 against 0.4 to 0.85 for the rest). Control women drop
+  from 6.88 to 1.94 semitones, a normal value. **Elderly women still read 10.17, and two speakers cause it:**
+  `109292d3b481` (41.8 semitones, ECAPA -0.05, whose real recordings read 76 Hz on five clips and 135 Hz on one) and
+  `062a915b1870` (22.0 semitones, which did not reproduce when re-synthesised with a different sentence); the other six
+  are 0.0 to 6.5. These two pass the guard, so the cause is unexplained: a tracker error on the real or the cloned audio,
+  or a clone that really is far off. **Do not read the elderly F0 error as a pitch result for women** until those two
+  are inspected. The men's F0 columns are unchanged by the guard (nothing rejected).
+* **Clones of some women are largely unvoiced.** The elderly clone of `09d129e07097` has voiced fraction 0.00 yet ECAPA 0.45,
+  the opposite of what an unvoiced clone should score; nobody has listened to it. Whether these are synthesis faults or tracker
+  failures is open.
 * **The spectral-distance lead of the men does not reproduce:** elderly women are 0.86 dB *better* than the control, so
   there is no evidence that aged voice quality is reproduced worse in general.
 
@@ -992,4 +1000,4 @@ rate, no listening test. Nothing in this section covers children (decision Q4).
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
 2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
 3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
-4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked and the metric guarded (S0.2e); the elderly F0 columns still need re-scoring with it.
+4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked, the metric guarded and both studies re-scored (S0.2e/S0.2f); two elderly-women speakers (`109292d3b481`, `062a915b1870`) still give 42 and 22 semitones and need inspecting.
