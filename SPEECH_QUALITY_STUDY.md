@@ -906,7 +906,7 @@ above 0.5 in every variant.
 * Yes/no questions only; wh-questions and tag questions were not tested. Adult readers, one file, one seed.
 * A cleaner control needs punctuated read speech (for example LibriTTS, CC BY 4.0, a download), which was not fetched.
 
-## Elderly adult speakers against a same-source control (S0.2b/S0.2c, 2026-10-23)
+## Elderly adult speakers against a same-source control (S0.2b/S0.2c/S0.2d, 2026-10-23)
 
 First real run of the Common Voice builder. Data: Common Voice Scripted Speech 26.0, **American English (Male)** subset
 (MDC Curators, CC0-1.0, accents exactly "United States English", gender `male_masculine`), shipped as speaker-disjoint
@@ -954,9 +954,40 @@ python -m backend.evaluate_synthesis --data-dir <corpus> --groups <corpus>/group
   to qualify may be frequent contributors.
 * No word error rate (`--whisper-model none`), no listening test.
 
+### Elderly women (same recipe, 2026-10-23)
+
+Same procedure on the **American English (Female)** subset (MDC Curators, CC0-1.0, gender `female_feminine`; 136 speakers
+in their sixties, 41 in their seventies and 6 in their eighties). Ten speakers per group, seed 1234, no code change.
+
+| | elderly (n=10) | cv_adult_control (n=10) | Gap | Within limit |
+|---|---|---|---|---|
+| `secs`, resemblyzer | 0.669 [0.625, 0.711] | 0.677 [0.640, 0.711] | 0.008 | yes (0.05) |
+| `ecapa`, independent | 0.261 [0.148, 0.362] | 0.203 [0.155, 0.254] | 0.058 | no |
+| spectral distance, dB (lower is better) | 6.10 [5.54, 6.64] | 6.96 [5.90, 8.04] | 0.86 | no |
+| F0 error, semitones | 11.28 [3.86, 20.30] (n=9) | 6.88 [2.28, 12.89] | 4.40 | no |
+| F0 range ratio | 0.900 [0.534, 1.246] (n=9) | 0.668 [0.313, 1.160] | 0.23 | no |
+| question-rise rate | 0.553 [0.433, 0.683] | 0.390 [0.310, 0.470] | 0.16 | no |
+| RTF | 3.74 | 3.58 | 0.16 | no |
+
+What this shows:
+
+* **Resemblyzer finds no age gap for women (0.008). ECAPA's gap (0.058) points the other way from the men's:** elderly women
+  score higher (0.261) than the younger control (0.203). The intervals overlap, so this is not a finding that elderly
+  women are cloned better; it does show the age effect is not a consistent deficit across the two groups.
+* **Women score lower than men on both judges:** ECAPA 0.20 to 0.26 against 0.29 to 0.32, secs 0.67 to 0.68 against
+  0.70 to 0.73. The groups come from different speakers and corpora, so this is a lead, not a gender comparison.
+* **The F0 error is large (6.9 to 11.3 semitones, intervals up to 20) and should not be read as a pitch result.** Errors
+  of this size are what an octave error in the pitch tracker looks like, and one speaker can dominate n = 9 or 10; it was
+  not checked, so the F0 columns for women are unreliable until the tracker output is inspected.
+* **The spectral-distance lead of the men does not reproduce:** elderly women are 0.86 dB *better* than the control, so
+  there is no evidence that aged voice quality is reproduced worse in general.
+
+Limits (in addition to those above): adult women only here, n = 10 per group, intervals mostly overlap; no word error
+rate, no listening test. Nothing in this section covers children (decision Q4).
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
 2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
 3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
-4. ~~Elderly speech from a source with verified licence terms~~ (done, adult males only, section above); an elderly **female** group and child speech remain open (children out of scope, Q4).
+4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). Open from the elderly run: check the F0 tracker output for octave errors on the female groups.
