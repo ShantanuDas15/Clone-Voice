@@ -976,9 +976,11 @@ What this shows:
   women are cloned better; it does show the age effect is not a consistent deficit across the two groups.
 * **Women score lower than men on both judges:** ECAPA 0.20 to 0.26 against 0.29 to 0.32, secs 0.67 to 0.68 against
   0.70 to 0.73. The groups come from different speakers and corpora, so this is a lead, not a gender comparison.
-* **The F0 error is large (6.9 to 11.3 semitones, intervals up to 20) and should not be read as a pitch result.** Errors
-  of this size are what an octave error in the pitch tracker looks like, and one speaker can dominate n = 9 or 10; it was
-  not checked, so the F0 columns for women are unreliable until the tracker output is inspected.
+* **The F0 error is large (6.9 to 11.3 semitones, intervals up to 20) and is not a pitch result.** Checked afterwards (S0.2e):
+  the tracker sits at its 60 Hz floor on one speaker's real recordings, and two re-synthesised clones were mostly unvoiced
+  (8 and 14 voiced frames, pinned at 1000 and 62 Hz) yet passed the old 5-frame minimum. The metric now refuses such
+  tracks (`None`) and reports `clone_voiced_fraction`; the figures above predate that and are not re-scored. The
+  mostly unvoiced clones may be a genuine synthesis fault for those voices; nobody has listened to them.
 * **The spectral-distance lead of the men does not reproduce:** elderly women are 0.86 dB *better* than the control, so
   there is no evidence that aged voice quality is reproduced worse in general.
 
@@ -990,4 +992,4 @@ rate, no listening test. Nothing in this section covers children (decision Q4).
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
 2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
 3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
-4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). Open from the elderly run: check the F0 tracker output for octave errors on the female groups.
+4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked and the metric guarded (S0.2e); the elderly F0 columns still need re-scoring with it.
