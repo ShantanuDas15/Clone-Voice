@@ -38,6 +38,16 @@ def email_verification_off_by_default(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def adult_confirmation_off_by_default(monkeypatch):
+    """Most tests upload a clip without the speaker_is_adult field.
+
+    The requirement itself is covered in test_adult_confirmation.py, which
+    switches it on explicitly (and checks the shipped default).
+    """
+    monkeypatch.setattr(settings, "REQUIRE_ADULT_CONFIRMATION", False)
+
+
+@pytest.fixture(autouse=True)
 def quality_gate_off_by_default(monkeypatch):
     """The mock vocoder returns silence, which the output gate rightly refuses.
 

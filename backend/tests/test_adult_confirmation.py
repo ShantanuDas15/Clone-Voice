@@ -38,12 +38,15 @@ def _rows(db_session):
     return db_session.query(VoiceProfile).all()
 
 
-def test_flag_defaults_to_off_so_existing_clients_keep_working(
+def test_flag_defaults_to_on() -> None:
+    from backend.core.config import Settings
+
+    assert Settings.model_fields["REQUIRE_ADULT_CONFIRMATION"].default is True
+
+
+def test_with_the_flag_off_existing_clients_keep_working(
     client: TestClient, auth_headers, db_session
 ) -> None:
-    from backend.core.config import settings
-
-    assert settings.REQUIRE_ADULT_CONFIRMATION is False
     response = _upload(client, auth_headers)
     assert response.status_code == 201
     assert _rows(db_session)[0].adult_confirmed_at is None
