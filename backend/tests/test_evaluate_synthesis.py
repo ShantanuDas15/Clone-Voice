@@ -103,6 +103,40 @@ def test_f0_range_ratio_is_none_without_a_real_range_or_voicing():
     assert es.f0_range_ratio(es.f0_track(tone(150.0)), silent) is None
 
 
+def _track(hz, n):
+    """A synthetic F0 track of ``n`` frames: voiced at ``hz`` (or NaN where ``hz`` is None)."""
+    return np.full(n, np.nan if hz is None else hz)
+
+
+def test_voiced_fraction_counts_voiced_frames():
+    f0 = np.concatenate([_track(200.0, 25), _track(None, 75)])
+    assert es.voiced_fraction(f0) == pytest.approx(0.25)
+    assert es.voiced_fraction(np.array([])) == 0.0
+
+
+def test_a_mostly_unvoiced_clone_has_no_f0_error():
+    """A few spurious voiced frames pinned at the ceiling must not become a 20-semitone error."""
+    real = _track(210.0, 300)
+    clone = np.concatenate([_track(es.F0_FMAX_HZ, 8), _track(None, 280)])
+    assert es.f0_error_semitones(real, clone) is None
+    assert es.f0_range_ratio(real, clone) is None
+
+
+def test_a_median_pinned_at_the_search_floor_has_no_f0_error():
+    real = _track(es.F0_FMIN_HZ, 300)
+    assert es.f0_error_semitones(real, _track(200.0, 300)) is None
+
+
+def test_a_pitch_just_inside_the_limits_is_still_measured():
+    low = es.F0_FMIN_HZ * 2 ** (3 / 12)
+    assert es.f0_error_semitones(_track(low, 300), _track(low, 300)) == pytest.approx(0)
+
+
+def test_too_few_voiced_frames_is_not_a_measurement():
+    few = np.concatenate([_track(200.0, es.MIN_VOICED_FRAMES - 1), _track(None, 40)])
+    assert es.f0_error_semitones(few, _track(200.0, 300)) is None
+
+
 # --- level and spectrum ------------------------------------------------------
 
 

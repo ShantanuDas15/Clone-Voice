@@ -13,6 +13,8 @@ Per clone it reports:
 * ``secs``                    cosine between the clone's and the speaker's embeddings
 * ``f0_error_semitones``      |median F0 of clone - median F0 of the real speech|
 * ``f0_range_ratio``          clone F0 range / real F0 range (5th to 95th percentile)
+* ``clone_voiced_fraction``   share of the clone's frames that are voiced; the two F0 columns above are
+                              ``None`` when too few frames are voiced or the median sits at a search limit
 * ``spectral_distance_db``    level-invariant long-term spectrum distance (timbre, brightness)
 * ``punctuation``             for the same sentence ending in ``.``, ``?`` and ``!``: does the
                               ``?`` end higher, and does the ``!`` have more F0 range and energy
@@ -75,7 +77,12 @@ F0_HOP = 160  # 10 ms at 16 kHz
 F0_FMIN_HZ = 60.0
 F0_FMAX_HZ = 1000.0
 # A pitch statistic over fewer voiced frames than this is noise, not a measurement.
-MIN_VOICED_FRAMES = 5
+MIN_VOICED_FRAMES = 30
+# ... and so is one where less than this share of the frames is voiced: a mostly unvoiced
+# clone yields a few spurious frames pinned at a search limit (S0.2e).
+MIN_VOICED_FRACTION = 0.10
+# A median this close (semitones) to the search floor or ceiling is the tracker's limit, not a pitch.
+F0_LIMIT_MARGIN_ST = 2.0
 SILENCE_RMS = 1e-5
 # The plan's gate (section 4): every group within this SECS gap of the best group.
 GROUP_GAP_LIMIT = 0.05
@@ -140,18 +147,37 @@ def _voiced(f0: np.ndarray) -> np.ndarray:
     return f0[np.isfinite(f0) & (f0 > 0)]
 
 
+def voiced_fraction(f0: np.ndarray) -> float:
+    """Share of the frames of an F0 track that are voiced (0.0 for an empty track)."""
+    f0 = np.asarray(f0, dtype=np.float64)
+    return float(len(_voiced(f0)) / len(f0)) if len(f0) else 0.0
+
+
+def _reliable_voiced(f0: np.ndarray) -> Optional[np.ndarray]:
+    """The voiced values of a track, or ``None`` if too few, too sparse or pinned at a search limit."""
+    voiced = _voiced(f0)
+    if len(voiced) < MIN_VOICED_FRAMES or voiced_fraction(f0) < MIN_VOICED_FRACTION:
+        return None
+    median = float(np.median(voiced))
+    if median < F0_FMIN_HZ * 2 ** (
+        F0_LIMIT_MARGIN_ST / 12
+    ) or median > F0_FMAX_HZ / 2 ** (F0_LIMIT_MARGIN_ST / 12):
+        return None
+    return voiced
+
+
 def f0_error_semitones(real_f0: np.ndarray, clone_f0: np.ndarray) -> Optional[float]:
     """Absolute difference of the median pitch, in semitones; ``None`` if unmeasurable."""
-    real, clone = _voiced(real_f0), _voiced(clone_f0)
-    if len(real) < MIN_VOICED_FRAMES or len(clone) < MIN_VOICED_FRAMES:
+    real, clone = _reliable_voiced(real_f0), _reliable_voiced(clone_f0)
+    if real is None or clone is None:
         return None
     return float(abs(semitones(np.median(clone)) - semitones(np.median(real))))
 
 
 def _f0_range(f0: np.ndarray) -> Optional[float]:
     """5th to 95th percentile pitch range in semitones; ``None`` if too few voiced frames."""
-    voiced = _voiced(f0)
-    if len(voiced) < MIN_VOICED_FRAMES:
+    voiced = _reliable_voiced(f0)
+    if voiced is None:
         return None
     low, high = np.percentile(semitones(voiced), [5, 95])
     return float(high - low)
@@ -641,6 +667,7 @@ def evaluate_speaker(
     clone_f0 = f0_track(clone)
     row["f0_error_semitones"] = f0_error_semitones(real_f0, clone_f0)
     row["f0_range_ratio"] = f0_range_ratio(real_f0, clone_f0)
+    row["clone_voiced_fraction"] = voiced_fraction(clone_f0)
     row["spectral_distance_db"] = long_term_spectrum_distance(real_audio, clone)
 
     # The three renderings of one sentence share a seed, so only the punctuation differs.
@@ -778,8 +805,12 @@ def evaluate_best_of(
 
 def degradation_cases() -> Dict[str, Callable[[np.ndarray], np.ndarray]]:
     """Recording defects to apply to a clean reference clip, by name."""
-    from backend.evaluate_preprocessing import (add_noise, add_reverb, gain,
-                                                telephone_band)
+    from backend.evaluate_preprocessing import (
+        add_noise,
+        add_reverb,
+        gain,
+        telephone_band,
+    )
 
     return {
         "clean": lambda y: y,
@@ -1184,6 +1215,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "secs",
         "f0_error_semitones",
         "f0_range_ratio",
+        "clone_voiced_fraction",
         "spectral_distance_db",
         "question_rise_rate",
         "exclamation_lift_rate",
