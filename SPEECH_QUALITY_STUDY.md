@@ -964,8 +964,8 @@ in their sixties, 41 in their seventies and 6 in their eighties). Ten speakers p
 | `secs`, resemblyzer | 0.669 [0.625, 0.711] | 0.677 [0.640, 0.711] | 0.008 | yes (0.05) |
 | `ecapa`, independent | 0.261 [0.148, 0.362] | 0.203 [0.155, 0.254] | 0.058 | no |
 | spectral distance, dB (lower is better) | 6.10 [5.54, 6.64] | 6.96 [5.90, 8.04] | 0.86 | no |
-| F0 error, semitones (guarded, S0.2e) | 10.17 [2.29, 20.39] (n=8) | 1.94 [1.22, 2.76] (n=7) | 8.22 | no |
-| F0 range ratio (guarded) | 1.005 [0.648, 1.310] (n=8) | 0.765 [0.279, 1.428] (n=7) | 0.24 | no |
+| F0 error, semitones (range-agreement check, S0.2h) | 2.94 [1.20, 4.75] (n=6) | 1.94 [1.22, 2.76] (n=7) | 1.00 | no |
+| F0 range ratio (range-agreement check) | 0.864 [0.479, 1.234] (n=6) | 0.765 [0.279, 1.428] (n=7) | 0.10 | no |
 | clone voiced fraction | 0.455 [0.277, 0.621] | 0.542 [0.370, 0.697] | 0.09 | no |
 | question-rise rate | 0.553 [0.433, 0.683] | 0.390 [0.310, 0.470] | 0.16 | no |
 | RTF | 3.74 | 3.58 | 0.16 | no |
@@ -977,23 +977,15 @@ What this shows:
   women are cloned better; it does show the age effect is not a consistent deficit across the two groups.
 * **Women score lower than men on both judges:** ECAPA 0.20 to 0.26 against 0.29 to 0.32, secs 0.67 to 0.68 against
   0.70 to 0.73. The groups come from different speakers and corpora, so this is a lead, not a gender comparison.
-* **Re-scored with the F0 guard (S0.2e, same speakers, seed and code otherwise; secs, ECAPA, spectral distance and question rate
-  reproduced to the last digit).** Five of the 20 women's clones (three control, two elderly) now have no F0 error because
-  too little of the clone is voiced (voiced fractions 0.00 to 0.27 against 0.4 to 0.85 for the rest). Control women drop
-  from 6.88 to 1.94 semitones, a normal value. **Elderly women still read 10.17, and two speakers cause it:**
-  `109292d3b481` (41.8 semitones, ECAPA -0.05) and `062a915b1870` (22.0 semitones); the other six are 0.0 to 6.5. Both
-  reproduced exactly when re-synthesised with the study's own sentence, seed and index (S0.2g), and have different causes:
-  * **`109292d3b481`: the real-side track is an artefact.** The tracker reports a constant 76 Hz on five of six real
-    clips (5th percentile = median = 76; 102 Hz, also constant, with a search range of 80 to 500 Hz), which is a
-    stationary tone or rumble, not speech; the sixth clip reads 141 Hz. The clone track is also unreliable (94 voiced
-    frames with median 853 Hz in the study range, 45 frames at 220 Hz in 80 to 500 Hz). The 41.8 semitones therefore
-    compares a noise lock with a poor clone track and says nothing about pitch.
-  * **`062a915b1870`: the clone has no stable pitch.** The real side is clean (210 Hz). The clone has 42 voiced frames
-    out of 162 (0.26, normal clones are 0.4 to 0.85) and the median moves with the search range (747 Hz, 499 Hz pinned at
-    the ceiling, 366 Hz from 12 frames), so no range finds a pitch. This looks like a breathy or noisy clone, a real
-    synthesis fault, with ECAPA 0.09; nobody has listened to it.
-  The guard (10 % voiced, 2 semitones from the limits) does not catch either: a 0.26 fraction passes, and a constant
-  noise lock inside the range passes. Do not read the elderly F0 error for women as a pitch result.
+* **Re-scored twice (S0.2e guard, then S0.2h range-agreement check; secs, ECAPA, spectral distance, question rate and voiced
+  fraction reproduced to the last digit each time).** Three control and two elderly clones have no F0 error because too
+  little of the clone is voiced (voiced fractions 0.00 to 0.27 against 0.4 to 0.85 for the rest). Two more elderly
+  speakers, `109292d3b481` (41.8 semitones) and `062a915b1870` (22.0), were found in S0.2g to be a tracker lock on a
+  constant tone in the real recordings and a clone with no stable pitch; the S0.2h check, which rejects a track whose median
+  moves more than 2 semitones between search ranges, now excludes both. **The elderly F0 error is 2.94 [1.20, 4.75] (n=6)
+  against 1.94 [1.22, 2.76] (n=7) for the control: a difference of about 1 semitone with overlapping intervals, so no age
+  effect on pitch is detectable for women either.** The earlier 10.17 was two bad measurements, not a pitch result.
+  Only six of ten elderly and seven of ten control clones are measurable, so the claim rests on small samples.
 * **Clones of some women are largely unvoiced.** The elderly clone of `09d129e07097` has voiced fraction 0.00 yet ECAPA 0.45,
   the opposite of what an unvoiced clone should score; nobody has listened to it. Whether these are synthesis faults or tracker
   failures is open.
@@ -1008,4 +1000,4 @@ rate, no listening test. Nothing in this section covers children (decision Q4).
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
 2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths (pack built and browser-checked, S0.7; **no listener has heard it**).
 3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
-4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked, the metric guarded and both studies re-scored (S0.2e/S0.2f); two elderly-women speakers (`109292d3b481`, `062a915b1870`) still give 42 and 22 semitones: inspected in S0.2g, one is a tracker lock on noise in the real audio and one a clone with no stable pitch; neither is a pitch result.
+4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked, the metric guarded and both studies re-scored (S0.2e/S0.2f); the two elderly-women outliers (`109292d3b481`, `062a915b1870`) were inspected (S0.2g), excluded by the S0.2h range-agreement check, and the women's study re-scored (elderly F0 error 2.94 semitones against 1.94 for the control).
