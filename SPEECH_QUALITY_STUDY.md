@@ -995,6 +995,61 @@ What this shows:
 Limits (in addition to those above): adult women only here, n = 10 per group, intervals mostly overlap; no word error
 rate, no listening test. Nothing in this section covers children (decision Q4).
 
+## Garbled endings and the speech-time gate check (S3.5, 2026-10-24)
+
+Question: some clones are noisy and lose the last words of a sentence ("You are coming to the meeting."
+heard as "You are"). How common is that, what causes it, and can the output gate catch it? All runs on
+the GPU (RTX 4060), real weights, GPU recogniser (faster-whisper small.en); the fault also appears on CPU
+(seen first there). Speakers are named by a hash of `client_id`; the audio stays in the scratch directory.
+
+| Measurement | Result |
+|---|---|
+| 40 speakers x 6 seeds, one 6-word sentence (240 clips) | 22.5% of clips have WER 0.34 or worse; 71% are transcribed perfectly |
+| 10 speakers x 40 sentences of 7 to 11 words (400 clips) | 28.5% bad (beam 1: 28.5%, beam 5: 28.2%) |
+| Bad rate per speaker (same 40 sentences) | 100%, 85%, 53%, 23%, 10%, then five speakers at 0 to 7% |
+| Reference recording SNR, same speakers | 29.6, 46.9, 44.0, 51.9, 44.7 dB for the five worst; 60 dB (the report's cap) for the five best |
+| Noise added to a clean reference (3 speakers, white noise) | bad rate 0.8% clean, 5.8% at 30 dB, 22.5% at 20 dB, 26.3% at 10 dB |
+
+Two listening rounds (10 clips each, one listener) agreed with the recogniser on 9 of 10 clips in the second
+round. The listener heard noise that grew along the clip and "pale" or whispered last words, and called
+two clips robotic and one too fast. The recogniser is the label used below; it slightly under-counts (it
+completed one clip the listener heard as 3 words).
+
+### What this shows
+
+* **The fault is real and not rare:** a quarter of clips from Common Voice references lose or garble words,
+  against 4.7% WER on the cleaner LibriSpeech speakers of S0.4b.
+* **It follows the speaker, not the seed.** The worst speakers fail on nearly every sentence, so a retry with
+  a new seed rarely rescues them.
+* **Noise in the reference causes it, but unevenly.** Adding noise to clean references raised the bad rate from
+  about 1% to 22% at 20 dB, one speaker to 50% and another to 12%. At 10 dB the pipeline's own gate refused one
+  speaker outright (`duration_too_long`).
+* **Failed clips run longer, not shorter.** Duration was the best cheap signal (AUC 0.86 to 0.93); whole-clip
+  periodicity (0.75) and voiced share (0.81 to 0.86) were weaker; harmonic energy (0.53) was no use.
+
+### The check that shipped
+
+`check_output` gains `speech_too_long`: speech seconds (non-silent 20 ms frames, so typed pauses cannot inflate
+it) divided by `-0.50 + 0.339 x words`, refused above 1.8, for texts of 6 to 11 spoken words
+(`TTS_GATE_MAX_SPEECH_RATIO`, 0 turns it off). The existing duration check stayed as it was.
+
+| On the 640 labelled clips | Result |
+|---|---|
+| Correct clips refused | 1 of 477 (0.2%) |
+| Garbled clips caught | 36 of 163 (22.1%) |
+
+### Limits
+
+* **It catches about one garbled clip in five.** A wider net (ratio above 1.5) caught 43% but refused 2.1% of
+  correct clips, a rate I judged too high for a check that ends in a refusal. The real fix is upstream: the
+  enrolment check rated the worst speaker "good" (SNR 29.6 dB).
+* **Fitted and tested on the same 640 clips**, 10 + 40 speakers, one sentence set, 7 to 11 words. The model has a
+  negative intercept, so it is skipped outside 6 to 11 words; longer texts are not checked until chunk-level
+  calibration is done.
+* Labels come from one recogniser; the listening rounds had one listener and 20 clips.
+* White noise only; real hum, room echo and compression were not tested.
+* The unexplained case: `02b890a0449a` fails on 100% of sentences with a clean-looking reference.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
