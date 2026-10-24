@@ -1091,6 +1091,45 @@ What could work instead, untested: synthesize one short test sentence at upload 
 synthesis per upload, and the speech-time check of S3.5 would catch about a fifth of the bad ones), or learn a
 predictor from many more speakers.
 
+### Larger speaker study and CPU check (S3.5b, 2026-10-24)
+
+154 Common Voice speakers (79 men, 75 women; 76 elderly, 78 adult controls; 6 more were skipped for too few
+usable clips), each cloned two ways: from one reference clip, and from four clips averaged the way the
+product does (`aggregate_embeddings`). Six sentences of 7 to 11 words, the same seeds for both profiles,
+GPU, the S3.5 gate on, scored by the recogniser (faster-whisper small.en). 1,848 clips.
+
+| Profile | Clips with WER 0.34 or worse | Clips refused by the gate |
+|---|---|---|
+| One clip | 19.3% of 916 scored | 8 of 924 |
+| Four clips averaged | 11.6% of 924 | 0 |
+
+* **More clips help.** Paired by speaker, the bad rate falls 8.2 points (19.8% to 11.6%, 95% bootstrap
+  interval -11.3 to -5.4; Wilcoxon p < 0.001). 45 speakers improved, 10 got worse, 99 were unchanged.
+* **Age makes no difference:** elderly 19.3%, adult controls 20.3% (one clip). **Women fail more than men**
+  in this data: 26.4% against 13.5% (one clip), 15.6% against 7.8% (four clips). Both are Common Voice
+  recordings; whether the cause is gender or the recordings was not separated.
+* **Recording measures still do not predict failure.** 44 speakers failed on 30% or more of their clips.
+  AUC: SNR 0.69, agreement between the clips 0.68, level 0.64, band 0.61, pitch 0.58, reverb 0.53, voiced
+  seconds 0.55, clipping 0.52. The enrolment rating was "good" for 101 speakers (29 failing) and "fair" for
+  53 (15 failing): it carries no information. This confirms S2.2e at 154 speakers.
+* **The speech-time check, tested on speakers it was not fitted on:** it refused 8 clips, all one-clip
+  profiles, none correct. Re-synthesized with the check off, each of the 8 ran 6 to 8.5 s for about 9 words
+  and scored WER 0.50 to 1.00. It also forced retries on about 9 more clips. But roughly 177 garbled clips
+  were still served, so it catches under 10% of them, not the 22% it showed on the data it was fitted on.
+  The 22% was optimistic. Its false refusals stayed near zero.
+* **CPU matches GPU.** The first 20 speakers, one-clip profile, 6 sentences, synthesized on CPU: 17.8% bad
+  against 18.6% on GPU, 2 refusals each, per-speaker bad rates correlate 0.92. Median synthesis was 6.0 s for
+  3.5 s of audio (real-time factor 1.7, p90 10.5 s per clip) on this 24-thread desktop CPU. Railway's
+  vCPUs will be slower, so a retry (a second full synthesis) costs more there.
+
+Limits: Common Voice recordings only; one listener for all listening rounds; the recogniser is the label (it
+under-counts slightly); four clips came from the speaker's own other sentences; the CPU check was 20 speakers
+and one profile type; the speed figure is from this machine, not Railway.
+
+What this means for the product: asking for several clips at upload (the product already accepts up to
+`VOICE_MAX_SAMPLES`) is the one change measured to reduce garbled output, by about 40% relative. A stronger
+upload prompt is the likely next step; the gate check helps little.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
