@@ -137,6 +137,31 @@ def test_too_few_voiced_frames_is_not_a_measurement():
     assert es.f0_error_semitones(few, _track(200.0, 300)) is None
 
 
+def test_a_steady_voice_agrees_between_search_ranges_and_keeps_its_track():
+    metric, raw = es.f0_for_metrics([tone(220.0), tone(210.0)])
+    assert np.isfinite(metric).sum() == np.isfinite(raw).sum() > 100
+    assert np.median(es._voiced(metric)) == pytest.approx(215.0, rel=0.05)
+
+
+def test_a_pitch_only_the_study_range_can_see_is_judged_unstable():
+    """A 70 Hz tone is inside the 60-1000 Hz range but below the 80 Hz check range: a noise-like lock."""
+    metric, raw = es.f0_for_metrics([tone(70.0, 70.0, seconds=2.0)])
+    assert len(es._voiced(raw)) > 30
+    assert len(es._voiced(metric)) == 0
+    assert es.f0_error_semitones(es.f0_track(tone(200.0)), metric) is None
+
+
+def test_the_raw_track_is_kept_for_voiced_fraction_when_unstable():
+    metric, raw = es.f0_for_metrics([tone(70.0, 70.0, seconds=2.0)])
+    assert es.voiced_fraction(raw) > 0.5
+    assert es.voiced_fraction(metric) == 0.0
+
+
+def test_silence_has_no_track_and_is_not_an_error():
+    metric, raw = es.f0_for_metrics([np.zeros(SR, np.float32)])
+    assert len(es._voiced(metric)) == 0 and len(es._voiced(raw)) == 0
+
+
 # --- level and spectrum ------------------------------------------------------
 
 
