@@ -81,6 +81,12 @@ MIN_VOICED_FRAMES = 30
 # ... and so is one where less than this share of the frames is voiced: a mostly unvoiced
 # clone yields a few spurious frames pinned at a search limit (S0.2e).
 MIN_VOICED_FRACTION = 0.10
+# The check search range for the pitch tracker (S0.2h): adult speech, narrower than the study range.
+F0_CHECK_FMIN_HZ = 80.0
+F0_CHECK_FMAX_HZ = 500.0
+# A track whose median moves by more than this (semitones) between the two ranges is the tracker
+# locking on noise, not a pitch: real adult speech agreed within 0.5, the failures by 5 or more.
+F0_RANGE_AGREEMENT_ST = 2.0
 # A median this close (semitones) to the search floor or ceiling is the tracker's limit, not a pitch.
 F0_LIMIT_MARGIN_ST = 2.0
 SILENCE_RMS = 1e-5
@@ -122,7 +128,12 @@ def semitones(hz: np.ndarray, reference_hz: float = 100.0) -> np.ndarray:
     return 12.0 * np.log2(np.asarray(hz, dtype=np.float64) / reference_hz)
 
 
-def f0_track(y: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
+def f0_track(
+    y: np.ndarray,
+    sr: int = SAMPLE_RATE,
+    fmin: float = F0_FMIN_HZ,
+    fmax: float = F0_FMAX_HZ,
+) -> np.ndarray:
     """Per-frame fundamental frequency in Hz, ``NaN`` where the frame is unvoiced."""
     y = np.asarray(y, dtype=np.float32)
     if (
@@ -132,8 +143,8 @@ def f0_track(y: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
         return np.full(max(len(y) // F0_HOP, 1), np.nan)
     f0, _, _ = librosa.pyin(
         y,
-        fmin=F0_FMIN_HZ,
-        fmax=F0_FMAX_HZ,
+        fmin=fmin,
+        fmax=fmax,
         sr=sr,
         frame_length=1024,
         hop_length=F0_HOP,
@@ -164,6 +175,25 @@ def _reliable_voiced(f0: np.ndarray) -> Optional[np.ndarray]:
     ) or median > F0_FMAX_HZ / 2 ** (F0_LIMIT_MARGIN_ST / 12):
         return None
     return voiced
+
+
+def f0_for_metrics(signals: Sequence[np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
+    """``(metric track, raw track)`` of the concatenated signals; the metric track is all ``NaN`` if unstable.
+
+    Unstable means the median pitch moves by more than ``F0_RANGE_AGREEMENT_ST`` between the study range
+    and the narrower adult check range: the tracker is following noise, so no F0 metric may use it. The raw
+    track is always returned, so voiced-fraction reporting does not depend on the check.
+    """
+    raw = np.concatenate([f0_track(y) for y in signals])
+    check = np.concatenate(
+        [f0_track(y, fmin=F0_CHECK_FMIN_HZ, fmax=F0_CHECK_FMAX_HZ) for y in signals]
+    )
+    wide, narrow = _voiced(raw), _voiced(check)
+    if len(wide) and len(narrow):
+        gap = abs(float(semitones(np.median(wide)) - semitones(np.median(narrow))))
+        if gap > F0_RANGE_AGREEMENT_ST:
+            return np.full_like(raw, np.nan), raw
+    return raw, raw
 
 
 def f0_error_semitones(real_f0: np.ndarray, clone_f0: np.ndarray) -> Optional[float]:
@@ -655,7 +685,7 @@ def evaluate_speaker(
             axis=0,
         )
     )
-    real_f0 = np.concatenate([f0_track(y) for y in real])
+    real_f0, _ = f0_for_metrics(real)
     real_audio = np.concatenate(real)
 
     row: Dict[str, object] = {"speaker": speaker, "group": group}
@@ -664,10 +694,10 @@ def evaluate_speaker(
     row["secs"] = secs(encoder.embed_utterance(clone), target)
     if independent is not None:
         row["ecapa"] = secs(independent.embed_utterance(clone), independent_target)
-    clone_f0 = f0_track(clone)
+    clone_f0, clone_raw = f0_for_metrics([clone])
     row["f0_error_semitones"] = f0_error_semitones(real_f0, clone_f0)
     row["f0_range_ratio"] = f0_range_ratio(real_f0, clone_f0)
-    row["clone_voiced_fraction"] = voiced_fraction(clone_f0)
+    row["clone_voiced_fraction"] = voiced_fraction(clone_raw)
     row["spectral_distance_db"] = long_term_spectrum_distance(real_audio, clone)
 
     # The three renderings of one sentence share a seed, so only the punctuation differs.
@@ -716,7 +746,7 @@ def evaluate_enrollment(
     target = np.mean(
         [encoder.embed_utterance(np.asarray(y, np.float32)) for y in real], axis=0
     )
-    real_f0 = np.concatenate([f0_track(y) for y in real])
+    real_f0, _ = f0_for_metrics(real)
     real_audio = np.concatenate(real)
 
     row: Dict[str, object] = {"speaker": speaker, "group": group}
@@ -729,7 +759,7 @@ def evaluate_enrollment(
                 sentence + ".", embedding, speaker, seed + 1000 * index + k
             )
             scores["secs"].append(secs(encoder.embed_utterance(clone), target))
-            error = f0_error_semitones(real_f0, f0_track(clone))
+            error = f0_error_semitones(real_f0, f0_for_metrics([clone])[0])
             if error is not None:
                 scores["f0"].append(error)
             distance = long_term_spectrum_distance(real_audio, clone)
@@ -774,7 +804,7 @@ def evaluate_best_of(
         )
         for name, e in encoders.items()
     }
-    real_f0 = np.concatenate([f0_track(y) for y in real])
+    real_f0, _ = f0_for_metrics(real)
     scores: Dict[str, List[float]] = {
         f"{m}_{v}": [] for m in (*encoders, "f0") for v in ("single", "best")
     }
@@ -790,7 +820,7 @@ def evaluate_best_of(
                     scores[f"{name}_{variant}"].append(
                         secs(e.embed_utterance(clone), targets[name])
                     )
-                error = f0_error_semitones(real_f0, f0_track(clone))
+                error = f0_error_semitones(real_f0, f0_for_metrics([clone])[0])
                 if error is not None:
                     scores[f"f0_{variant}"].append(error)
     finally:
