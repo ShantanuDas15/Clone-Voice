@@ -1157,8 +1157,11 @@ The limits that matter more than the averages (defaults `INFERENCE_CALL_TIMEOUT_
 
 * **A maximum-length request fails on 4 CPUs or fewer**, and a second user is refused whenever the one
   ahead has not finished within 10 s, which at 2 CPUs is every short request.
-* **After the long request timed out at 2 CPUs, three further requests were all refused** for the next
-  10 s. That points to the abandoned forward pass still holding the slot, but I did not isolate the cause.
+* **After a request timed out, the next ones were refused while the slot stayed held.** This is the
+  M6 hardening working as designed: the permit is kept until the abandoned worker thread returns, so two
+  forward passes never overlap, but the thread cannot be killed and the vocoder ran on to the end. Measured
+  after a 488-character request failed at 34 s: the slot stayed held another 20.4 s on 2 CPUs and 0.8 s on
+  4 CPUs (S3.5e below).
 * **Memory rose from 1.7 GB to 4.9 GB as threads fell.** Unexplained; it matters when choosing a Railway
   memory limit.
 * A gate retry doubles the cost of a request; none occurred here, so its real frequency on Railway is
@@ -1171,6 +1174,23 @@ was one run each, and the plan's own vCPU and memory limits were not checked aga
 What this suggests (not changed; these are settings and product decisions): on a small container, lower the
 maximum text length or raise the stage timeout in proportion to the CPU count; and either lengthen the queue
 wait or accept that simultaneous users will be turned away.
+
+### Stopping abandoned passes early (S3.5e, 2026-10-24)
+
+The synthesizer now checks, before each chunk, and the vocoder checks, at its existing progress hook every
+100 steps, a flag that is set when the request that started the pass has given up (timeout or cancellation).
+The pass then raises and the worker thread returns, so the permit is released within about a second. The
+no-overlap guarantee is unchanged: the permit still goes back only when the thread has returned.
+
+| 2 CPUs, one 488-character request that exceeds the 30 s stage limit | Before | After |
+|---|---|---|
+| Request fails after | 34.4 s | 34.1 s |
+| Slot held after the failure | 20.4 s | 0.2 s |
+| Next short request | served, 12.7 s | served, 12.7 s |
+
+This does not make a too-long request succeed; it stops one slow request from refusing the users behind
+it. Limits: one run per case, a fast desktop CPU, and the stage limit itself (30 s) and text maximum
+(500 characters) are unchanged and still need a decision for the chosen Railway plan.
 
 ## Next measurements, in order
 
