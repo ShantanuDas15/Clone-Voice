@@ -219,3 +219,99 @@ def test_lifespan_drains_inflight_inference_on_shutdown():
         with TestClient(app):
             drain.assert_not_called()
     drain.assert_called_once()
+
+
+# --- cooperative cancellation (an abandoned pass stops early) ---------------
+
+
+class _Cooperative:
+    """Worker that does its work in small steps and checks whether anyone still waits."""
+
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.stopped_early = False
+        self.finished = False
+
+    def __call__(self, *_args):
+        self.started.set()
+        try:
+            for _ in range(1000):  # up to 10 s if nobody ever gives up
+                tts._check_abandoned()
+                threading.Event().wait(0.01)
+        except tts.InferenceAbandoned:
+            self.stopped_early = True
+            raise
+        self.finished = True
+        return "done"
+
+
+def test_a_cooperative_pass_frees_the_permit_soon_after_the_request_times_out(
+    fresh_semaphore,
+):
+    worker = _Cooperative()
+
+    async def scenario():
+        with pytest.raises(asyncio.TimeoutError):
+            async with _acquire_inference_slot() as slot:
+                await slot.run(worker, timeout=0.05)
+        await _wait_until(lambda: not fresh_semaphore.locked(), timeout=2.0)
+        assert worker.stopped_early and not worker.finished
+
+    asyncio.run(scenario())
+
+
+def test_the_next_request_is_not_stopped_by_the_previous_abandonment(fresh_semaphore):
+    worker = _Cooperative()
+    follower = _Gate()
+    follower.release.set()
+
+    async def scenario():
+        with pytest.raises(asyncio.TimeoutError):
+            async with _acquire_inference_slot() as slot:
+                await slot.run(worker, timeout=0.05)
+        async with _acquire_inference_slot() as slot:
+            assert not tts._abandoned.is_set()
+            assert await slot.run(follower, timeout=5) == "done"
+
+    asyncio.run(scenario())
+
+
+def test_an_ordinary_pass_is_never_stopped(fresh_semaphore):
+    worker = _Cooperative()
+
+    async def scenario():
+        async with _acquire_inference_slot() as slot:
+            assert await slot.run(worker, timeout=20) == "done"
+
+    asyncio.run(scenario())
+    assert worker.finished and not worker.stopped_early
+
+
+def test_check_abandoned_raises_only_when_the_flag_is_set():
+    tts._abandoned.clear()
+    tts._check_abandoned()
+    tts._abandoned.set()
+    try:
+        with pytest.raises(tts.InferenceAbandoned):
+            tts._check_abandoned()
+    finally:
+        tts._abandoned.clear()
+
+
+def test_the_vocoder_stops_when_its_request_gave_up(monkeypatch):
+    class _FakeVocoder:
+        def generate(self, mels, batched, target, overlap, mu_law, progress_callback):
+            for step in range(5):
+                progress_callback(step * 100, 500, 1, 1.0)
+            return np.zeros(100)
+
+    monkeypatch.setattr(tts, "_vocoder", _FakeVocoder())
+    monkeypatch.setattr(tts, "_inference_device", lambda _model: "cpu")
+    mel = np.zeros((80, 40), dtype=np.float32)
+    assert tts.vocode(mel).shape == (100,)
+    tts._abandoned.set()
+    try:
+        with pytest.raises(tts.InferenceAbandoned):
+            tts.vocode(mel)
+    finally:
+        tts._abandoned.clear()

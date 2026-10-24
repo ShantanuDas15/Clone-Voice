@@ -64,6 +64,24 @@ _vocoder_checksum_verified = False
 # `python -m backend.measure_event_loop_lag`).
 _inference_semaphore = asyncio.Semaphore(1)
 
+# Set when a request gives up (timeout or cancellation) while its worker thread is still inside
+# a forward pass. A thread cannot be killed, but the synthesizer (between chunks) and the vocoder
+# (every 100 steps) look at this flag and stop, so the permit that is held until the thread
+# returns is freed in about a second instead of after the whole abandoned decode. Safe as a
+# single flag because only one call holds the permit; the next holder clears it.
+_abandoned = threading.Event()
+
+
+class InferenceAbandoned(Exception):
+    """Raised inside a worker thread whose request has already given up."""
+
+
+def _check_abandoned() -> None:
+    """Stop the current forward pass if its request is no longer waiting for it."""
+    if _abandoned.is_set():
+        raise InferenceAbandoned("the request gave up on this forward pass")
+
+
 # Count of requests currently waiting to acquire `_inference_semaphore`
 # (HARDENING_PLAN.md finding H6). Only ever mutated from
 # `_acquire_inference_slot()`, always between `await` points, so plain
@@ -172,7 +190,11 @@ def _release_after(task: "asyncio.Future[Any]") -> None:
 
     def _on_done(done: "asyncio.Future[Any]") -> None:
         """Consume the result (nobody awaits it) and free the permit."""
-        if not done.cancelled() and done.exception() is not None:
+        if isinstance(
+            done.exception() if not done.cancelled() else None, InferenceAbandoned
+        ):
+            logger.info("Abandoned inference call stopped early, permit released.")
+        elif not done.cancelled() and done.exception() is not None:
             logger.warning(
                 "Abandoned inference call failed after its request gave up: %r",
                 done.exception(),
@@ -277,6 +299,7 @@ async def _acquire_inference_slot():
         _inference_waiters -= 1
         metrics.INFERENCE_WAIT_SECONDS.observe(time.perf_counter() - wait_started)
 
+    _abandoned.clear()
     slot = _InferenceSlot()
     try:
         yield slot
@@ -285,6 +308,7 @@ async def _acquire_inference_slot():
         if unfinished is None:
             _inference_semaphore.release()
         else:
+            _abandoned.set()
             # The request was cancelled or timed out while its thread is
             # still inside a forward pass: keep the permit until it returns.
             _release_after(unfinished)
@@ -682,6 +706,7 @@ def _decode_chunk(
         raise RuntimeError(
             "Synthesizer is not loaded. Call load_models() before inference."
         )
+    _check_abandoned()
 
     device = _inference_device(_synthesizer)
     sequence = text_to_sequence(text, synth_hparams.tts_cleaner_names)
@@ -808,7 +833,7 @@ def vocode(mel: np.ndarray) -> np.ndarray:
             8000,  # target samples per batch entry (reference default)
             800,  # crossfade overlap in samples (reference default)
             vocoder_hparams.mu_law,
-            lambda *_args: None,
+            lambda *_args: _check_abandoned(),
         )
 
     del mel_tensor
