@@ -42,6 +42,11 @@ TAG_BITS = 12
 ENGINE_BITS = 4
 # AudioSeal's detector works on a 320-sample frame grid (20 ms at 16 kHz).
 FRAME = 320
+# The generator is TorchScript: it specialises on, and keeps, a compiled version for every new input
+# length. Fed whole clips of every length a request can have, memory grew without bound (0.6 GB to
+# 4.9 GB over 20 clips on 2 CPUs) and each call took up to 5 s. It is therefore run on windows of this
+# one length (a multiple of FRAME, so the detector's frame grid is unchanged), the last one padded.
+WINDOW_SAMPLES = 4 * MODEL_RATE
 SUBDIR = "audioseal"
 GENERATOR_FILE = "generator_base.pth"
 DETECTOR_FILE = "detector_base.pth"
@@ -168,10 +173,17 @@ class Watermarker:
         y = waveform.astype(np.float32)
         low = _resampled(y, sample_rate, MODEL_RATE)
         message = torch.from_numpy(message_bits(self.tag, engine))[None]
+        pieces = []
         with self._lock, torch.no_grad():
-            x = torch.from_numpy(low)[None, None]
-            residual = self.generator.get_watermark(x, MODEL_RATE, message=message)
-        residual = residual[0, 0].numpy()
+            for start in range(0, len(low), WINDOW_SAMPLES):
+                part = low[start : start + WINDOW_SAMPLES]
+                kept = len(part)
+                if kept < WINDOW_SAMPLES:
+                    part = np.pad(part, (0, WINDOW_SAMPLES - kept))
+                x = torch.from_numpy(part)[None, None]
+                piece = self.generator.get_watermark(x, MODEL_RATE, message=message)
+                pieces.append(piece[0, 0].numpy()[:kept])
+        residual = np.concatenate(pieces)
         residual = _fit(_resampled(residual, MODEL_RATE, sample_rate), len(y))
         marked = y + residual
         peak = float(np.max(np.abs(marked)))
