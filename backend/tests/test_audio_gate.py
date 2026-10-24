@@ -393,3 +393,45 @@ def test_a_smaller_chunk_limit_decodes_more_chunks(gate_on):
         tts_pipeline.synthesize_speech(text, np.ones(256, np.float32), 30)
     assert default_count == 1 and len(decodes) > 1
     assert all(len(d) <= 30 for d in decodes)
+
+
+# --- speech time (S3.5) -----------------------------------------------------
+
+EIGHT_WORDS = "You will find the report on the desk."  # expected speech about 2.2 s
+
+
+def test_speech_time_within_the_model_passes():
+    result = _gate(_voiced(2.3), text=EIGHT_WORDS)
+    assert result.passed
+    assert result.measures.speech_ratio == pytest.approx(2.3 / 2.212, abs=0.05)
+
+
+def test_dragged_speech_is_refused_though_the_duration_check_allows_it():
+    result = _gate(_voiced(4.5), text=EIGHT_WORDS)
+    assert result.reasons == ("speech_too_long",)
+    assert result.measures.duration_ratio < 2.5
+
+
+def test_a_typed_pause_does_not_count_as_speech_time():
+    pause = np.zeros(int(SR * 1.5), dtype=np.float32)
+    wav = np.concatenate([_voiced(1.2), pause, _voiced(1.2)])
+    result = _gate(wav, text=EIGHT_WORDS, max_pause=1.5)
+    assert result.passed
+    assert result.measures.speech_seconds == pytest.approx(2.4, abs=0.1)
+
+
+def test_texts_outside_the_calibrated_word_range_skip_the_check():
+    assert _gate(_voiced(3.0)).measures.speech_ratio is None  # 5 words
+    long_text = " ".join(["word"] * 14)
+    assert _gate(_voiced(6.0), text=long_text).measures.speech_ratio is None
+
+
+def test_the_speech_check_can_be_turned_off():
+    result = check_output(_voiced(4.5), SR, EIGHT_WORDS, 0, 0.7, None)
+    assert result.passed
+
+
+def test_the_speech_ratio_setting_defaults_on_and_zero_means_off():
+    assert Settings.model_fields["TTS_GATE_MAX_SPEECH_RATIO"].default == 1.8
+    off = Settings(DATABASE_URL="sqlite://", TTS_GATE_MAX_SPEECH_RATIO=0)
+    assert off.TTS_GATE_MAX_SPEECH_RATIO == 0
