@@ -1130,6 +1130,48 @@ What this means for the product: asking for several clips at upload (the product
 `VOICE_MAX_SAMPLES`) is the one change measured to reduce garbled output, by about 40% relative. A stronger
 upload prompt is the likely next step; the gate check helps little.
 
+### Timing on Railway-sized CPUs (S3.5d, 2026-10-24)
+
+Question: what does a request cost on the CPU-only container the product will run in? The real pipeline
+(`run_inference_pipeline`, quality gate on, default timeouts) pinned to 8, 4, 2 and 1 logical CPUs with
+`taskset` and the same thread count for torch (`TORCH_NUM_THREADS`), no GPU. 4 speakers, 5 requests each
+(four 9-word sentences, one 38-word text of 10.8 s of audio).
+
+| CPUs | 9-word sentence, median (p90) | Real-time factor | 38 words, 10.8 s of audio | Peak memory |
+|---|---|---|---|---|
+| 8 | 5.5 s (6.3) | 1.8 | 10.2 s | 1.7 GB |
+| 4 | 7.5 s (8.5) | 2.4 | 14.7 s | 3.2 GB |
+| 2 | 10.8 s (12.6) | 3.5 | 25.6 s | 4.6 GB |
+| 1 | 11.8 s (14.4) | 4.0 | 28.0 s | 4.9 GB |
+
+The vocoder is about 90% of the time. No gate retries happened in these 80 requests. Weights load in under
+a second once cached.
+
+The limits that matter more than the averages (defaults `INFERENCE_CALL_TIMEOUT_SECONDS` 30 s per stage,
+`INFERENCE_ACQUIRE_TIMEOUT_SECONDS` 10 s, one inference at a time, text up to 500 characters):
+
+| Test | 8 CPUs | 4 CPUs | 2 CPUs |
+|---|---|---|---|
+| One 488-character (95 word) request | served, 50.5 s | **fails** (vocoder over 30 s; 65.5 s before the error) | **fails** (34.0 s) |
+| Three short requests at the same moment | 2 served (6.6 s, 12.8 s), 1 refused after 10 s | 2 served (8.5 s, 16.6 s), 1 refused after 10 s | 1 served (11.2 s), 2 refused after 10 s |
+
+* **A maximum-length request fails on 4 CPUs or fewer**, and a second user is refused whenever the one
+  ahead has not finished within 10 s, which at 2 CPUs is every short request.
+* **After the long request timed out at 2 CPUs, three further requests were all refused** for the next
+  10 s. That points to the abandoned forward pass still holding the slot, but I did not isolate the cause.
+* **Memory rose from 1.7 GB to 4.9 GB as threads fell.** Unexplained; it matters when choosing a Railway
+  memory limit.
+* A gate retry doubles the cost of a request; none occurred here, so its real frequency on Railway is
+  open (S3.5b: 25 first attempts in 1,848 requests).
+
+Limits: this is an i7-13700HX (up to 5 GHz) with hyperthread pairs standing in for vCPUs. A cloud vCPU is
+usually slower, so these times are a best case. One speaker pool, 20 requests per size, the concurrency test
+was one run each, and the plan's own vCPU and memory limits were not checked against Railway.
+
+What this suggests (not changed; these are settings and product decisions): on a small container, lower the
+maximum text length or raise the stage timeout in proportion to the CPU count; and either lengthen the queue
+wait or accept that simultaneous users will be turned away.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
