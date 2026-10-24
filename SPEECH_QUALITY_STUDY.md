@@ -1006,6 +1006,6 @@ rate, no listening test. Nothing in this section covers children (decision Q4).
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
-2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
+2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths (pack built and browser-checked, S0.7; **no listener has heard it**).
 3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
 4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked, the metric guarded and both studies re-scored (S0.2e/S0.2f); two elderly-women speakers (`109292d3b481`, `062a915b1870`) still give 42 and 22 semitones: inspected in S0.2g, one is a tracker lock on noise in the real audio and one a clone with no stable pitch; neither is a pitch result.
