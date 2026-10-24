@@ -1192,6 +1192,48 @@ This does not make a too-long request succeed; it stops one slow request from re
 it. Limits: one run per case, a fast desktop CPU, and the stage limit itself (30 s) and text maximum
 (500 characters) are unchanged and still need a decision for the chosen Railway plan.
 
+### Limits that follow the CPU (S3.5f, 2026-10-24)
+
+The S3.5d timings showed a full-length text running past the 30 s stage limit on a small CPU, taking the
+whole limit before failing. Measured with warm-up done (the earlier runs skipped it), the vocoder's cost is a
+fixed part per call plus a part per second of audio, and it bends upward with length:
+
+| CPUs | Fixed seconds per call | Seconds per second of audio |
+|---|---|---|
+| 2 | 6.5 | 1.09 |
+| 4 | 4.7 | 0.63 |
+| 8 | 3.6 | 0.41 |
+
+Warm-up now times the vocoder at 1.5 s and 12.5 s of audio and keeps that pair. Each request is judged from
+its text before it queues (estimated audio length from its words and typed pauses, then fixed + per-second x
+audio against 30 s x ). A text that would not fit is refused at once with a 422 that
+names about how many words do (, default on). One-time cost: warm-up plus timing took
+79 s on 2 CPUs and 106 s on 8 (including loading the models), inside the 600 s deploy health check.
+
+| Real requests, warmed up, margin 0.8 | 2 CPUs | 4 CPUs | 8 CPUs |
+|---|---|---|---|
+| 20 words | served, 17 s | served, 13 s | served, 7 s |
+| 40 words (13 s of audio) | served, 25 s | served, 18 s | served, 13 s |
+| 60 words | refused at once (about 49 words fit) | served | served |
+| 95 words (488 characters) | refused at once | refused at once (about 88 words fit) | served, 51 s |
+
+* **A one-point timing was wrong.** Timing one short sentence gave 4.9 s per audio second on 2 CPUs, which
+  would have refused texts that fit (the real figure at length is about 1.1). The fixed part dominates short
+  audio.
+* **A margin of 0.9 was too thin.** At 4 CPUs a 95-word text predicted at 25.6 s of vocoding still timed out
+  (30 s limit, 66 s end to end); 0.8 refuses it. At 2 CPUs a 60-word text predicted at 23 s also timed out
+  before the two-point fit was made longer.
+* **The earlier "fails on 4 CPUs" in S3.5d was partly cold start:** those scripts skipped warm-up, which the
+  service does at boot. Warmed up, 4 CPUs serve about 60 words and 8 serve the full 500 characters.
+* **A gate retry still doubles the time.** A 60-word text hit the decode cap ("truncated") and the smaller
+  chunk retry took 65 to 72 s in total on 4 CPUs. Retries are not in the estimate.
+
+Limits: a fast desktop CPU with hyperthread pairs standing in for vCPUs (Railway's will be slower, which the
+timing at boot captures by itself); one speaker; four to eight real requests per size; the estimate of audio
+length is the S3.5 speech model (fitted on 6 to 11 word sentences) plus pauses, so its error on long text is
+not measured; the 500-character API maximum is unchanged and the frontend does not yet show the lower limit
+before the user presses Generate (it shows the server's message).
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
