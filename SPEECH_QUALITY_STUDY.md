@@ -1050,6 +1050,47 @@ it) divided by `-0.50 + 0.339 x words`, refused above 1.8, for texts of 6 to 11 
 * White noise only; real hum, room echo and compression were not tested.
 * The unexplained case: `02b890a0449a` fails on 100% of sentences with a clean-looking reference.
 
+### Does an enrolment threshold predict the failures? (S2.2e, 2026-10-24)
+
+Question: would a stricter recording-quality warning at upload catch the speakers whose clones come out
+garbled? Data: the 40 Common Voice speakers of the 6-word run (6 seeds each), the failure rate per speaker
+(WER 0.34 or worse) against measures of the one reference clip used. 9 speakers fail on 30% or more of their
+clips (8 on half or more); the other 31 are fine.
+
+| Reference measure | Spearman with failure rate | AUC, failing vs. fine speakers |
+|---|---|---|
+| Estimated SNR | -0.33 | 0.72 |
+| Level after decay (reverberation drop) | -0.32 | 0.78 |
+| Agreement with the speaker's own other clips | -0.35 | 0.73 |
+| Level (dBFS), high band, clipping, voiced seconds | between -0.17 and +0.24 | 0.50 to 0.59 |
+| Pitch, embedding distance to the group centre | -0.11, +0.06 | 0.54, 0.55 |
+
+What each SNR warning level would do on these speakers:
+
+| Warn below | Failing speakers flagged (of 9) | Fine speakers flagged (of 31) |
+|---|---|---|
+| 25 dB (today) | 0 | 0 |
+| 30 dB | 2 | 0 |
+| 40 dB | 2 | 1 |
+| 50 dB | 5 | 5 |
+| 55 dB | 6 | 8 |
+
+* **The existing check misses every failing speaker.** Today's rating was "good" for 6 of the 9 and "fair" for
+  3; none was "poor". The worst speaker (`02b890a0449a`) had SNR 29.6 dB and no hint.
+* **No threshold works.** Raising the SNR warning to 50 dB would flag 5 of the 9, and also 5 of the 31 fine
+  speakers: half of the warnings would be wrong. No other measure does better. The 10-speaker lead from the
+  earlier run (lower SNR, more failures) does not hold up at 40.
+* **Noise itself is still a cause**, as the controlled test showed (added noise at 20 dB raised failures from
+  about 1% to 22%), and today's 25 dB warning does flag that case. The real failing speakers are mostly not
+  noisy by this measure, so the cause there is something these measures do not capture.
+* **Decision: the thresholds stay as they are.** Changing them on this evidence would add false warnings and
+  catch little.
+
+Limits: 40 speakers and 9 failing ones; one reference clip per speaker; all measures are single-clip numbers.
+What could work instead, untested: synthesize one short test sentence at upload and judge the result (costs a
+synthesis per upload, and the speech-time check of S3.5 would catch about a fifth of the bad ones), or learn a
+predictor from many more speakers.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
