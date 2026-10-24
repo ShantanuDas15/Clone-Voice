@@ -20,8 +20,8 @@ from backend.core.config import Settings, settings
 from backend.services import tts_engine, tts_pipeline, watermark
 from backend.services.sv2tts.checksum import load_manifest
 from backend.services.watermark import (ENGINE_CODES, FRAME, MANIFEST_KEYS,
-                                        MODEL_RATE, NBITS, Detection,
-                                        Watermarker, message_bits)
+                                        MODEL_RATE, NBITS, WINDOW_SAMPLES,
+                                        Detection, Watermarker, message_bits)
 
 SR = 16000
 TAG = 0xC10
@@ -139,11 +139,44 @@ def test_the_output_keeps_its_length_rate_and_type_and_gains_the_residual(marker
     out = marker.apply(y, SR, "sv2tts")
     assert out.shape == y.shape and out.dtype == np.float32
     assert np.max(np.abs(out - y)) == pytest.approx(0.01, abs=0.002)
+    # The network always sees one fixed window length, never the clip's own length.
     assert marker.generator.calls[0] == (
-        len(y),
+        WINDOW_SAMPLES,
         SR,
         message_bits(TAG, "sv2tts").tolist(),
     )
+
+
+def test_the_window_is_a_whole_number_of_detector_frames():
+    assert WINDOW_SAMPLES % FRAME == 0
+
+
+@pytest.mark.parametrize("seconds", [0.2, 3.9, 4.0, 4.1, 9.5, 20.0])
+def test_every_call_to_the_network_has_the_same_length_whatever_the_clip(
+    marker, seconds
+):
+    """A new input length made the TorchScript network keep another compiled copy (memory leak)."""
+    y = _voiced(seconds)
+    out = marker.apply(y, SR, "sv2tts")
+    lengths = {call[0] for call in marker.generator.calls}
+    assert lengths == {WINDOW_SAMPLES}
+    assert len(marker.generator.calls) == -(-len(y) // WINDOW_SAMPLES)
+    assert out.shape == y.shape
+
+
+def test_the_residual_has_no_gap_or_overlap_at_the_window_edges():
+    """With a constant residual every sample, including those next to an edge, gets exactly it."""
+
+    class Constant:
+        def get_watermark(self, x, rate, message=None):
+            import torch
+
+            return torch.full((1, 1, x.shape[-1]), 0.01)
+
+    quiet = Watermarker(Constant(), FakeDetector(), TAG)
+    y = np.zeros(2 * WINDOW_SAMPLES + 123, dtype=np.float32)
+    out = quiet.apply(y, SR, "sv2tts")
+    assert np.allclose(out, 0.01, atol=1e-6)
 
 
 def test_the_input_is_not_modified(marker):
@@ -158,7 +191,7 @@ def test_other_sample_rates_are_marked_at_16khz_and_keep_their_own_bandwidth(mar
     out = marker.apply(y, 24000, "chatterbox_nano")
     assert out.shape == y.shape
     assert marker.generator.calls[0][1] == MODEL_RATE
-    assert marker.generator.calls[0][0] == pytest.approx(len(y) * 2 / 3, abs=2)
+    assert marker.generator.calls[0][0] == WINDOW_SAMPLES
     # The residual that was added is band-limited below 8 kHz (a windowed spectrum, to avoid
     # leakage): the 24 kHz signal keeps its own top octave untouched.
     residual = (out - y) * np.hanning(len(y))
@@ -378,8 +411,10 @@ def test_it_is_added_after_levelling_so_levelling_cannot_undo_it(wm_on):
     path, _ = tts_pipeline.finish_and_save(
         _voiced(2.0, amp=0.01), SR, "wm-user", "sv2tts"
     )
-    marked_input = wm_on.generator.calls[0]
-    assert marked_input[0] == 2 * SR  # the whole clip, once, at its final level
+    saved, _ = _saved(path)
+    assert len(wm_on.generator.calls) == 1  # marked once, after levelling
+    assert wm_on.generator.calls[0][0] == WINDOW_SAMPLES
+    assert len(saved) == 2 * SR
 
 
 def test_when_it_cannot_be_applied_nothing_is_saved(wm_on, tmp_path):

@@ -1162,8 +1162,8 @@ The limits that matter more than the averages (defaults `INFERENCE_CALL_TIMEOUT_
   forward passes never overlap, but the thread cannot be killed and the vocoder ran on to the end. Measured
   after a 488-character request failed at 34 s: the slot stayed held another 20.4 s on 2 CPUs and 0.8 s on
   4 CPUs (S3.5e below).
-* **Memory rose from 1.7 GB to 4.9 GB as threads fell.** Unexplained; it matters when choosing a Railway
-  memory limit.
+* **Memory rose from 1.7 GB to 4.9 GB as threads fell.** Explained and fixed in S3.5g below: the output
+  watermark, not the thread count.
 * A gate retry doubles the cost of a request; none occurred here, so its real frequency on Railway is
   open (S3.5b: 25 first attempts in 1,848 requests).
 
@@ -1233,6 +1233,39 @@ timing at boot captures by itself); one speaker; four to eight real requests per
 length is the S3.5 speech model (fitted on 6 to 11 word sentences) plus pauses, so its error on long text is
 not measured; the 500-character API maximum is unchanged and the frontend does not yet show the lower limit
 before the user presses Generate (it shows the server's message).
+
+### The memory growth was the watermark (S3.5g, 2026-10-25)
+
+S3.5d recorded peak memory rising from 1.7 GB (8 CPUs) to 4.9 GB (1 CPU) and left it unexplained. Traced:
+
+* **A clean process is small.** Models loaded: 0.7 to 0.8 GB; a 12.5 s vocoder call peaks at 1.2 to 1.3 GB,
+  the same at 2 and at 8 threads. Run alone, the synthesizer and the vocoder each level off.
+* **The full pipeline was not flat.** 30 requests (short sentences and a 38-word text every fifth request) on
+  2 CPUs: 0.83 GB to 6.7 GB, about 1 GB more after each long text and no plateau. On 8 CPUs 1.0 GB to
+  2.0 GB. Python's own memory stayed at 83 MB and the count of live tensors constant, so it was native memory.
+* **Not the cause** (each tried on the 2-CPU run, none stopped the growth): `MALLOC_ARENA_MAX`,
+  `MALLOC_MMAP_THRESHOLD_`/`MALLOC_TRIM_THRESHOLD_` (one good run, then a bad one), `malloc_trim`, jemalloc,
+  `MKL_DISABLE_FAST_MM`, `ONEDNN_PRIMITIVE_CACHE_CAPACITY=0`. Run-to-run noise was about 0.5 GB.
+* **The watermark was.** With `WATERMARK_ENABLED` off the same 12 requests stayed at 0.88 to 1.0 GB. AudioSeal's
+  generator is TorchScript, which compiles and keeps a specialised version for every new input length; the
+  pipeline fed it each clip at its own length. Applied to 20 clips of random length on 2 CPUs: 0.59 GB to
+  4.9 GB, each call taking 0.2 to 5.2 s. Applied in fixed 4 s windows (the last one padded): flat at 0.85 GB,
+  0.2 to 0.6 s per call.
+
+The fix runs the generator on windows of 64,000 samples (a whole number of the detector's 320-sample frames).
+
+| Same speech-like clips, real networks | Old (whole clip) | New (4 s windows) |
+|---|---|---|
+| Detector probability, 0.5 s to 15 s | 0.99 to 1.00 | 0.99 to 1.00 |
+| Tag match, bit accuracy | yes, 1.00 | yes, 1.00 |
+| Residual level against the speech | -29 to -36 dB | -29 to -36 dB |
+| Step in the residual at a window edge | not applicable | 0.0004 (typical sample step 0.0001) |
+| Pipeline, 30 requests on 2 CPUs | 0.83 to 6.7 GB | flat at 1.3 GB, one peak at 2.5 GB |
+
+Limits: detection and level checked on synthetic speech-like clips, not on real clones, and not after MP3 or
+resampling beyond what the existing real-network tests cover (they pass); the pipeline run was 2 CPUs only, the
+8-CPU rerun was not done; the detector (`detect`, used only by the offline `detect_watermark` tool) still takes
+whole clips and was not changed; the 2.5 GB peak for a long text is the figure to size the container for.
 
 ## Next measurements, in order
 
