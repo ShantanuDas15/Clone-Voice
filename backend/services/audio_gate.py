@@ -40,6 +40,17 @@ DURATION_BASE_SECONDS = 0.29
 DURATION_PER_WORD_SECONDS = 0.287
 DURATION_RATIO_BOUNDS: Tuple[float, float] = (0.35, 2.5)
 DURATION_MIN_WORDS = 4
+# Speech time: the seconds of non-silent frames, so typed pauses cannot inflate it. A voice cloned
+# from a noisy reference drags and garbles the end of a sentence (S3.5): on 640 syntheses of
+# 6 to 11 word sentences, speech seconds = -0.50 + 0.339 * words for the clips that were
+# transcribed correctly, and the garbled ones ran longer. Ratio above 1.8: 0.2% of correct clips
+# and 22% of garbled ones. The model is a fit inside that word range, so outside it the check is
+# skipped (the intercept is negative and would misjudge short texts).
+SPEECH_BASE_SECONDS = -0.50
+SPEECH_PER_WORD_SECONDS = 0.339
+SPEECH_RATIO_MAX = 1.8
+SPEECH_MIN_WORDS = 6
+SPEECH_MAX_WORDS = 11
 
 _WORD = re.compile(r"[A-Za-z0-9']+")
 
@@ -55,6 +66,8 @@ class GateMeasures:
     longest_silence_seconds: float
     clipping_ratio: float
     duration_ratio: Optional[float]
+    speech_seconds: float = 0.0
+    speech_ratio: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +103,7 @@ def measure_output(
     if frames == 0:
         level = -120.0
         silence_ratio, longest = 1.0, duration
+        speech_seconds = 0.0
     else:
         blocks = waveform[: frames * frame].astype(np.float64).reshape(frames, frame)
         rms_db = 20.0 * np.log10(np.sqrt((blocks**2).mean(axis=1)) + 1e-12)
@@ -97,6 +111,7 @@ def measure_output(
         silent = rms_db < level - SILENCE_BELOW_LOUD_DB
         silence_ratio = float(silent.mean())
         longest = _longest_run(silent) * FRAME_SECONDS
+        speech_seconds = float((~silent).sum()) * FRAME_SECONDS
     expected = DURATION_BASE_SECONDS + DURATION_PER_WORD_SECONDS * spoken_words
     return GateMeasures(
         duration_seconds=duration,
@@ -108,6 +123,13 @@ def measure_output(
         duration_ratio=(
             duration / expected if spoken_words >= DURATION_MIN_WORDS else None
         ),
+        speech_seconds=speech_seconds,
+        speech_ratio=(
+            speech_seconds
+            / (SPEECH_BASE_SECONDS + SPEECH_PER_WORD_SECONDS * spoken_words)
+            if SPEECH_MIN_WORDS <= spoken_words <= SPEECH_MAX_WORDS
+            else None
+        ),
     )
 
 
@@ -117,6 +139,7 @@ def check_output(
     spoken_text: str,
     truncated_chunks: int,
     max_pause_seconds: float,
+    max_speech_ratio: Optional[float] = SPEECH_RATIO_MAX,
 ) -> GateResult:
     """Decide whether ``waveform`` is plausible speech for ``spoken_text``.
 
@@ -126,6 +149,8 @@ def check_output(
         spoken_text: The text as it is spoken (after normalisation).
         truncated_chunks: How many decodes hit the synthesizer's frame cap.
         max_pause_seconds: The longest pause the pipeline can insert on purpose.
+        max_speech_ratio: Refuse a 6 to 11 word text whose speech time exceeds this multiple of
+            the expected time; ``None`` turns the check off.
     """
     if waveform.ndim != 1 or waveform.size == 0:
         return GateResult(False, ("empty",), None)
@@ -152,4 +177,10 @@ def check_output(
         DURATION_RATIO_BOUNDS[0] <= ratio <= DURATION_RATIO_BOUNDS[1]
     ):
         reasons.append("duration_too_short" if ratio < 1.0 else "duration_too_long")
+    if (
+        max_speech_ratio is not None
+        and measures.speech_ratio is not None
+        and measures.speech_ratio > max_speech_ratio
+    ):
+        reasons.append("speech_too_long")
     return GateResult(not reasons, tuple(reasons), measures)

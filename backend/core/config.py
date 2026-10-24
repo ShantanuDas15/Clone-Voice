@@ -254,6 +254,10 @@ class Settings(BaseSettings):
     # refuse rather than serve broken audio.
     TTS_QUALITY_GATE_ENABLED: bool = True
     TTS_QUALITY_MAX_ATTEMPTS: int = Field(default=2, ge=1, le=5)
+    # SPEECH_QUALITY_PLAN.md S3.5: refuse (and retry) a 6 to 11 word text whose speech time is
+    # more than this multiple of the expected time, the sign of a voice that drags and garbles the
+    # end of the sentence. 0 turns the check off.
+    TTS_GATE_MAX_SPEECH_RATIO: float = Field(default=1.8, ge=0)
     # SPEECH_QUALITY_PLAN.md S2.5: synthesize this many candidates with the SV2TTS engine and serve
     # the one whose voice is closest to the profile (speaker encoder cosine). 1 = off. Each extra
     # candidate is a full synthesis plus one encoder pass, so latency grows about N-fold: leave it

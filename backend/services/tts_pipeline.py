@@ -1064,6 +1064,7 @@ async def run_inference_pipeline(
                     spoken_text,
                     result.truncated_decodes,
                     max_pause,
+                    settings.TTS_GATE_MAX_SPEECH_RATIO or None,
                 )
                 if verdict.passed:
                     metrics.QUALITY_GATE_RESULTS.labels("passed").inc()
@@ -1132,6 +1133,7 @@ async def run_inference_pipeline(
                             spoken_text,
                             result.truncated_decodes,
                             max_pause,
+                            settings.TTS_GATE_MAX_SPEECH_RATIO or None,
                         )
                         if not verdict.passed:
                             metrics.BEST_OF_N.labels("gate_failed").inc()
