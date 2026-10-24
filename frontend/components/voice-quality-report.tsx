@@ -1,6 +1,7 @@
 import type { VoiceProfileUpload } from "@/lib/api/voice";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { FEW_CLIPS_NUDGE, RECOMMENDED_CLIPS } from "@/lib/voice-advice";
 
 const RATING_LABEL: Readonly<Record<string, string>> = {
   good: "Good recording",
@@ -15,7 +16,9 @@ const RATING_LABEL: Readonly<Record<string, string>> = {
 export function VoiceQualityReport({ profile }: { profile: VoiceProfileUpload }) {
   const quality = profile.quality;
   const mismatched = (profile.samples ?? []).filter((s) => s.mismatch);
-  if (!quality && mismatched.length === 0) return null;
+  const clipCount = (profile.samples ?? []).length;
+  const fewClips = clipCount > 0 && clipCount < RECOMMENDED_CLIPS;
+  if (!quality && mismatched.length === 0 && !fewClips) return null;
   return (
     <section aria-label="Recording quality" className="space-y-2 text-sm">
       {quality && (
@@ -38,6 +41,9 @@ export function VoiceQualityReport({ profile }: { profile: VoiceProfileUpload })
             </ul>
           )}
         </>
+      )}
+      {fewClips && (
+        <Alert tone="neutral">{FEW_CLIPS_NUDGE} Open Clips on your voices page to add them.</Alert>
       )}
       {mismatched.length > 0 && (
         <Alert tone="neutral">

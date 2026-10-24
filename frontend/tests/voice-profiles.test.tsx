@@ -274,6 +274,38 @@ describe("UploadVoiceForm", () => {
     post.mockRestore();
   });
 
+  it("tells the owner of a one-clip voice to add more clips, and a three-clip voice nothing", async () => {
+    const ok = { agreement: 1, mismatch: false };
+    const post = vi
+      .spyOn(http, "post")
+      .mockResolvedValueOnce({ data: { ...fixtures.profile, samples: [{ position: 0, ...ok }] } })
+      .mockResolvedValueOnce({
+        data: {
+          ...fixtures.profile,
+          samples: [0, 1, 2].map((position) => ({ position, ...ok })),
+        },
+      });
+    const first = wrap(<UploadVoiceForm />);
+    await fillAndSubmit();
+    const report = await screen.findByRole("region", { name: "Recording quality" });
+    expect(within(report).getByText(/Add more clips of the same person/)).toBeInTheDocument();
+    first.unmount();
+    wrap(<UploadVoiceForm />);
+    await fillAndSubmit();
+    await screen.findByText(/created\./i);
+    expect(screen.queryByRole("region", { name: "Recording quality" })).not.toBeInTheDocument();
+    post.mockRestore();
+  });
+
+  it("suggests more clips as soon as one file is chosen, and not before", async () => {
+    wrap(<UploadVoiceForm />);
+    const user = userEvent.setup();
+    await screen.findByLabelText("Voice name");
+    expect(screen.queryByText(/Tip: add 2 or 3 more clips/)).not.toBeInTheDocument();
+    await user.upload(screen.getByLabelText("Voice sample"), wav());
+    expect(screen.getByText(/Tip: add 2 or 3 more clips/)).toBeInTheDocument();
+  });
+
   it("shows no quality section when the server sent none", async () => {
     const post = vi.spyOn(http, "post").mockResolvedValue({ data: fixtures.profile });
     wrap(<UploadVoiceForm />);
@@ -667,6 +699,7 @@ describe("VoiceProfileList actions and advice", () => {
         samples: [
           ok,
           { ...ok, position: 1, mismatch: true, quality: { rating: "fair", hints: [] } },
+          { ...ok, position: 2 },
         ],
       }),
     ]);
@@ -679,10 +712,16 @@ describe("VoiceProfileList actions and advice", () => {
   });
 
   it("shows no advice line for a voice whose clips are fine", async () => {
+    list([profile({ samples: [ok, { ...ok, position: 1 }, { ...ok, position: 2 }] })]);
+    wrap(<VoiceProfileList />);
+    await screen.findByText("Clips (3)");
+    expect(screen.queryByText(/Open Clips for tips/)).toBeNull();
+  });
+
+  it("nudges a voice made from one clip to add more, on the card", async () => {
     list([profile({ samples: [ok] })]);
     wrap(<VoiceProfileList />);
-    await screen.findByText("Clips (1)");
-    expect(screen.queryByText(/Open Clips for tips/)).toBeNull();
+    expect(await screen.findByText(/Add more clips of the same person/)).toBeInTheDocument();
   });
 
   it("calls a voice with no clip rows just Clips, not Clips (0)", async () => {

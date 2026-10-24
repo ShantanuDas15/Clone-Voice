@@ -257,6 +257,12 @@ export function UploadVoiceForm() {
         ) : (
           <AudioUploader files={files} onChange={setFiles} disabled={pending} error={fileError} />
         )}
+        {files.length === 1 && (
+          <p className="text-sm text-muted-foreground">
+            Tip: add 2 or 3 more clips of the same person. Voices made from several clips have fewer
+            garbled or missing words. You can also add them later under Clips.
+          </p>
+        )}
       </fieldset>
 
       <div>
