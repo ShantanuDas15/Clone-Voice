@@ -981,11 +981,19 @@ What this shows:
   reproduced to the last digit).** Five of the 20 women's clones (three control, two elderly) now have no F0 error because
   too little of the clone is voiced (voiced fractions 0.00 to 0.27 against 0.4 to 0.85 for the rest). Control women drop
   from 6.88 to 1.94 semitones, a normal value. **Elderly women still read 10.17, and two speakers cause it:**
-  `109292d3b481` (41.8 semitones, ECAPA -0.05, whose real recordings read 76 Hz on five clips and 135 Hz on one) and
-  `062a915b1870` (22.0 semitones, which did not reproduce when re-synthesised with a different sentence); the other six
-  are 0.0 to 6.5. These two pass the guard, so the cause is unexplained: a tracker error on the real or the cloned audio,
-  or a clone that really is far off. **Do not read the elderly F0 error as a pitch result for women** until those two
-  are inspected. The men's F0 columns are unchanged by the guard (nothing rejected).
+  `109292d3b481` (41.8 semitones, ECAPA -0.05) and `062a915b1870` (22.0 semitones); the other six are 0.0 to 6.5. Both
+  reproduced exactly when re-synthesised with the study's own sentence, seed and index (S0.2g), and have different causes:
+  * **`109292d3b481`: the real-side track is an artefact.** The tracker reports a constant 76 Hz on five of six real
+    clips (5th percentile = median = 76; 102 Hz, also constant, with a search range of 80 to 500 Hz), which is a
+    stationary tone or rumble, not speech; the sixth clip reads 141 Hz. The clone track is also unreliable (94 voiced
+    frames with median 853 Hz in the study range, 45 frames at 220 Hz in 80 to 500 Hz). The 41.8 semitones therefore
+    compares a noise lock with a poor clone track and says nothing about pitch.
+  * **`062a915b1870`: the clone has no stable pitch.** The real side is clean (210 Hz). The clone has 42 voiced frames
+    out of 162 (0.26, normal clones are 0.4 to 0.85) and the median moves with the search range (747 Hz, 499 Hz pinned at
+    the ceiling, 366 Hz from 12 frames), so no range finds a pitch. This looks like a breathy or noisy clone, a real
+    synthesis fault, with ECAPA 0.09; nobody has listened to it.
+  The guard (10 % voiced, 2 semitones from the limits) does not catch either: a 0.26 fraction passes, and a constant
+  noise lock inside the range passes. Do not read the elderly F0 error for women as a pitch result.
 * **Clones of some women are largely unvoiced.** The elderly clone of `09d129e07097` has voiced fraction 0.00 yet ECAPA 0.45,
   the opposite of what an unvoiced clone should score; nobody has listened to it. Whether these are synthesis faults or tracker
   failures is open.
@@ -1000,4 +1008,4 @@ rate, no listening test. Nothing in this section covers children (decision Q4).
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
 2. ~~An emotion classifier~~ (done, S0.3 above), ~~a predicted-naturalness model and RTF~~ (done, S0.1e above), ~~an **independent** speaker encoder~~ (done, S0.1f above), and a first blind listening test of the S1 pause lengths.
 3. ~~A positive control for the question metric (natural questions)~~ (done, S0.3b above; a punctuated corpus would tighten it).
-4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked, the metric guarded and both studies re-scored (S0.2e/S0.2f); two elderly-women speakers (`109292d3b481`, `062a915b1870`) still give 42 and 22 semitones and need inspecting.
+4. ~~Elderly speech from a source with verified licence terms~~ (done for adult males and females, section above); child speech remains open (children out of scope, Q4). The F0 tracker was checked, the metric guarded and both studies re-scored (S0.2e/S0.2f); two elderly-women speakers (`109292d3b481`, `062a915b1870`) still give 42 and 22 semitones: inspected in S0.2g, one is a tracker lock on noise in the real audio and one a clone with no stable pitch; neither is a pitch result.
