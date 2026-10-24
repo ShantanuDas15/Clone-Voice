@@ -1206,8 +1206,8 @@ fixed part per call plus a part per second of audio, and it bends upward with le
 
 Warm-up now times the vocoder at 1.5 s and 12.5 s of audio and keeps that pair. Each request is judged from
 its text before it queues (estimated audio length from its words and typed pauses, then fixed + per-second x
-audio against 30 s x ). A text that would not fit is refused at once with a 422 that
-names about how many words do (, default on). One-time cost: warm-up plus timing took
+audio against 30 s x `TTS_ADMISSION_MARGIN`). A text that would not fit is refused at once with a 422 that
+names about how many words do (`TTS_ADMISSION_CONTROL`, default on). One-time cost: warm-up plus timing took
 79 s on 2 CPUs and 106 s on 8 (including loading the models), inside the 600 s deploy health check.
 
 | Real requests, warmed up, margin 0.8 | 2 CPUs | 4 CPUs | 8 CPUs |
