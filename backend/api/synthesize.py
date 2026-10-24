@@ -36,6 +36,7 @@ from backend.services.tts_pipeline import (
     InferenceQueueFullError,
     InferenceTimeoutError,
     OutputQualityError,
+    TextTooLongError,
     free_gpu_memory,
     run_inference_pipeline,
 )
@@ -275,6 +276,19 @@ async def synthesize(
             req.text, embedding, str(user_id), **pipeline_extra
         )
         out_path, duration = result
+    except TextTooLongError as error:
+        logger.info(
+            "Text refused as too long for this server (%d chars, about %d words fit) — user_id=%s",
+            len(req.text),
+            error.max_words,
+            user_id,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail="This text is too long for the server to speak in one go. "
+            f"Please shorten it to about {error.max_words} words or fewer, "
+            "or split it into parts.",
+        )
     except InferenceQueueFullError:
         logger.warning(
             "Inference queue full — rejecting synthesis request — "

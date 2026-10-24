@@ -17,7 +17,9 @@ from backend.core import metrics
 from backend.core.config import settings
 from backend.core.cpu_limits import resolve_thread_count
 from backend.services import style_markup, styled_synthesis
-from backend.services.audio_gate import check_output
+from backend.services.audio_gate import (SPEECH_BASE_SECONDS,
+                                         SPEECH_PER_WORD_SECONDS,
+                                         check_output, count_spoken_words)
 from backend.services.audio_polish import polish_waveform
 from backend.services.candidate_selection import (UNSCORABLE, pick_best,
                                                   speaker_similarity)
@@ -74,6 +76,95 @@ _abandoned = threading.Event()
 
 class InferenceAbandoned(Exception):
     """Raised inside a worker thread whose request has already given up."""
+
+
+# --- Admission control (SPEECH_QUALITY_PLAN.md S3.5f) -----------------------------------------
+#
+# The vocoder is about 90% of a request, and one stage may run INFERENCE_CALL_TIMEOUT_SECONDS.
+# Its cost depends on the CPU and is not proportional to the audio: a fixed part per call plus a
+# part per second of audio (measured on 2 CPUs: about 7 s plus 1.1 s per second of audio; on 8
+# CPUs 3 s plus 0.6 s). So a maximum-length text that is fine on a big machine runs past the limit
+# on a small one, times out after 30 s and wastes the slot. Instead of finding out the slow way,
+# warm-up times the vocoder at two lengths on this machine and each request is judged from its
+# text before it is queued.
+
+CALIBRATION_TEXT = "This is a short sentence that is used to time the voice model."
+# Mel lengths timed at warm-up: about 1.5 s and 12.5 s of audio. The vocoder's cost does not depend
+# on what the mel contains, so one decoded sentence is tiled to both lengths. The long point is
+# long on purpose: the cost bends upward with length, so a short one under-predicts a full text.
+CALIBRATION_FRAMES = (120, 1000)
+
+# (fixed seconds, seconds per second of audio) of one vocoder call on this machine; None until
+# warm-up measures it.
+_vocoder_cost: Optional[tuple[float, float]] = None
+
+
+class TextTooLongError(Exception):
+    """The text would take longer to vocode than one inference stage may run."""
+
+    def __init__(self, max_words: int) -> None:
+        """Remember roughly how many words this machine can handle."""
+        super().__init__(
+            f"text too long for this server (about {max_words} words at most)"
+        )
+        self.max_words = max_words
+
+
+def estimated_audio_seconds(spoken_text: str) -> float:
+    """Estimate the audio length of already-cleaned text: speech time plus typed pauses."""
+    segments = split_into_segments(spoken_text, settings.TTS_CHUNK_MAX_CHARS)
+    words = count_spoken_words(spoken_text)
+    speech = max(0.3, SPEECH_BASE_SECONDS + SPEECH_PER_WORD_SECONDS * words)
+    pauses = sum(
+        settings.TTS_PAUSE_SECONDS.get(segment.boundary.value, 0.0)
+        for segment in segments[:-1]
+    )
+    return speech + pauses
+
+
+def check_text_fits(spoken_text: str) -> None:
+    """Raise ``TextTooLongError`` if this text's vocoding would pass the stage time limit."""
+    cost = _vocoder_cost
+    if cost is None or not settings.TTS_ADMISSION_CONTROL:
+        return
+    fixed, per_second = cost
+    budget = settings.INFERENCE_CALL_TIMEOUT_SECONDS * settings.TTS_ADMISSION_MARGIN
+    if fixed + per_second * estimated_audio_seconds(spoken_text) <= budget:
+        return
+    max_audio = max(0.0, (budget - fixed) / per_second)
+    max_words = max(1, int((max_audio - SPEECH_BASE_SECONDS) / SPEECH_PER_WORD_SECONDS))
+    raise TextTooLongError(max_words)
+
+
+def _time_vocoder(mel: np.ndarray) -> tuple[float, float]:
+    """Return (audio seconds, compute seconds) of one vocoder call."""
+    started = time.perf_counter()
+    wav = vocode(mel)
+    return len(wav) / synth_hparams.sample_rate, time.perf_counter() - started
+
+
+def _calibrate_vocoder_speed() -> None:
+    """Time the vocoder at two lengths and keep its fixed and per-second cost."""
+    global _vocoder_cost
+    if not settings.TTS_ADMISSION_CONTROL:
+        return
+    base = synthesize_speech(CALIBRATION_TEXT, np.zeros(256, dtype=np.float32))
+    points = []
+    for frames in CALIBRATION_FRAMES:
+        repeats = -(-frames // base.shape[1])
+        points.append(_time_vocoder(np.tile(base, (1, repeats))[:, :frames]))
+    (short_audio, short_time), (long_audio, long_time) = points
+    if long_audio <= short_audio or short_audio <= 0:
+        return
+    per_second = (long_time - short_time) / (long_audio - short_audio)
+    if per_second <= 0:  # timing noise: fall back to a purely proportional cost
+        _vocoder_cost = (0.0, long_time / long_audio)
+    else:
+        _vocoder_cost = (max(0.0, short_time - per_second * short_audio), per_second)
+    logger.info(
+        "Vocoder cost on this machine: %.1f s per call plus %.2f s per second of audio.",
+        *_vocoder_cost,
+    )
 
 
 def _check_abandoned() -> None:
@@ -232,9 +323,32 @@ async def warmup_inference() -> bool:
         logger.exception("Inference warm-up failed; service will report not ready.")
         _warmup_status = "failed"
         return False
+    await _calibrate_admission_control()
     logger.info("Inference warm-up forward pass succeeded.")
     _warmup_status = "ok"
     return True
+
+
+async def _calibrate_admission_control() -> None:
+    """Measure the vocoder for admission control; a failure only leaves the check off.
+
+    Separate from the warm-up pass because it takes longer than one stage may on a small CPU
+    (two timed vocoder calls), so it has its own, longer limit and cannot fail readiness.
+    """
+    if not settings.TTS_ADMISSION_CONTROL:
+        return
+    try:
+        async with _acquire_inference_slot() as slot:
+            await slot.run(
+                _calibrate_vocoder_speed,
+                timeout=4 * settings.INFERENCE_CALL_TIMEOUT_SECONDS,
+                stage="calibration",
+            )
+    except Exception:
+        logger.warning(
+            "Could not time the vocoder; texts will not be checked against the machine.",
+            exc_info=True,
+        )
 
 
 async def drain_inflight_inference(timeout: float) -> bool:
@@ -998,6 +1112,8 @@ async def run_inference_pipeline(
         conditioning = engine.conditioning_from_array(embedding)
     # Inline emotion tags are only for the per-sentence path; every other path speaks the bare text.
     spoken_text = _clean_for_chunking(style_markup.bare(text))
+    if engine.name == "sv2tts":
+        check_text_fits(spoken_text)
     max_pause = max(settings.TTS_PAUSE_SECONDS.values())
     attempts = (
         settings.TTS_QUALITY_MAX_ATTEMPTS if settings.TTS_QUALITY_GATE_ENABLED else 1
