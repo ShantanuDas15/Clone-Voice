@@ -38,6 +38,17 @@ def email_verification_off_by_default(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_measured_vocoder_cost(monkeypatch):
+    """Warm-up in one test must not make another test's text look too long for the machine.
+
+    The admission check (test_admission_control.py) sets the measured speed explicitly.
+    """
+    from backend.services import tts_pipeline
+
+    monkeypatch.setattr(tts_pipeline, "_vocoder_cost", None)
+
+
+@pytest.fixture(autouse=True)
 def adult_confirmation_off_by_default(monkeypatch):
     """Most tests upload a clip without the speaker_is_adult field.
 
