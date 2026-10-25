@@ -20,7 +20,12 @@ import { getDraft, saveDraft } from "@/lib/draft";
 import { ApiError } from "@/lib/errors";
 import { describeEngine } from "@/lib/engine-names";
 import { firstRun } from "@/lib/first-run";
-import { TEXT_MAX, hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
+import {
+  TEXT_MAX,
+  countWords,
+  hasLikelyUnsupportedChars,
+  synthesisTextSchema,
+} from "@/lib/validation/text";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Select, Textarea } from "@/components/ui/field";
@@ -216,6 +221,10 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
 
   const warnChars = hasLikelyUnsupportedChars(text);
   const over = text.trim().length - TEXT_MAX; // > 0: that many characters too many
+  // The server's speed-based limit (S3.5i); an estimate, so it warns but never blocks.
+  const maxWords = capabilities.data?.max_words ?? null;
+  const words = maxWords != null ? countWords(text) : 0;
+  const overWords = maxWords != null && words > maxWords;
 
   // Why Generate is unavailable, shown next to the button (UR4). While the list loads we don't
   // block; the server still enforces both rules.
@@ -258,15 +267,22 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             readOnly={pending} // stays selectable and copyable while generating
             className="read-only:bg-muted"
             aria-invalid={textError || over > 0 ? true : undefined}
-            aria-describedby={`tts-count tts-hint${over > 0 ? " tts-over" : ""}`}
+            aria-describedby={`tts-count tts-hint${over > 0 ? " tts-over" : ""}${overWords ? " tts-words" : ""}`}
           />
           <p
             id="tts-count"
-            className={`mt-1 text-right font-mono text-xs tabular-nums ${over > 0 ? "font-semibold text-danger" : "text-muted-foreground"}`}
+            className={`mt-1 text-right font-mono text-xs tabular-nums ${over > 0 || overWords ? "font-semibold text-danger" : "text-muted-foreground"}`}
           >
             {text.length} / {TEXT_MAX}
             {over > 0 && ` (${over} too many)`}
+            {maxWords != null && ` · ${words} / about ${maxWords} words`}
           </p>
+          {overWords && over <= 0 && (
+            <Alert tone="neutral" id="tts-words" className="mt-1">
+              This server speaks about {maxWords} words at a time, so this may be refused. Shorten
+              it or split it into parts.
+            </Alert>
+          )}
           {over > 0 && (
             <Alert tone="danger" id="tts-over" className="mt-1">
               That&apos;s over the {TEXT_MAX}-character limit. Shorten the text to generate it.

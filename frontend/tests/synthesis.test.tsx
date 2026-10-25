@@ -621,6 +621,29 @@ describe("generate screen details", () => {
     expect(calls).toBe(0);
   });
 
+  it("shows this server's word limit next to the count and warns past it", async () => {
+    server.use(
+      mswHttp.get(`${API}/synthesize/capabilities`, () =>
+        HttpResponse.json({ emotion_control: false, max_words: 5 }),
+      ),
+    );
+    wrap(<TextToSpeechForm />);
+    const box = await screen.findByLabelText("Text");
+    fireEvent.change(box, { target: { value: "one two three" } });
+    expect(await screen.findByText(/3 \/ about 5 words/)).toBeInTheDocument();
+    expect(screen.queryByText(/may be refused/i)).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: "one two three four five six" } });
+    expect(await screen.findByText(/may be refused/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate speech" })).not.toBeDisabled();
+  });
+
+  it("shows no word limit when the server reports none", async () => {
+    wrap(<TextToSpeechForm />);
+    const box = await screen.findByLabelText("Text");
+    fireEvent.change(box, { target: { value: "one two three" } });
+    expect(screen.queryByText(/about \d+ words/)).not.toBeInTheDocument();
+  });
+
   it("shows no over-limit message at exactly the limit", async () => {
     wrap(<TextToSpeechForm />);
     const box = await screen.findByLabelText("Text");

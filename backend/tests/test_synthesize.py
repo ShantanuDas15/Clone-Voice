@@ -408,7 +408,7 @@ def test_capabilities_requires_auth(client: TestClient):
 def test_capabilities_off_by_default(client: TestClient, auth_headers_syn):
     res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
     assert res.status_code == 200
-    assert res.json() == {"emotion_control": False}
+    assert res.json() == {"emotion_control": False, "max_words": None}
 
 
 def test_capabilities_off_when_the_engine_cannot_style(
@@ -417,7 +417,7 @@ def test_capabilities_off_when_the_engine_cannot_style(
     """The flag alone is not enough: SV2TTS has no delivery control, so it stays off."""
     monkeypatch.setattr(settings, "EMOTION_CONTROL_ENABLED", True)
     res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
-    assert res.json() == {"emotion_control": False}
+    assert res.json() == {"emotion_control": False, "max_words": None}
 
 
 def test_capabilities_on_with_flag_and_a_styling_engine(
@@ -428,7 +428,7 @@ def test_capabilities_on_with_flag_and_a_styling_engine(
     monkeypatch.setattr(settings, "EMOTION_CONTROL_ENABLED", True)
     monkeypatch.setattr(styled_synthesis, "applies", lambda engine: True)
     res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
-    assert res.json() == {"emotion_control": True}
+    assert res.json() == {"emotion_control": True, "max_words": None}
 
 
 def test_capabilities_follow_the_canary(
@@ -439,7 +439,7 @@ def test_capabilities_follow_the_canary(
     monkeypatch.setattr(styled_synthesis, "applies", lambda engine: True)
     monkeypatch.setattr(settings, "EMOTION_CONTROL_PERCENT", 100)
     res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
-    assert res.json() == {"emotion_control": True}
+    assert res.json() == {"emotion_control": True, "max_words": None}
 
 
 def test_capabilities_survive_an_engine_that_cannot_be_built(
@@ -453,4 +453,29 @@ def test_capabilities_survive_an_engine_that_cannot_be_built(
     monkeypatch.setattr(api, "get_engine_for_user", boom)
     res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
     assert res.status_code == 200
-    assert res.json() == {"emotion_control": False}
+    assert res.json() == {"emotion_control": False, "max_words": None}
+
+
+def test_capabilities_report_the_word_limit_of_this_machine(
+    client: TestClient, auth_headers_syn, monkeypatch
+):
+    """S3.5i: the measured vocoder speed becomes a word count the form can show up front."""
+    from backend.services import tts_pipeline
+
+    monkeypatch.setattr(settings, "TTS_ADMISSION_CONTROL", True)
+    monkeypatch.setattr(tts_pipeline, "_vocoder_cost", (6.5, 1.09))  # the 2-CPU fit
+    res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
+    words = res.json()["max_words"]
+    assert words == tts_pipeline.admission_max_words()
+    assert 40 <= words <= 60
+
+
+def test_capabilities_have_no_word_limit_with_admission_control_off(
+    client: TestClient, auth_headers_syn, monkeypatch
+):
+    from backend.services import tts_pipeline
+
+    monkeypatch.setattr(settings, "TTS_ADMISSION_CONTROL", False)
+    monkeypatch.setattr(tts_pipeline, "_vocoder_cost", (6.5, 1.09))
+    res = client.get("/api/v1/synthesize/capabilities", headers=auth_headers_syn)
+    assert res.json()["max_words"] is None
