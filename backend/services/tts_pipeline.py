@@ -145,6 +145,12 @@ def check_text_fits(spoken_text: str) -> None:
     raise TextTooLongError(admission_max_words() or 1)
 
 
+def _retry_fits(begun: float, attempt_started: float) -> bool:
+    """True if a retry, costing about what the failed attempt did, ends inside the request budget."""
+    now = time.perf_counter()
+    return (now - begun) + (now - attempt_started) <= settings.TTS_REQUEST_BUDGET_SECONDS
+
+
 def _time_vocoder(mel: np.ndarray) -> tuple[float, float]:
     """Return (audio seconds, compute seconds) of one vocoder call."""
     started = time.perf_counter()
@@ -1164,6 +1170,7 @@ async def run_inference_pipeline(
             nonlocal style_applied, emotions_used, seed_applied
             truncation_retries = 0
             wav, rate = np.zeros(0, np.float32), settings.VOCODER_SAMPLE_RATE
+            begun = time.perf_counter()
             for attempt in range(1, attempts + 1):
                 started = time.perf_counter()
                 try:
@@ -1223,6 +1230,15 @@ async def run_inference_pipeline(
                 for reason in verdict.reasons:
                     metrics.QUALITY_GATE_FAILURES.labels(reason).inc()
                 last = attempt == attempts
+                if not last and not _retry_fits(begun, started):
+                    last = True
+                    logger.warning(
+                        "Not retrying: another attempt of %.1f s would pass the %.0f s "
+                        "request budget (%.1f s used)",
+                        time.perf_counter() - started,
+                        settings.TTS_REQUEST_BUDGET_SECONDS,
+                        time.perf_counter() - begun,
+                    )
                 metrics.ENGINE_SYNTHESIS.labels(
                     which.name, "gate_refused" if last else "gate_retried"
                 ).inc()

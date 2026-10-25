@@ -3,6 +3,7 @@
 import asyncio
 import io
 import os
+import time
 import wave
 from pathlib import Path
 from unittest.mock import patch
@@ -204,6 +205,48 @@ def test_a_bad_attempt_is_retried_and_the_good_one_is_served(gate_on):
     assert duration == pytest.approx(1.8, abs=0.01)
     assert _count("retried") == retried + 1
     assert len(_outputs()) == 1
+
+
+def test_a_retry_that_would_pass_the_request_budget_is_skipped(gate_on, monkeypatch):
+    """S3.5j: the second attempt costs about what the first did; if that overruns, refuse now."""
+    monkeypatch.setattr(settings, "TTS_REQUEST_BUDGET_SECONDS", 0.05)
+    seen = []
+
+    def slow_bad(mel):
+        seen.append(1)
+        time.sleep(0.04)  # 2 x 0.04 s is over the 0.05 s budget
+        return np.zeros(SR * 2, np.float32)
+
+    refused = _count("refused")
+    with patch.object(tts_pipeline, "vocode", slow_bad), pytest.raises(
+        OutputQualityError
+    ):
+        _run()
+    assert len(seen) == 1  # no second synthesis
+    assert _count("refused") == refused + 1
+    assert _outputs() == []
+
+
+def test_a_retry_that_fits_the_request_budget_still_happens(gate_on, monkeypatch):
+    monkeypatch.setattr(settings, "TTS_REQUEST_BUDGET_SECONDS", 60.0)
+    fake, seen = _vocode_returning(np.zeros(SR * 2, np.float32), _voiced(1.8))
+    with patch.object(tts_pipeline, "vocode", fake):
+        _run()
+    assert len(seen) == 2
+
+
+def test_retry_fits_compares_elapsed_plus_another_attempt_with_the_budget(monkeypatch):
+    monkeypatch.setattr(settings, "TTS_REQUEST_BUDGET_SECONDS", 90.0)
+    now = time.perf_counter()
+    assert tts_pipeline._retry_fits(now - 40, now - 40)  # 40 + 40 <= 90
+    assert not tts_pipeline._retry_fits(now - 50, now - 50)  # 50 + 50 > 90
+    assert not tts_pipeline._retry_fits(now - 88, now - 5)  # a short attempt that ends late
+
+
+@pytest.mark.parametrize("bad", [0, -1])
+def test_request_budget_must_be_positive(bad):
+    with pytest.raises(Exception):
+        Settings(TTS_REQUEST_BUDGET_SECONDS=bad)
 
 
 def test_when_every_attempt_fails_it_refuses_and_stores_nothing(gate_on):
