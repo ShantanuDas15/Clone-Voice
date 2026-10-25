@@ -1312,6 +1312,22 @@ references are synthetic listening-test clips (no real speech was on this machin
 4 long requests per size, one run of the 60-word, long and concurrency cases. Railway's plan vCPU and memory
 limits were still not checked against its documentation or a deployed service.
 
+### Gate retries and the request budget (S3.5j, 2026-10-25)
+
+Admission control (S3.5f) judges one vocoder pass against the 30 s stage limit. A gate retry (S3.4) is another
+full synthesis with a fresh stage limit, so it never breaks that limit; it lengthens the request and holds the
+single inference slot. S3.5h saw it: a 60-word text on 8 CPUs took 40 s against about 20 s after one retry.
+The worst case is 2 attempts x 2 stages x 30 s = 120 s, exactly the web app's request timeout.
+
+Shrinking the word limit to pay for a possible retry would roughly halve it (about 49 to 25 words on 2 CPUs)
+to cover an event seen in about 1.4% of short requests, so the limits were kept. Instead the request has a
+time budget (`TTS_REQUEST_BUDGET_SECONDS`, 90 s): after a failed attempt, if the time already spent plus
+another attempt of the same length would pass it, the attempt is refused at once (the same quality refusal)
+rather than retried into a client timeout that discards the audio anyway.
+
+Limits: tested with a stubbed vocoder, not measured on a real CPU; the retry is assumed to cost what the failed
+attempt did (a smaller-chunk retry after truncation may differ); how often the budget binds is not measured.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
