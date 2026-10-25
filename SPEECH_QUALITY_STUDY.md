@@ -1328,6 +1328,37 @@ rather than retried into a client timeout that discards the audio anyway.
 Limits: tested with a stubbed vocoder, not measured on a real CPU; the retry is assumed to cost what the failed
 attempt did (a smaller-chunk retry after truncation may differ); how often the budget binds is not measured.
 
+### Does cleaning the reference lower the garbled rate? (S3.5k, 2026-10-26)
+
+Noise in the reference raised the bad rate from about 1% to 22% (S3.5), so the obvious fix is to clean the
+recording at upload. Tested before building it: 56 Common Voice speakers (28 women, 28 men, the first
+selected by `prepare_cv_corpus --per-group 14` from the female and male downloads), each cloned two ways from
+the same 10 to 30 s reference (several of the speaker's clips joined): as recorded, and after spectral-gating
+noise reduction (`noisereduce`, stationary, `prop_decrease` 0.8). Six sentences of 8 to 11 words, the same
+seeds for both, GPU, the S3.5 gate on, scored by the recogniser (faster-whisper small.en). 672 clips.
+
+| Reference | Clips refused by the gate | Clips with WER 0.34 or worse (of those scored) | Mean WER | Speaker similarity to held-out real speech |
+|---|---|---|---|---|
+| As recorded | 8 of 336 | 25.3% | 0.263 | 0.717 |
+| Noise-reduced | 0 of 336 | 28.6% | 0.343 | 0.690 |
+
+* **Cleaning did not lower the bad rate.** Paired by speaker, it rose 1.9 points (95% bootstrap interval -5.1
+  to +8.8; Wilcoxon p = 0.59): 16 speakers improved, 22 got worse, 18 were unchanged.
+* **It made the voice less like the speaker.** Similarity fell 0.027 (interval -0.040 to -0.015), lower for
+  41 of 56 speakers. The same noise reduction that was meant to help changes what the encoder hears.
+* **The refusals went to zero, but not the bad clips.** Counting a refused clip as bad, the raw rate is
+  27.7% against 28.6% cleaned: no difference.
+* **Women fail more again:** 31.5% against 21.8% (as recorded), as in S3.5b. Cleaning left women at 31.0% and
+  took men to 26.2%.
+* **Do not read the 18 worst speakers as a rescue.** The 18 speakers who failed on 30% or more as recorded
+  averaged 70.0% bad and 55.6% cleaned, but they were picked for being bad on the first run, so part of the
+  drop is chance (regression to the mean); the paired result over all 56 is the fair one.
+
+Decision: noise reduction at upload is not built. Limits: one denoiser with one setting (a stronger or learned
+one, such as DeepFilterNet, was not tried); a joined 10 to 30 s reference, not the one-clip profile of S3.5b,
+so the 25.3% is not comparable with its 19.3%; 56 speakers, one seed; Common Voice only; recogniser labels;
+whether the cleaned clone sounds cleaner to a listener was not asked.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
