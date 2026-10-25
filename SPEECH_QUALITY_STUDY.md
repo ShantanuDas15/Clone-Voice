@@ -1267,6 +1267,51 @@ resampling beyond what the existing real-network tests cover (they pass); the pi
 8-CPU rerun was not done; the detector (`detect`, used only by the offline `detect_watermark` tool) still takes
 whole clips and was not changed; the 2.5 GB peak for a long text is the figure to size the container for.
 
+### Re-timing the Railway-sized CPUs (S3.5h, 2026-10-25)
+
+S3.5d's table predates the watermark fix (S3.5g), the early stop (S3.5e) and the CPU-scaled limits (S3.5f), so
+it was rerun on the service as it now boots: the real pipeline (`run_inference_pipeline`, quality gate on,
+default timeouts) pinned with `taskset` to 8, 4, 2 and 1 logical CPUs and the same thread count for torch,
+no GPU, warm-up and admission calibration done first (`warmup_inference`, margin 0.8). 4 reference voices,
+each asked for four 9-word sentences and one 38-word text (16 short requests and 4 long per size).
+
+| CPUs | 9-word sentence, median (p90) | Real-time factor | 38 words, median | Peak memory | Boot warm-up + timing |
+|---|---|---|---|---|---|
+| 8 | 5.7 s (6.2) | 2.0 | 10.0 s | 2.0 GB | 18 s |
+| 4 | 7.3 s (8.2) | 2.4 | 13.6 s | 2.5 GB | 24 s |
+| 2 | 10.2 s (12.4) | 3.5 | 19.2 s | 2.5 GB | 35 s |
+| 1 | 11.4 s (12.5) | 3.9 | 21.5 s | 2.6 GB | 37 s |
+
+Against S3.5d: a short sentence is unchanged (5.5, 7.5, 10.8, 11.8 s then), a 38-word text is 25% faster at
+2 CPUs (25.6 to 19.2 s) and 23% at 1 CPU (28.0 to 21.5 s), and peak memory no longer grows as threads fall
+(was 1.7, 3.2, 4.6, 4.9 GB). Warm-up is the first request's cost moved to boot, so it appears here, not in
+the request times.
+
+| Longer texts (warmed up) | 8 CPUs | 4 CPUs | 2 CPUs | 1 CPU |
+|---|---|---|---|---|
+| 38 words | served, 10 s | served, 14 s | served, 19 s | served, 22 s |
+| 60 words | served, 40 s (one retry) | served, 22 s | refused at once | refused at once |
+| about 85 words (483 characters) | served, 22 s | refused at once | refused at once | refused at once |
+| Three short requests at once | 2 served, 1 queue timeout at 10 s | 2 served, 1 timeout | 2 served, 1 timeout | 1 served, 2 timeouts |
+
+* **No request timed out at a stage limit.** Every long text was either served or refused before it queued;
+  the S3.5d failures at 30 s are gone.
+* **The gate cost time and a failure.** At 8 CPUs one sentence failed the speech-time check on both attempts
+  (14 s spent, no audio) and the 60-word text was truncated once and retried (40 s against about 20 s).
+  Reference voices were screened first because an earlier pass with an unscreened voice failed the gate on
+  3 of 4 sentences, so the failure rate here belongs to these voices, not to users. A retry doubles the time
+  and is still not in the admission estimate.
+* **Concurrency is unchanged by the fixes:** one inference at a time, so a second short request waits one
+  full request (7 to 11 s at 8 and 4 CPUs, 10 to 20 s below) and a third is turned away after 10 s. At 1 CPU
+  the 10 s wait is shorter than one request, so only the first is served.
+* **Size the container for about 2.6 GB.** The earlier 4.9 GB figure was the watermark leak.
+
+Limits: a fast desktop CPU (i7-13700HX) with hyperthread pairs standing in for vCPUs, so a Railway vCPU
+will be slower; boot timing, which re-fits the limits to the machine, is the safeguard. Four voices, whose
+references are synthetic listening-test clips (no real speech was on this machine this session), 16 short and
+4 long requests per size, one run of the 60-word, long and concurrency cases. Railway's plan vCPU and memory
+limits were still not checked against its documentation or a deployed service.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
