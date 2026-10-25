@@ -264,6 +264,11 @@ class Settings(BaseSettings):
     # holding the slot. The margin leaves room for run-to-run variation. False turns it off.
     TTS_ADMISSION_CONTROL: bool = True
     TTS_ADMISSION_MARGIN: float = Field(default=0.8, gt=0.0, le=1.0)
+    # SPEECH_QUALITY_PLAN.md S3.5j: a retry costs about what the failed attempt did and holds the
+    # one inference slot for it. When the time already spent plus that cost would pass this many
+    # seconds, the failed attempt is refused instead of retried. The default sits under the web
+    # app's 120 s request timeout, leaving room for the queue wait, watermark and saving.
+    TTS_REQUEST_BUDGET_SECONDS: float = Field(default=90.0, gt=0.0)
     # SPEECH_QUALITY_PLAN.md S2.5: synthesize this many candidates with the SV2TTS engine and serve
     # the one whose voice is closest to the profile (speaker encoder cosine). 1 = off. Each extra
     # candidate is a full synthesis plus one encoder pass, so latency grows about N-fold: leave it
