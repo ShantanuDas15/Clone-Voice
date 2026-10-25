@@ -566,6 +566,17 @@
           "emotion_control": {
             "title": "Emotion Control",
             "type": "boolean"
+          },
+          "max_words": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Words"
           }
         },
         "required": [
@@ -1522,7 +1533,7 @@
     },
     "/api/v1/synthesize/capabilities": {
       "get": {
-        "description": "Say whether an emotion the user picks would be applied for them.",
+        "description": "Say whether an emotion would be applied for the user, and how long a text fits.",
         "operationId": "get_capabilities_api_v1_synthesize_capabilities_get",
         "responses": {
           "200": {

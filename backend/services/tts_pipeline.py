@@ -122,6 +122,17 @@ def estimated_audio_seconds(spoken_text: str) -> float:
     return speech + pauses
 
 
+def admission_max_words() -> Optional[int]:
+    """Roughly how many words this machine can vocode in one stage; None when nothing limits it."""
+    cost = _vocoder_cost
+    if cost is None or not settings.TTS_ADMISSION_CONTROL:
+        return None
+    fixed, per_second = cost
+    budget = settings.INFERENCE_CALL_TIMEOUT_SECONDS * settings.TTS_ADMISSION_MARGIN
+    max_audio = max(0.0, (budget - fixed) / per_second)
+    return max(1, int((max_audio - SPEECH_BASE_SECONDS) / SPEECH_PER_WORD_SECONDS))
+
+
 def check_text_fits(spoken_text: str) -> None:
     """Raise ``TextTooLongError`` if this text's vocoding would pass the stage time limit."""
     cost = _vocoder_cost
@@ -131,9 +142,7 @@ def check_text_fits(spoken_text: str) -> None:
     budget = settings.INFERENCE_CALL_TIMEOUT_SECONDS * settings.TTS_ADMISSION_MARGIN
     if fixed + per_second * estimated_audio_seconds(spoken_text) <= budget:
         return
-    max_audio = max(0.0, (budget - fixed) / per_second)
-    max_words = max(1, int((max_audio - SPEECH_BASE_SECONDS) / SPEECH_PER_WORD_SECONDS))
-    raise TextTooLongError(max_words)
+    raise TextTooLongError(admission_max_words() or 1)
 
 
 def _time_vocoder(mel: np.ndarray) -> tuple[float, float]:

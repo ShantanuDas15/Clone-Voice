@@ -1231,8 +1231,8 @@ names about how many words do (`TTS_ADMISSION_CONTROL`, default on). One-time co
 Limits: a fast desktop CPU with hyperthread pairs standing in for vCPUs (Railway's will be slower, which the
 timing at boot captures by itself); one speaker; four to eight real requests per size; the estimate of audio
 length is the S3.5 speech model (fitted on 6 to 11 word sentences) plus pauses, so its error on long text is
-not measured; the 500-character API maximum is unchanged and the frontend does not yet show the lower limit
-before the user presses Generate (it shows the server's message).
+not measured; the 500-character API maximum is unchanged. The frontend now shows the lower limit before the user
+presses Generate (S3.5i: `max_words` on `/synthesize/capabilities`, as an estimate that warns and never blocks).
 
 ### The memory growth was the watermark (S3.5g, 2026-10-25)
 

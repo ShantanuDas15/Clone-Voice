@@ -29,6 +29,8 @@ export interface SynthesisInput {
 export interface SynthesisCapabilities {
   /** True when a chosen emotion would be applied for this user; false means it is ignored. */
   emotion_control: boolean;
+  /** About how many words this server speaks in one request; null/absent when nothing limits it. */
+  max_words?: number | null;
 }
 
 export async function fetchCapabilities(signal?: AbortSignal): Promise<SynthesisCapabilities> {

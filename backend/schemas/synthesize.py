@@ -135,3 +135,6 @@ class SynthesisCapabilitiesOut(BaseModel):
     # True when a chosen emotion would be applied for this user (flag or canary on, and the
     # engine that serves them has a delivery control); false means it would be ignored.
     emotion_control: bool
+    # About how many words this server can speak in one request (it depends on the machine's
+    # measured speed); null when nothing limits the text below the 500-character maximum.
+    max_words: Optional[int] = None

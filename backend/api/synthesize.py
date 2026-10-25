@@ -37,6 +37,7 @@ from backend.services.tts_pipeline import (
     InferenceTimeoutError,
     OutputQualityError,
     TextTooLongError,
+    admission_max_words,
     free_gpu_memory,
     run_inference_pipeline,
 )
@@ -487,17 +488,20 @@ async def synthesize(
 def get_capabilities(
     request: Request, current_user: User = Depends(get_current_user)
 ) -> SynthesisCapabilitiesOut:
-    """Say whether an emotion the user picks would be applied for them."""
+    """Say whether an emotion would be applied for the user, and how long a text fits."""
+    max_words = None
     try:
         user_id = str(current_user.id)
         engine = get_engine_for_user(user_id)
         applied = styled_synthesis.enabled_for(user_id) and styled_synthesis.applies(
             engine
         )
+        if engine.name == "sv2tts":  # the only engine the admission check covers
+            max_words = admission_max_words()
     except Exception:  # an engine that cannot be built just means no controls
         logger.exception("capabilities check failed")
         applied = False
-    return SynthesisCapabilitiesOut(emotion_control=applied)
+    return SynthesisCapabilitiesOut(emotion_control=applied, max_words=max_words)
 
 
 HISTORY_SEARCH_MAX_LENGTH = 200
