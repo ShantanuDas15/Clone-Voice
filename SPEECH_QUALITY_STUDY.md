@@ -1430,6 +1430,45 @@ per speaker (not the four-clip profile the product recommends); the recogniser i
 chunk slices cut at the pause boundary can clip a word; the fit uses only chunks the recogniser passed, which biases
 it toward fast, clean speech.
 
+### Does best-of-N reduce garbled speech? (S2.5c, 2026-10-26)
+
+Question: S2.5b found best-of-3 raised similarity by 0.021 on the selecting encoder. The product's visible fault is
+garbled output (S3.5b, S3.6b), which similarity does not measure. Does picking among candidates reduce it? Data:
+32 Common Voice speakers (16 elderly, 16 adult controls; 16 men, 16 women), one joined 10 to 30 s reference each,
+6 hand-written sentences of 9 to 10 words, 3 candidates per sentence from different seeds through the production
+pipeline (gate and retries on, `TTS_BEST_OF_N` 1), GPU, scored by the recogniser (faster-whisper small.en); garbled =
+WER 0.34 or worse. `python -m backend.evaluate_synthesis --garbled-best-of 3`. 192 sentences, 576 candidates.
+Three selectors choose among the same candidates: the first (what N=1 serves), the closest to the profile under
+the model's own encoder (what best-of-N serves today), and the lowest WER (an upper bound: it reads the recogniser
+that also scores it).
+
+| Selector | Garbled sentences | Change against first (paired by speaker, 95% interval) |
+|---|---|---|
+| First candidate | 18.2% | none |
+| Closest voice (today's best-of-3) | 19.3% | +1.0 points (-1.6 to +4.7) |
+| Lowest WER (upper bound) | 12.5% | -5.7 points (-9.9 to -2.1) |
+| All three candidates garbled | 12.5% | the floor for any selector |
+
+* **Today's selection does not help.** Choosing by voice similarity left the garbled rate where it was (18.2% to
+  19.3%, interval spans zero). Similarity and garbling are not the same property, so best-of-3 as built costs about
+  2.9 times the compute without lowering the fault users hear.
+* **Even a perfect selector removes only a third.** The lowest-WER pick reaches 12.5%, which is exactly the share
+  of sentences where all three candidates failed. The remaining garbling belongs to the speaker or the reference
+  (some voices fail on every seed), not to the seed, so more candidates cannot fix it.
+* **Three candidates were refused outright** by the gate after its retries (counted as garbled, never selected).
+* **Elderly and adult controls did not differ meaningfully** (first-candidate 15.6% against 20.8%).
+* **ECAPA similarity was not measured.** `speechbrain` is not in the project environment (the S0.1f run used a
+  separate torch 2.6 environment) and was not installed here, so the independent-encoder half of S2.5's open item
+  is still open. The garbled-rate question did not need it.
+
+Decision: `TTS_BEST_OF_N` stays 1. A WER-aware selector (S2.5d) could remove up to 5.7 points of 18.2 (a third), but
+only at 3 times the synthesis cost plus a recogniser at serve time, and the oracle number is optimistic. The cheaper
+lever stays the one S3.5b measured: more reference clips cut the garbled rate by 8.2 points at no serving cost.
+
+Limits: 32 speakers, one seed set, six sentences of 9 to 10 words; one reference clip per speaker, not the multi-clip
+profile the product recommends; the recogniser is noisy and the oracle shares it with the score; the study seeds
+candidates directly, which is statistically the same as the production extras but not byte-identical to them.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

@@ -775,3 +775,99 @@ def test_evaluate_best_of_needs_two_candidates_and_works_without_an_independent_
         es.evaluate_best_of(_LevelEncoder(), None, "s", files, "g", 0, 1, 1, ["One"])
     row = es.evaluate_best_of(_LevelEncoder(), None, "s", files, "g", 0, 1, 2, ["One"])
     assert "ecapa_best" not in row and "secs_best" in row
+
+
+# --- candidate selection (S2.5c) ---------------------------------------------
+
+
+def test_select_candidate_picks_first_closest_or_lowest_wer_and_breaks_ties_early():
+    sims, wers = [0.6, 0.9, 0.9], [0.5, 0.4, 0.0]
+    assert es.select_candidate("first", sims, wers) == 0
+    assert es.select_candidate("similarity", sims, wers) == 1
+    assert es.select_candidate("wer_oracle", sims, wers) == 2
+    assert es.select_candidate("wer_oracle", sims, [0.2, 0.2, 0.2]) == 0
+    with pytest.raises(ValueError):
+        es.select_candidate("random", sims, wers)
+
+
+def test_evaluate_candidate_selection_scores_each_selector_on_the_same_candidates(
+    tmp_path, monkeypatch
+):
+    from backend.core.config import settings
+
+    seen = []
+    amps = iter([0.1, 0.2, 0.3] * 2)
+
+    def fake_synth(text, embedding, speaker, seed):
+        seen.append((seed, settings.TTS_BEST_OF_N))
+        return tone(180.0, 185.0, 1.0, amp=next(amps))
+
+    # sentence 1: only candidate 1 is clean; sentence 2: every candidate is garbled
+    replies = iter(["x y z w", "a b c d", "x y z w", "x y z w", "x y z w", "x y z w"])
+    monkeypatch.setattr(es, "_synthesize", fake_synth)
+    before = settings.TTS_BEST_OF_N
+    row = es.evaluate_candidate_selection(
+        _LevelEncoder(),
+        _LevelEncoder(),
+        lambda audio: next(replies),
+        "spk",
+        _speaker_files(tmp_path),
+        "grp",
+        1,
+        1234,
+        3,
+        ["a b c d", "a b c d"],
+    )
+    assert settings.TTS_BEST_OF_N == before
+    assert {n for _, n in seen} == {1}
+    assert len({s for s, _ in seen}) == 6
+    # the first candidate of sentence 1 is garbled; the oracle finds the clean one
+    assert row["garbled_first"] == pytest.approx(1.0)
+    assert row["garbled_wer_oracle"] == pytest.approx(0.5)
+    assert row["all_candidates_garbled"] == pytest.approx(0.5)
+    assert row["wer_wer_oracle"] <= row["wer_first"]
+    for name in es.SELECTORS:
+        assert -1.0 <= row[f"ecapa_{name}"] <= 1.0
+
+
+def test_evaluate_candidate_selection_needs_two_candidates_and_skips_ecapa_without_it(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(es, "_synthesize", lambda *a: tone(180.0, 185.0, 1.0, amp=0.1))
+    files = _speaker_files(tmp_path)
+    args = (_LevelEncoder(), None, lambda audio: "a b", "s", files, "g", 0, 1)
+    with pytest.raises(ValueError):
+        es.evaluate_candidate_selection(*args, 1, ["a b"])
+    row = es.evaluate_candidate_selection(*args, 2, ["a b"])
+    assert row["garbled_first"] == 0.0 and row["ecapa_first"] is None
+
+
+def test_a_candidate_the_gate_refuses_counts_as_garbled_and_never_wins(
+    tmp_path, monkeypatch
+):
+    from backend.services.tts_pipeline import OutputQualityError
+
+    calls = iter([0, 1, 2])
+
+    def fake_synth(text, embedding, speaker, seed):
+        if next(calls) == 0:
+            raise OutputQualityError(("speech_too_long",))
+        return tone(180.0, 185.0, 1.0, amp=0.1)
+
+    monkeypatch.setattr(es, "_synthesize", fake_synth)
+    row = es.evaluate_candidate_selection(
+        _LevelEncoder(),
+        _LevelEncoder(),
+        lambda audio: "a b",
+        "s",
+        _speaker_files(tmp_path),
+        "g",
+        0,
+        1,
+        3,
+        ["a b"],
+    )
+    assert row["refused_candidates"] == 1.0
+    assert row["garbled_first"] == 1.0  # the first candidate was the refused one
+    assert row["garbled_similarity"] == 0.0 and row["garbled_wer_oracle"] == 0.0
+    assert row["all_candidates_garbled"] == 0.0
