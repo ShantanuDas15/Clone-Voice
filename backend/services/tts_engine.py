@@ -19,6 +19,7 @@ from typing import Any, Awaitable, Callable, Optional, Tuple
 import numpy as np
 
 from backend.core.config import settings
+from backend.services.audio_gate import ChunkSpan
 
 # Runs one blocking stage of an engine on a worker thread, under the inference slot and its
 # timeout, and records the stage's metrics: ``await run_stage("vocoder", fn, *args)``.
@@ -82,6 +83,8 @@ class SynthesisResult:
     # The emotion label of each sentence, in order, when the engine spoke sentence by sentence
     # (S5.3b); empty otherwise. A label, not a promise about what the audio sounds like.
     sentence_emotions: Tuple[str, ...] = ()
+    # Where each decoded chunk of a long text sits in the waveform, when the engine knows (S3.6).
+    chunk_spans: Tuple[ChunkSpan, ...] = ()
 
 
 class EngineUnavailableError(RuntimeError):
