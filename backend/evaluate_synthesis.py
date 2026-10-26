@@ -95,6 +95,9 @@ GROUP_GAP_LIMIT = 0.05
 
 # The expressive sentence set (plan S0.2). Each stem is spoken ending in ".", "?" and "!".
 DEFAULT_SENTENCES = Path(__file__).parent / "eval_data" / "expressive_sentences.json"
+DEFAULT_SELECTION_SENTENCES = (
+    Path(__file__).parent / "eval_data" / "selection_sentences.json"
+)
 EMOTIONS = ("neutral", "happy", "sad", "angry")
 # A gap this long inside the audio is a pause a listener hears.
 PAUSE_MIN_SECONDS = 0.2
@@ -833,6 +836,120 @@ def evaluate_best_of(
     return row
 
 
+SELECTORS = ("first", "similarity", "wer_oracle")
+GARBLED_WER = 0.34
+
+
+def select_candidate(
+    selector: str, similarities: Sequence[float], wers: Sequence[float]
+) -> int:
+    """Index of the candidate a selector would serve: the first, the closest voice, or the lowest WER.
+
+    ``wer_oracle`` is an upper bound (it reads the recogniser); ties go to the earliest.
+    """
+    from backend.services.candidate_selection import pick_best
+
+    if selector == "first":
+        return 0
+    if selector == "similarity":
+        return pick_best(similarities)
+    if selector == "wer_oracle":
+        return pick_best([-w for w in wers])
+    raise ValueError(f"unknown selector {selector!r}")
+
+
+def evaluate_candidate_selection(
+    encoder,
+    independent,
+    transcribe: Transcriber,
+    speaker: str,
+    files: Sequence[str],
+    group: str,
+    index: int,
+    seed: int,
+    candidates: int,
+    sentences: Sequence[str],
+) -> Dict[str, object]:
+    """Does picking among ``candidates`` seeds reduce garbled output? (S2.5c)
+
+    Each sentence is synthesized with ``candidates`` different seeds through the production
+    pipeline at ``TTS_BEST_OF_N`` 1; the selectors in ``SELECTORS`` then choose among the same
+    candidates. ``similarity`` is what best-of-N serves today (cosine to the profile under the
+    model's own encoder). A candidate is garbled at WER ``GARBLED_WER`` or worse, scored by
+    ``transcribe`` against the sentence; ``independent`` (optional) adds ECAPA similarity to
+    the speaker's held-out real speech.
+    """
+    from backend.core.config import settings
+    from backend.services.candidate_selection import (UNSCORABLE,
+                                                      speaker_similarity)
+    from backend.services.tts_pipeline import OutputQualityError
+
+    if candidates < 2:
+        raise ValueError("candidate selection needs at least 2 candidates")
+    embedding = reference_embedding(encoder, files[0])
+    target = None
+    if independent is not None:
+        real = [librosa.load(p, sr=SAMPLE_RATE)[0] for p in files[1:]]
+        target = np.mean(
+            [independent.embed_utterance(np.asarray(y, np.float32)) for y in real],
+            axis=0,
+        )
+    garbled: Dict[str, List[float]] = {name: [] for name in SELECTORS}
+    wer_of: Dict[str, List[float]] = {name: [] for name in SELECTORS}
+    ecapa_of: Dict[str, List[float]] = {name: [] for name in SELECTORS}
+    any_garbled: List[float] = []
+    refused = 0
+    original = settings.TTS_BEST_OF_N
+    settings.TTS_BEST_OF_N = 1
+    try:
+        for k, sentence in enumerate(sentences):
+            sims: List[float] = []
+            wers: List[float] = []
+            ecapas: List[Optional[float]] = []
+            for j in range(candidates):
+                try:
+                    clone = _synthesize(
+                        sentence + ".",
+                        embedding,
+                        speaker,
+                        seed + 1000 * index + k + 100 * j,
+                    )
+                except OutputQualityError:
+                    # The gate refused it after its retries: a user would get an error, so it
+                    # counts as garbled and never wins a selector over a candidate that passed.
+                    refused += 1
+                    sims.append(UNSCORABLE)
+                    wers.append(1.0)
+                    ecapas.append(None)
+                    continue
+                sims.append(
+                    speaker_similarity(embedding, encoder.embed_utterance(clone))
+                )
+                wers.append(word_error_rate(sentence, transcribe(clone)))
+                ecapas.append(
+                    None
+                    if independent is None
+                    else secs(independent.embed_utterance(clone), target)
+                )
+            any_garbled.append(float(all(w >= GARBLED_WER for w in wers)))
+            for name in SELECTORS:
+                chosen = select_candidate(name, sims, wers)
+                garbled[name].append(float(wers[chosen] >= GARBLED_WER))
+                wer_of[name].append(wers[chosen])
+                if ecapas[chosen] is not None:
+                    ecapa_of[name].append(ecapas[chosen])
+    finally:
+        settings.TTS_BEST_OF_N = original
+    row: Dict[str, object] = {"speaker": speaker, "group": group}
+    for name in SELECTORS:
+        row[f"garbled_{name}"] = _mean(garbled[name])
+        row[f"wer_{name}"] = _mean(wer_of[name])
+        row[f"ecapa_{name}"] = _mean(ecapa_of[name])
+    row["all_candidates_garbled"] = _mean(any_garbled)
+    row["refused_candidates"] = float(refused)
+    return row
+
+
 def degradation_cases() -> Dict[str, Callable[[np.ndarray], np.ndarray]]:
     """Recording defects to apply to a clean reference clip, by name."""
     from backend.evaluate_preprocessing import (
@@ -1023,6 +1140,62 @@ def _run_best_of_study(args, dataset, groups, stems, encoder) -> int:
     return 0
 
 
+def _run_selection_study(args, dataset, groups, encoder) -> int:
+    """Run ``evaluate_candidate_selection`` over the chosen speakers and write the report."""
+    if args.whisper_model.lower() == "none":
+        raise SystemExit(
+            "--garbled-best-of scores word error rate: drop --whisper-model none"
+        )
+    transcribe = make_whisper_transcriber(args.whisper_model)
+    independent = None
+    if args.independent_encoder == "ecapa":
+        from backend.score_engine_outputs import make_ecapa_encoder
+
+        independent = make_ecapa_encoder()
+    sentences = json.loads(DEFAULT_SELECTION_SENTENCES.read_text())["sentences"][
+        : args.stems
+    ]
+    chosen = select_speakers(dataset, groups, args.speakers)
+    rows = []
+    for n, speaker in enumerate(chosen):
+        rows.append(
+            evaluate_candidate_selection(
+                encoder,
+                independent,
+                transcribe,
+                speaker,
+                dataset[speaker],
+                groups.get(speaker, "ungrouped"),
+                n,
+                args.seed,
+                args.garbled_best_of,
+                sentences,
+            )
+        )
+        logger.info("scored speaker %d/%d (%s)", n + 1, len(chosen), speaker)
+    names = ["garbled", "wer"] + (["ecapa"] if independent else [])
+    report = {
+        "candidates": args.garbled_best_of,
+        "garbled_wer": GARBLED_WER,
+        "speakers": len(rows),
+        "rows": rows,
+        "mean": {
+            f"{m}_{sel}": group_report(rows, f"{m}_{sel}")
+            for m in names
+            for sel in SELECTORS
+        },
+        "all_candidates_garbled": group_report(rows, "all_candidates_garbled"),
+        "paired_change": {
+            f"{m}_{sel}_vs_first": paired_change(rows, f"{m}_first", f"{m}_{sel}")
+            for m in names
+            for sel in SELECTORS[1:]
+        },
+    }
+    args.out.write_text(json.dumps(report, indent=2))
+    print(json.dumps({"paired_change": report["paired_change"]}, indent=2))
+    return 0
+
+
 def _run_degradation_study(args, dataset, groups, stems, encoder) -> int:
     """Run ``evaluate_degradations`` over the chosen speakers and write the report."""
     import tempfile
@@ -1143,6 +1316,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="compare serving one candidate with the best of N (S2.5a), then stop",
     )
     parser.add_argument(
+        "--garbled-best-of",
+        type=int,
+        default=0,
+        metavar="N",
+        help="compare serving the first of N candidates with the closest voice and the lowest "
+        "WER (S2.5c), then stop",
+    )
+    parser.add_argument(
         "--independent-encoder",
         choices=("none", "ecapa"),
         default="none",
@@ -1165,6 +1346,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="skip the single-sentence study and run only the multi-sentence stimuli",
     )
+    parser.add_argument(
+        "--device",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="device for the synthesis models (the encoder and scorers stay on the CPU)",
+    )
     parser.add_argument("--out", type=Path, default=Path("synthesis_study.json"))
     args = parser.parse_args(argv)
 
@@ -1183,13 +1370,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     from backend.services.tts_pipeline import load_models
 
-    load_models("cpu")
+    load_models(args.device)
     encoder = VoiceEncoder("cpu")
 
     if args.degrade_compare:
         return _run_degradation_study(args, dataset, groups, stems, encoder)
     if args.best_of:
         return _run_best_of_study(args, dataset, groups, stems, encoder)
+    if args.garbled_best_of:
+        return _run_selection_study(args, dataset, groups, encoder)
     if args.enroll_compare:
         return _run_enrollment_study(args, dataset, groups, stems, encoder)
     paragraphs = load_stimuli(args.sentences, "paragraphs")[: args.paragraphs]
