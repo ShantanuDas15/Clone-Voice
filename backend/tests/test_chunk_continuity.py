@@ -206,5 +206,5 @@ def test_truncation_still_counted_in_chained_mode(monkeypatch) -> None:
     monkeypatch.setattr(settings, "TTS_CHUNK_MAX_CHARS", 25)
     monkeypatch.setattr(settings, "TTS_CHUNK_CONTINUITY", "frame")
     monkeypatch.setattr(hp, "max_mel_frames", 5)
-    _, truncated = tts_pipeline._synthesize_counting_truncation(TEXT, EMB)
+    _, truncated, _ = tts_pipeline._synthesize_counting_truncation(TEXT, EMB)
     assert truncated >= 3

@@ -240,7 +240,9 @@ def test_retry_fits_compares_elapsed_plus_another_attempt_with_the_budget(monkey
     now = time.perf_counter()
     assert tts_pipeline._retry_fits(now - 40, now - 40)  # 40 + 40 <= 90
     assert not tts_pipeline._retry_fits(now - 50, now - 50)  # 50 + 50 > 90
-    assert not tts_pipeline._retry_fits(now - 88, now - 5)  # a short attempt that ends late
+    assert not tts_pipeline._retry_fits(
+        now - 88, now - 5
+    )  # a short attempt that ends late
 
 
 @pytest.mark.parametrize("bad", [0, -1])
@@ -293,7 +295,7 @@ def test_a_decode_that_hits_the_frame_cap_is_counted_and_fails_the_gate(
     gate_on, monkeypatch
 ):
     monkeypatch.setattr(tts_pipeline.synth_hparams, "max_mel_frames", 8)
-    mel, truncated = tts_pipeline._synthesize_counting_truncation(
+    mel, truncated, _ = tts_pipeline._synthesize_counting_truncation(
         "A sentence long enough to pass the cap.", np.ones(256, np.float32)
     )
     assert truncated >= 1

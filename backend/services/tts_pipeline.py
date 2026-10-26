@@ -18,8 +18,8 @@ from backend.core.config import settings
 from backend.core.cpu_limits import resolve_thread_count
 from backend.services import style_markup, styled_synthesis
 from backend.services.audio_gate import (SPEECH_BASE_SECONDS,
-                                         SPEECH_PER_WORD_SECONDS,
-                                         check_output, count_spoken_words)
+                                         SPEECH_PER_WORD_SECONDS, check_output,
+                                         count_spoken_words)
 from backend.services.audio_polish import polish_waveform
 from backend.services.candidate_selection import (UNSCORABLE, pick_best,
                                                   speaker_similarity)
@@ -148,7 +148,9 @@ def check_text_fits(spoken_text: str) -> None:
 def _retry_fits(begun: float, attempt_started: float) -> bool:
     """True if a retry, costing about what the failed attempt did, ends inside the request budget."""
     now = time.perf_counter()
-    return (now - begun) + (now - attempt_started) <= settings.TTS_REQUEST_BUDGET_SECONDS
+    return (now - begun) + (
+        now - attempt_started
+    ) <= settings.TTS_REQUEST_BUDGET_SECONDS
 
 
 def _time_vocoder(mel: np.ndarray) -> tuple[float, float]:
@@ -765,6 +767,22 @@ def synthesize_speech(
         mels = [_synthesize_chunk(segment.text, embedding) for segment in segments]
     else:
         mels = _synthesize_chained(segments, embedding)
+    # Where each chunk's speech sits among the joined frames, for the per-chunk quality
+    # check (S3.6); read back by `_synthesize_counting_truncation` on this same thread.
+    frames_before = 0
+    spans = []
+    for i, (segment, mel) in enumerate(zip(segments, mels)):
+        if i:
+            frames_before += _pause_frames(segments[i - 1].boundary)
+        spans.append(
+            (
+                count_spoken_words(segment.text),
+                frames_before,
+                frames_before + mel.shape[1],
+            )
+        )
+        frames_before += mel.shape[1]
+    _decode_state.chunks = tuple(spans)
     if len(mels) == 1:
         return mels[0]
 
@@ -893,20 +911,28 @@ def _synthesize_counting_truncation(
     embedding: np.ndarray,
     max_chars: Optional[int] = None,
     seed: Optional[int] = None,
-) -> tuple[np.ndarray, int]:
-    """Run ``synthesize_speech`` and also return how many decodes hit the frame cap.
+) -> tuple[np.ndarray, int, tuple[tuple[int, int, int], ...]]:
+    """Run ``synthesize_speech``; also return the truncated-decode count and the chunk spans.
+
+    The spans are (spoken words, first mel frame, end mel frame) per chunk; empty when the
+    text was not chunked at all (or a test double replaced the synthesis).
 
     A ``seed`` fixes the sampling before the decode. Inference is serialised by the semaphore, so
     nothing else draws from the generator until the vocoder stage that follows has run.
     """
     _decode_state.truncated = 0
+    _decode_state.chunks = ()
     if seed is not None:
         torch.manual_seed(seed)
     if max_chars is None:
         mel = synthesize_speech(text, embedding)
     else:
         mel = synthesize_speech(text, embedding, max_chars)
-    return mel, int(getattr(_decode_state, "truncated", 0))
+    return (
+        mel,
+        int(getattr(_decode_state, "truncated", 0)),
+        getattr(_decode_state, "chunks", ()),
+    )
 
 
 # WaveRNN returns (frames - 1) * hop samples and fades the last 20 hops, so it
@@ -1201,7 +1227,9 @@ async def run_inference_pipeline(
                     # A voice the engine cannot use is not the engine being down: counted apart so
                     # the "unavailable" rate stays a measure of the worker's health.
                     outcome = (
-                        "reference_rejected" if error.reason == "reference" else "unavailable"
+                        "reference_rejected"
+                        if error.reason == "reference"
+                        else "unavailable"
                     )
                     metrics.ENGINE_SYNTHESIS.labels(which.name, outcome).inc()
                     raise
@@ -1222,7 +1250,15 @@ async def run_inference_pipeline(
                     result.truncated_decodes,
                     max_pause,
                     settings.TTS_GATE_MAX_SPEECH_RATIO or None,
+                    result.chunk_spans,
+                    settings.TTS_GATE_CHUNK_MAX_SPEECH_RATIO or None,
                 )
+                if verdict.measures and verdict.measures.worst_chunk_ratio is not None:
+                    logger.debug(
+                        "Worst chunk speech ratio %.2f over %d chunks",
+                        verdict.measures.worst_chunk_ratio,
+                        len(result.chunk_spans),
+                    )
                 if verdict.passed:
                     metrics.QUALITY_GATE_RESULTS.labels("passed").inc()
                     metrics.ENGINE_SYNTHESIS.labels(which.name, "ok").inc()
@@ -1300,6 +1336,8 @@ async def run_inference_pipeline(
                             result.truncated_decodes,
                             max_pause,
                             settings.TTS_GATE_MAX_SPEECH_RATIO or None,
+                            result.chunk_spans,
+                            settings.TTS_GATE_CHUNK_MAX_SPEECH_RATIO or None,
                         )
                         if not verdict.passed:
                             metrics.BEST_OF_N.labels("gate_failed").inc()

@@ -1359,6 +1359,40 @@ one, such as DeepFilterNet, was not tried); a joined 10 to 30 s reference, not t
 so the 25.3% is not comparable with its 19.3%; 56 speakers, one seed; Common Voice only; recogniser labels;
 whether the cleaned clone sounds cleaner to a listener was not asked.
 
+### Speech time per chunk of long text (S3.6a, 2026-10-26)
+
+Question: the S3.5 speech-time check only covers texts of 6 to 11 words. Long text is decoded in chunks, so can the
+same test be applied to each chunk? What shipped is the plumbing and a measurement: the pipeline now reports where
+each chunk sits in the waveform (`ChunkSpan`), the gate measures the worst chunk's speech ratio on its own slice,
+and a new reason `chunk_speech_too_long` fires above `TTS_GATE_CHUNK_MAX_SPEECH_RATIO` (default 0: measure and log
+only, never refuse). Study: 12 LibriSpeech test-clean speakers (one 10 to 30 s reference each) x 6 punctuated
+paragraphs of 45 to 60 words, GPU, real weights, seed 1234 + paragraph, default 150-character chunks: 180 chunks.
+
+| Chunk size | Chunks | Speech ratio against the S3.5 line: mean | 95th percentile | Maximum |
+|---|---|---|---|---|
+| 6 to 11 words | 24 | 0.83 | 0.98 | 1.19 |
+| 12 to 17 words | 48 | 0.84 | 0.98 | 2.26 |
+| 18 to 27 words | 108 | 0.77 | 0.97 | 1.34 |
+
+* **Most real chunks are outside the calibrated range.** Chunks ran 11 to 27 words; only 24 of 180 (13%) fall in 6
+  to 11, so with the S3.5 range the per-chunk check judges few chunks. Widening the range needs a fitted line.
+* **The S3.5 line is loose for longer chunks.** On these clean chunks speech seconds = -0.08 + 0.247 x words (168
+  chunks that were not truncated), against -0.50 + 0.339 x words from Common Voice sentences. Extended past 11 words
+  the old line would put clean chunks at about 0.8, so a 1.8 limit on it would only fire at about 2.3 times
+  the clean fit (at 20 words). A limit set from this line would be too lax to be useful.
+* **The one chunk above 1.5 was already refused.** The 2.26 chunk (16 words, 11.1 s of speech) came from a
+  decode that hit the frame cap, which the gate's `truncated` reason catches. Without truncated paragraphs
+  (12 of 36 had one) the clean maximum against the own fit is 1.54 and the 99th percentile 1.37.
+
+Decision: the per-chunk limit stays off. This measures only the clean side: there are no garbled-chunk labels,
+so the share of garbled chunks caught and the false-refusal rate at a chosen limit are **not** measured.
+
+Limits: LibriSpeech readers (cleaner than Common Voice, where the S3.5 fault lives); 12 speakers, one seed; hand
+written paragraphs; the 0.247 line is a fit on clean chunks, not a validated model; no recogniser, so nothing says
+which chunks were garbled. The next step (S3.6b) needs the Common Voice corpus: synthesize long text, score each
+chunk's slice with the recogniser, fit the line on correct chunks, choose a limit at about 0.2% false refusals and
+report the catch rate.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).

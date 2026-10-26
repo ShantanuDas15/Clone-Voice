@@ -258,6 +258,10 @@ class Settings(BaseSettings):
     # more than this multiple of the expected time, the sign of a voice that drags and garbles the
     # end of the sentence. 0 turns the check off.
     TTS_GATE_MAX_SPEECH_RATIO: float = Field(default=1.8, ge=0)
+    # SPEECH_QUALITY_PLAN.md S3.6: the same speech-time test applied to each chunk of a long text.
+    # Off (0) until calibrated on garbled-chunk labels; when 0 the worst chunk is still measured
+    # and logged.
+    TTS_GATE_CHUNK_MAX_SPEECH_RATIO: float = Field(default=0.0, ge=0)
     # SPEECH_QUALITY_PLAN.md S3.5f: warm-up times the vocoder on this machine, and a text whose
     # vocoding would take longer than INFERENCE_CALL_TIMEOUT_SECONDS x this margin is refused up
     # front (422, with the word count that fits) instead of timing out after the full limit and

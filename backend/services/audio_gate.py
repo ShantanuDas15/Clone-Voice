@@ -11,8 +11,8 @@ guards that never fired on the 120 ordinary outputs.
 """
 
 import re
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from dataclasses import dataclass, replace
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -56,6 +56,15 @@ _WORD = re.compile(r"[A-Za-z0-9']+")
 
 
 @dataclass(frozen=True)
+class ChunkSpan:
+    """Where one decoded chunk of a long text sits in the output waveform (S3.6)."""
+
+    words: int
+    start_sample: int
+    end_sample: int
+
+
+@dataclass(frozen=True)
 class GateMeasures:
     """What was measured on the waveform."""
 
@@ -68,6 +77,8 @@ class GateMeasures:
     duration_ratio: Optional[float]
     speech_seconds: float = 0.0
     speech_ratio: Optional[float] = None
+    # The largest speech ratio of any chunk the pipeline reported (None: no chunk was judged).
+    worst_chunk_ratio: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +144,29 @@ def measure_output(
     )
 
 
+def worst_chunk_speech_ratio(
+    waveform: np.ndarray, sample_rate: int, spans: Sequence[ChunkSpan]
+) -> Optional[float]:
+    """Largest speech ratio over the chunks whose word count the speech-time model covers.
+
+    Each chunk is measured on its own slice, so a drawn-out chunk is not averaged away by the
+    others and the pauses between chunks (outside every span) cannot inflate it. ``None`` when
+    no chunk is in range.
+    """
+    worst: Optional[float] = None
+    for span in spans:
+        start = max(0, span.start_sample)
+        end = min(len(waveform), span.end_sample)
+        if end <= start:
+            continue
+        ratio = measure_output(
+            waveform[start:end], sample_rate, span.words
+        ).speech_ratio
+        if ratio is not None and (worst is None or ratio > worst):
+            worst = ratio
+    return worst
+
+
 def check_output(
     waveform: np.ndarray,
     sample_rate: int,
@@ -140,6 +174,8 @@ def check_output(
     truncated_chunks: int,
     max_pause_seconds: float,
     max_speech_ratio: Optional[float] = SPEECH_RATIO_MAX,
+    chunk_spans: Sequence[ChunkSpan] = (),
+    max_chunk_speech_ratio: Optional[float] = None,
 ) -> GateResult:
     """Decide whether ``waveform`` is plausible speech for ``spoken_text``.
 
@@ -151,6 +187,10 @@ def check_output(
         max_pause_seconds: The longest pause the pipeline can insert on purpose.
         max_speech_ratio: Refuse a 6 to 11 word text whose speech time exceeds this multiple of
             the expected time; ``None`` turns the check off.
+        chunk_spans: Where each decoded chunk sits in ``waveform`` (empty when the engine did not
+            report them, which skips the chunk check).
+        max_chunk_speech_ratio: Refuse when any chunk's speech time exceeds this multiple of its
+            expected time (S3.6); ``None`` measures the chunks but never refuses on them.
     """
     if waveform.ndim != 1 or waveform.size == 0:
         return GateResult(False, ("empty",), None)
@@ -158,6 +198,13 @@ def check_output(
         return GateResult(False, ("non_finite",), None)
 
     measures = measure_output(waveform, sample_rate, count_spoken_words(spoken_text))
+    if len(chunk_spans) > 1:
+        measures = replace(
+            measures,
+            worst_chunk_ratio=worst_chunk_speech_ratio(
+                waveform, sample_rate, chunk_spans
+            ),
+        )
     reasons = []
     if truncated_chunks > 0:
         reasons.append("truncated")
@@ -183,4 +230,10 @@ def check_output(
         and measures.speech_ratio > max_speech_ratio
     ):
         reasons.append("speech_too_long")
+    if (
+        max_chunk_speech_ratio is not None
+        and measures.worst_chunk_ratio is not None
+        and measures.worst_chunk_ratio > max_chunk_speech_ratio
+    ):
+        reasons.append("chunk_speech_too_long")
     return GateResult(not reasons, tuple(reasons), measures)

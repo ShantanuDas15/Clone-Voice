@@ -55,9 +55,9 @@ def test_the_stage_seeds_the_generator_so_a_seed_repeats_and_differs():
 
     with patch.object(tts_pipeline, "synthesize_speech", draw):
         run = tts_pipeline._synthesize_counting_truncation
-        a, _ = run("x", EMB, None, 5)
-        b, _ = run("x", EMB, None, 5)
-        c, _ = run("x", EMB, None, 6)
+        a = run("x", EMB, None, 5)[0]
+        b = run("x", EMB, None, 5)[0]
+        c = run("x", EMB, None, 6)[0]
     assert a[0] == b[0] and a[0] != c[0]
 
 

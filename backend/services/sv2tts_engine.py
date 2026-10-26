@@ -13,6 +13,7 @@ import numpy as np
 
 from backend.core.config import settings
 from backend.services import tts_pipeline as pipeline
+from backend.services.audio_gate import ChunkSpan
 from backend.services.tts_engine import (NEUTRAL, EngineCapabilities,
                                          StageRunner, SynthesisResult,
                                          SynthesisStyle, TTSEngine,
@@ -87,12 +88,21 @@ class Sv2ttsEngine(TTSEngine):
             if seed is None
             else partial(pipeline._synthesize_counting_truncation, seed=seed)
         )
-        mel, truncated = await run_stage(
+        outcome = await run_stage(
             "synthesizer",
             stage_fn,
             text,
             conditioning.embedding,
             *(() if chunk_chars is None else (chunk_chars,)),
         )
+        # Test doubles of the stage may still return only (mel, truncated).
+        mel, truncated = outcome[0], outcome[1]
+        spans = outcome[2] if len(outcome) > 2 else ()
         waveform = await run_stage("vocoder", pipeline.vocode, mel)
-        return SynthesisResult(waveform, settings.VOCODER_SAMPLE_RATE, truncated)
+        hop = pipeline.synth_hparams.hop_size
+        return SynthesisResult(
+            waveform,
+            settings.VOCODER_SAMPLE_RATE,
+            truncated,
+            chunk_spans=tuple(ChunkSpan(w, a * hop, b * hop) for w, a, b in spans),
+        )
