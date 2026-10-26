@@ -1393,6 +1393,43 @@ which chunks were garbled. The next step (S3.6b) needs the Common Voice corpus: 
 chunk's slice with the recogniser, fit the line on correct chunks, choose a limit at about 0.2% false refusals and
 report the catch rate.
 
+### Does the per-chunk speech-time check catch garbled chunks? (S3.6b, 2026-10-26)
+
+Question: S3.6a left the per-chunk limit off because no chunk was labelled garbled. Can a limit on a chunk's speech
+time catch the garbled ones without refusing good ones? Data: 48 Common Voice speakers (24 elderly, 24 adult
+controls; 24 men, 24 women), each cloned from one joined 10 to 30 s reference, 6 paragraphs x 2 seeds, GPU, default
+150-character chunks, real weights: 1,920 chunks. Each chunk's slice of the waveform was transcribed (faster-whisper
+small.en) and scored against that chunk's text; a chunk is garbled at WER 0.34 or worse (the S3.5b cut).
+
+| Measure | Result |
+|---|---|
+| Chunks / words per chunk | 1,920; 3 to 17 words, 25% inside the calibrated 6 to 11 |
+| Garbled chunks (WER 0.34 or worse) | 31.8% (elderly 33.6%, adult controls 30.0%) |
+| Fit on correct chunks of untruncated paragraphs (n = 1,309) | speech seconds = 0.058 + 0.276 x words |
+| Limit at 2% / 1% / 0.5% / 0.2% false refusals | 1.62 / 1.74 / 1.89 / 1.97 times the fit |
+| Garbled chunks caught at those limits (588 untruncated) | 19.6% / 13.6% / 9.0% / 7.7% |
+
+* **The check is weak per chunk.** At about 0.2% false refusals it catches 7.7% of garbled chunks. Short chunks make
+  the labels noisy (one wrong word in 3 is WER 0.33), so the cut was repeated on chunks of 8 words or more only
+  (375 chunks, 95 garbled, 25.3%): 16.8% caught at 0.2% false refusals (limit 1.68), 30.5% at 2%; area under the
+  curve 0.74.
+* **The per-chunk line is not the S3.5 line.** Correct chunks follow 0.058 + 0.276 x words here (-0.14 + 0.294
+  from 8 words), against -0.50 + 0.339 on whole sentences and -0.08 + 0.247 on clean LibriSpeech (S3.6a): three
+  different lines, so any limit is only as good as the line behind it.
+* **Chunk garbling is common on Common Voice references,** 31.8% of chunks against 11.6% to 19.8% of whole
+  6 to 11 word clips in S3.5b. The label is stricter per word at this length and a long text has several chunks to
+  fail, so the two rates are not comparable one to one.
+
+Decision: `TTS_GATE_CHUNK_MAX_SPEECH_RATIO` stays 0 (measure only). A limit that costs 0.2% false refusals would
+catch 8 to 17% of garbled chunks and, as in S3.5, would not repair what it misses; 2% false refusals for a
+20 to 30% catch is not worth a refused request. The speech-time signal is the wrong tool for chunks; a
+recogniser pass or a better reference is what reduces the rate (S3.5b: four clips cut garbled output by 40%).
+
+Limits: one seed pair per paragraph; six hand-written paragraphs whose chunks reach only 17 words; one reference
+per speaker (not the four-clip profile the product recommends); the recogniser is itself wrong on short slices, and
+chunk slices cut at the pause boundary can clip a word; the fit uses only chunks the recogniser passed, which biases
+it toward fast, clean speech.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
