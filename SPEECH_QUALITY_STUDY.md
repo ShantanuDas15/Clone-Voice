@@ -1513,6 +1513,14 @@ one 33-word text each, warm-up first, a 24-core desktop):
   value), or more than ten speakers and two paragraphs each. The WaveRNN paragraph WER here (10.7 %) is higher than
   S0.4b's 4.7 % because it is a ten-speaker subset that includes speakers 237 and 1580.
 
+**First listening result (2026-10-27, one listener).** A 24-trial blind pack (`make_listening_stimuli` with the two vocoders on
+the same seeds, 6 speakers x 8 paragraphs; `listening_test build --max-per-pair 20 --anchors 4`; question "Which recording
+sounds more natural and human?") was answered by the project owner: WaveRNN was preferred in **20 of 20** pairs, HiFi-GAN in
+none, no "no preference"; the listener passed the anchor check (95 % interval for the WaveRNN share 0.84 to 1.00, p about
+2e-6). Limits: one listener (the plan's gate is at least 10), who knew which comparison it was (labels were blinded, the
+hypothesis was not), the question is naturalness only (it says nothing on likeness to the speaker, which only the SECS
+figures above cover), and the reason was not recorded.
+
 **Decision: WaveRNN stays; HiFi-GAN is not built.** Reopen if there is a training budget (fine-tune HiFi-GAN on this
 synthesizer's own mel, which removes the adapter) or a listening test that rates the adapter version as equal.
 Request limits need no change.
