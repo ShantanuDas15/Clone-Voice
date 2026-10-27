@@ -1469,6 +1469,54 @@ Limits: 32 speakers, one seed set, six sentences of 9 to 10 words; one reference
 profile the product recommends; the recogniser is noisy and the oracle shares it with the score; the study seeds
 candidates directly, which is statistically the same as the production extras but not byte-identical to them.
 
+### HiFi-GAN spike behind a mel adapter (S3.1, 2026-10-27)
+
+The S3.1/S3.2 options review recommended a measured spike: SpeechBrain `tts-hifigan-libritts-16kHz` (Apache-2.0)
+in place of WaveRNN, behind an adapter from the synthesizer mel (16 kHz, n_fft 800, hop 200, fmin 55, fmax 7600,
+symmetric, pre-emphasised audio) to the mel the checkpoint was trained on (hop 256, n_fft 1024, fmin 0, fmax 8000,
+slaney, log). The adapter undoes the normalisation and the pre-emphasis tilt, maps the 80 bands to linear bins
+and back through the HiFi-GAN filterbank, resamples frames 200 to 256 and adds a per-band offset fitted on ten
+speakers. On ten other speakers its log-mel is within 0.28 of the true HiFi-GAN mel (about 2.4 dB, mean error
+0.05). Scratch code only, nothing in the repo; `speechbrain` was installed outside the requirements.
+
+Ten speakers (five per pitch group) of the S0.2 corpus, seed 1234, the full production pipeline (gate on),
+CPU, WaveRNN against the same pipeline with `vocode` swapped. Single sentences use two stems, plus two
+paragraphs per speaker, Whisper `small.en`, UTMOS22:
+
+| | WaveRNN | HiFi-GAN + adapter |
+|---|---|---|
+| SECS (resemblyzer, not independent) | **0.754** | 0.720 (worse for 7 of 10 speakers, up to 0.12) |
+| Median pitch error (semitones) | **5.5** | 7.65 |
+| Spectral distance (dB) | 5.47 | **4.84** |
+| Predicted MOS | **3.03** | 2.93 |
+| WER, paragraphs | 10.7 % | **4.5 %** |
+| RTF in the study run | 3.3 | **0.55** |
+
+Railway-sized CPU timing (`taskset` and torch threads pinned, four reference voices, four 9-word sentences and
+one 33-word text each, warm-up first, a 24-core desktop):
+
+| CPUs | 9-word sentence | RTF | Long text | Peak memory | Warm-up |
+|---|---|---|---|---|---|
+| 8 | 5.5 s / **0.8 s** | 2.29 / **0.33** | 10.2 / **2.7 s** | 1.9 / 2.4 GB | 18 / 3 s |
+| 4 | 7.0 s / **1.0 s** | 3.02 / **0.39** | 12.7 / **3.2 s** | 2.1 / 1.9 GB | 25 / 4 s |
+| 2 | 9.9 s / **1.4 s** | 4.10 / **0.55** | 18.0 / **4.8 s** | 2.5 / 1.9 GB | 36 / 6 s |
+| 1 | 11.0 s / **1.4 s** | 4.67 / **0.55** | 20.1 / **4.9 s** | 2.5 / 2.5 GB | 38 / 6 s |
+
+(WaveRNN / HiFi-GAN in each cell.) The WaveRNN column agrees with S3.5h (5.7, 7.3, 10.2, 11.4 s).
+
+* **Speed is not in doubt:** 7 to 13 times less time per request at every CPU count, faster than real time on one CPU.
+* **The keep rule fails.** The plan keeps it only if WER and SECS do not drop and RTF improves. WER and RTF
+  improve, SECS drops, and so do pitch accuracy and MOS. The words are clearer and the voice is less the speaker's.
+* **Likely cause: the adapter**, not the vocoder. The mel is rebuilt through interpolation and a band correction,
+  and there is no information below the synthesizer's 55 Hz. This is a guess: it was not isolated.
+* **Not measured:** ECAPA (independent) similarity, any listening, per-speaker pitch results (several rows had no
+  value), or more than ten speakers and two paragraphs each. The WaveRNN paragraph WER here (10.7 %) is higher than
+  S0.4b's 4.7 % because it is a ten-speaker subset that includes speakers 237 and 1580.
+
+**Decision: WaveRNN stays; HiFi-GAN is not built.** Reopen if there is a training budget (fine-tune HiFi-GAN on this
+synthesizer's own mel, which removes the adapter) or a listening test that rates the adapter version as equal.
+Request limits need no change.
+
 ## Next measurements, in order
 
 1. ~~Multi-sentence and number-heavy stimuli with word error rate~~ (done, section above).
