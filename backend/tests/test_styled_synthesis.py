@@ -142,6 +142,22 @@ def test_segments_are_called_in_order_with_their_own_style_and_joined_with_pause
     assert not gap.any()
 
 
+def test_segment_edges_are_faded_so_the_join_has_no_step():
+    result = _run(_Recorder(seconds=0.5), "It is fine. I hate this!")
+    wave = result.waveform
+    second = int(0.9 * RATE)
+    # the stub is a constant 0.1: unfaded it would step from 0 to 0.1 at each edge
+    assert wave[0] == 0.0 and wave[int(0.5 * RATE) - 1] == 0.0
+    assert wave[second] == 0.0 and wave[-1] == 0.0
+    assert np.abs(np.diff(wave)).max() < 0.1 / 100
+    assert wave[int(0.25 * RATE)] == pytest.approx(0.1)
+
+
+def test_a_single_segment_is_not_touched():
+    result = _run(_Recorder(seconds=0.5), "Just one sentence.")
+    assert np.all(result.waveform == np.float32(0.1))
+
+
 def test_the_pause_follows_the_previous_segment_s_ending(monkeypatch):
     monkeypatch.setitem(settings.TTS_PAUSE_SECONDS, "exclamation", 0.7)
     result = _run(_Recorder(seconds=0.5), "Stop! Go on.")

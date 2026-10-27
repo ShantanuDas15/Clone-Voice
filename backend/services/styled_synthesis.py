@@ -14,7 +14,8 @@ Differences from the one-call path, all deliberate:
   full stop inside ``Dr.`` is not taken for a sentence end. The one-call path sends the raw text;
 * one engine call per segment, so a request costs several worker calls (each under the stage
   timeout) instead of one;
-* segments are joined by silence at the engine's own sample rate, not in mel space.
+* segments are joined by silence at the engine's own sample rate, not in mel space, with a
+  10 ms fade at each segment edge so the join does not click.
 
 Engines without a delivery control (SV2TTS, Turbo, Nano) are never split: ``applies`` is false
 for them, so they keep the one-call path.
@@ -28,6 +29,7 @@ import numpy as np
 
 from backend.core import metrics
 from backend.core.config import settings
+from backend.services.audio_polish import apply_edge_fades
 from backend.services.style_mapping import EXAGGERATION_ENGINES, build_style
 from backend.services.style_markup import parse, prepare, strip_nonverbal
 from backend.services.sv2tts.synthesizer.utils.cleaners import \
@@ -181,7 +183,10 @@ async def synthesize_styled(
         rate = result.sample_rate
         if index:
             parts.append(_pause(planned[index - 1].segment.boundary.value, rate))
-        parts.append(np.asarray(result.waveform, np.float32))
+        wave = np.asarray(result.waveform, np.float32)
+        # A segment rarely starts or ends on a zero sample; beside digital silence that step
+        # clicks, so the edges of a joined segment are faded (S3.3c).
+        parts.append(apply_edge_fades(wave, rate) if len(planned) > 1 else wave)
         truncated += result.truncated_decodes
         metrics.SENTENCES_STYLED.labels(
             item.emotion, "requested" if item.requested else "detected"
