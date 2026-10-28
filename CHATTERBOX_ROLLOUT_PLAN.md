@@ -40,7 +40,7 @@
 |---|---|---|
 | R0.1 | **Build the worker image in CI** (`docker build tts_worker/` job, like `docker-build.yml` for the backend) and smoke-test `/health` and one synthesis with the stub path | CI job green; image runs |
 | R0.2 | If D3=b: narrow private-network allow-list in `Settings` + tests (accepts `x.railway.internal` over http, still rejects any other plain-http host; token still required) | tests incl. boundary hosts (`evilrailway.internal`, `railway.internal.evil.com`) |
-| R0.3 | Draft the consent/terms text (D4); bump `TERMS_VERSION`; frontend terms page; tests | You approved the text |
+| R0.3 | Consent/terms text (D4): **text approved 2026-10-28** (see §9). Apply it to `frontend/lib/terms-content.ts` and bump `TERMS_VERSION` (backend `core/config.py` and the frontend constant, which a test keeps equal) **in the same release that first sets `TTS_CANARY_PERCENT` above 0**, not before | text approved; applied and version bumped with the first canary release |
 | R0.1 ✅ | **Worker image built and run in CI** (`worker-docker-build.yml`; real Docker, Nano on CPU, one real synthesis). Done 2026-10-18. It found two real problems, both fixed here: the lock could not be installed with `pip` (`ResolutionImpossible`: chatterbox-tts and the lock name resemble-perth by different Git URLs; now `pip install --no-deps` + `pip check`), and the worker swallowed the reason a reference was rejected (now logs the failure's class only). | CI green: image 6426 MB, torch 2.6.0+cu124, `/health` ready, 401/401/409/422 checks, 200 audio at 24 kHz, nothing private in logs or `/tmp` |
 | R0.5 | **Reference clips must be longer than 5 s for Turbo and Nano** (found by R0.1, from the pinned model source: `assert len(wav)/sr > 5.0`; a 5.0 s clip gets a 422). Uploads accept 2 s of voice, `REFERENCE_MIN_SECONDS` is 1 s, and a worker 422 becomes a `RuntimeError` (a failed generation), not a fallback. Options: build the reference from several stored clips up to 20 s; treat this 422 as "unavailable" so the user still gets SV2TTS; advise 8 s or more at upload. **Decided 2026-10-18: fall back first** (done, S4.4b `1bceddf`): such a voice is now served by SV2TTS, counted as `reason="reference"`, never opening the breaker; with fallback off the API answers a 422 naming the remedy. **Still open:** making short clips usable on the better engine (several clips, or longer-recording advice at upload), and showing the real reason in History. | tests with a 3 s and a 6 s profile; no failed generation |
 | R0.6 ✅ | **CPU-only worker image** (found by R0.1; done 2026-10-18): `--build-arg TORCH_BACKEND=cpu` installs torch and torchaudio from PyTorch's CPU index and drops the 13 `nvidia-*` packages and `triton` from the lock at build time (no second lock to maintain; the default stays the CUDA image). **Measured in CI: 1954 MB against 6426 MB (70% smaller)**; `torch 2.6.0+cpu`, `torch.version.cuda` is None, no `nvidia` or `triton` package, and the same smoke passes (Nano loads on CPU, `/health` ready, one real 200 synthesis at 24 kHz). | CI matrix green for both backends; size limit 2560 MB |
@@ -106,7 +106,7 @@ Ship (R3) only when **D1 accepted** and D4 text live, **R1 gates pass**, and **R
 |---|---|---|
 | R0.1 worker image in CI | ✅ Done | `1d4660a` |
 | R0.2 private-network allow-list (if D3=b) | ✅ Done 2026-10-28: `TTS_WORKER_ALLOW_PRIVATE_HTTP` (default false) accepts http for `<service>.railway.internal` only; boundary hosts and the token rule tested; suite 2131 passed, 1 skipped, 11 warnings | `8c94cb6` |
-| R0.3 consent/terms text | ⬜ Needs D4 | — |
+| R0.3 consent/terms text | 🟡 Text approved 2026-10-28 (D4); **not applied**: the version bump ships with the first canary release (`TTS_CANARY_PERCENT` > 0). Still `draft` for counsel | — |
 | R0.4 runbook | 🟡 Written 2026-10-28, not run on Railway: `CHATTERBOX_RUNBOOK.md`, `tts_worker/railway.toml`, worker section in `RAILWAY_DEPLOYMENT.md`, 8 guard tests; suite 2139 passed, 1 skipped, 11 warnings. Open for R1: IPv6 bind (`::`), Railway per-service CPU/memory limits, no-volume cold start | `a3f3e1e` |
 | R0.5 reference clip must exceed 5 s (new, found by R0.1) | 🟡 Fallback done (`1bceddf`); making short clips usable not started | `1bceddf` |
 | R0.6 CPU-only worker image (new, found by R0.1) | ✅ Done | `094a5c9`, `ddf6def` |
@@ -114,3 +114,20 @@ Ship (R3) only when **D1 accepted** and D4 text live, **R1 gates pass**, and **R
 | R2 listening test + independent similarity | ⬜ Needs speakers and raters | — |
 | R3 canary ramp | ⬜ Blocked on R1, R2, D1, D4 | — |
 | R4 post-rollout study | ⬜ | — |
+
+## 9. Approved consent text (D4, approved 2026-10-28, not yet applied)
+
+Apply to `frontend/lib/terms-content.ts` when the first canary release is prepared, together with a
+`TERMS_VERSION` bump to that release's date in **both** `backend/core/config.py` and the frontend constant
+(`frontend/tests/terms-page.test.tsx` fails if they differ). `TERMS_STATUS` stays `"draft"` until counsel
+reviews it. Existing voices keep the terms version they were created under; a client that showed the old
+text gets a 409 "terms changed" at its next upload (RU-3). Whether current users are also told by email or
+a banner is still open.
+
+**New section, "Where your voice sample is processed"**
+> To build your voice profile and to speak your text, we process your voice sample on our own service. For some requests, a separate speech service that we run on the same hosting infrastructure receives a short excerpt of your sample (at most 20 seconds) together with the text you typed. That service does not store the excerpt, the text or the audio it produces, and does not write them to its logs. It only returns the generated audio. If it is unavailable, your request is handled by the built-in voice engine instead.
+
+**Amended section, "AI-generated speech"**
+> Speech made with {BRAND_NAME} is labelled as AI-generated in the app. Audio from our higher-quality voice engine also carries an inaudible watermark that marks it as AI-generated, and this cannot be turned off. Sound tags such as [laugh] or [cough] are generated in your voice, not recorded from you. Do not present generated speech as a real recording of a person.
+
+Each claim is true by construction: the worker keeps the reference in a temporary file deleted after the call and never logs text or audio (`tts_worker/README.md`); the reference is capped at 20 s (`REFERENCE_MAX_SECONDS`); the Chatterbox model always watermarks its output; the fallback engine is SV2TTS. If any of that changes, this text must change with it.
