@@ -112,3 +112,85 @@ def test_ci_exercises_the_entrypoint_on_real_docker():
     assert "RAILWAY_RUN_UID=0" in workflow
     # Changing the entrypoint or the config must trigger that job.
     assert '"backend/serve.py"' in workflow and '"railway.toml"' in workflow
+
+
+# --- the inference worker service (CHATTERBOX_ROLLOUT_PLAN.md R0.4) ---------------------------
+
+WORKER_CONFIG = tomllib.loads((REPO_ROOT / "tts_worker" / "railway.toml").read_text())
+RUNBOOK = (REPO_ROOT / "CHATTERBOX_RUNBOOK.md").read_text()
+
+
+def test_worker_builds_its_own_dockerfile_from_the_repo_root():
+    build = WORKER_CONFIG["build"]
+    assert build["builder"] == "DOCKERFILE"
+    assert (REPO_ROOT / build["dockerfilePath"]).is_file()
+    assert build["dockerfilePath"].startswith("tts_worker/")
+    assert WORKER_CONFIG["build"]["watchPatterns"] == ["tts_worker/**"]
+
+
+def test_worker_healthcheck_is_its_real_unauthenticated_route():
+    from tts_worker.app import PATH_HEALTH
+
+    assert WORKER_CONFIG["deploy"]["healthcheckPath"] == PATH_HEALTH
+    # The first start downloads the model weights.
+    assert WORKER_CONFIG["deploy"]["healthcheckTimeout"] >= 300
+
+
+def test_worker_draining_outlasts_one_worker_call():
+    drain = WORKER_CONFIG["deploy"]["drainingSeconds"]
+    assert drain > Settings.model_fields["TTS_WORKER_TIMEOUT_SECONDS"].default
+
+
+def test_worker_railway_toml_carries_no_secrets():
+    text = (REPO_ROOT / "tts_worker" / "railway.toml").read_text()
+    code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+    assert "[variables]" not in code
+    assert not re.search(r"(SECRET|PASSWORD|API_KEY|TOKEN)\s*=", code)
+
+
+def test_the_port_in_the_runbook_is_the_one_the_image_listens_on():
+    dockerfile = (REPO_ROOT / "tts_worker" / "Dockerfile").read_text()
+    assert "EXPOSE 8100" in dockerfile and '"8100"' in dockerfile
+    assert "http://tts-worker.railway.internal:8100" in RUNBOOK
+    assert "http://tts-worker.railway.internal:8100" in DOC
+
+
+def test_the_runbook_names_every_variable_the_worker_and_the_api_need():
+    for name in (
+        "TORCH_BACKEND",
+        "TTS_WORKER_TOKEN",
+        "TTS_WORKER_MODEL",
+        "TTS_WORKER_DEVICE",
+        "OMP_NUM_THREADS",
+        "TTS_WORKER_URL",
+        "TTS_WORKER_ALLOW_PRIVATE_HTTP",
+        "TTS_CANARY_ENGINE",
+        "TTS_CANARY_PERCENT",
+        "TTS_FALLBACK_ENGINE",
+    ):
+        assert f"`{name}`" in RUNBOOK
+
+
+def test_the_documented_private_url_passes_the_real_settings_validation():
+    """The values the runbook tells the owner to set must start the API."""
+    settings = Settings(
+        TTS_ENGINE="chatterbox_nano",
+        TTS_WORKER_URL="http://tts-worker.railway.internal:8100",
+        TTS_WORKER_ALLOW_PRIVATE_HTTP=True,
+        TTS_WORKER_TOKEN="x" * 48,
+    )
+    assert settings.TTS_WORKER_URL.endswith(":8100")
+    with pytest.raises(Exception):  # the flag really is required
+        Settings(
+            TTS_ENGINE="chatterbox_nano",
+            TTS_WORKER_URL="http://tts-worker.railway.internal:8100",
+            TTS_WORKER_TOKEN="x" * 48,
+        )
+
+
+def test_the_runbook_fallback_reasons_match_the_metric():
+    from backend.core import metrics
+
+    source = Path(metrics.__file__).read_text()
+    for reason in ("unavailable", "busy", "circuit_open", "reference"):
+        assert reason in source and f"`{reason}`" in RUNBOOK

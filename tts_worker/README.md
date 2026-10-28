@@ -81,5 +81,5 @@ Nano is not in the PyPI release of `chatterbox-tts`, so it is installed from a p
 * Two images, one Dockerfile: the default `TORCH_BACKEND=cuda` (PyPI's torch with its CUDA runtime, **6.4 GB**, for a GPU host) and `--build-arg TORCH_BACKEND=cpu` (torch and torchaudio from PyTorch's CPU index, no `nvidia-*` packages or `triton`, **about 2.0 GB**). Both are built and run in CI. The CPU build has not been run on the real target host (Railway) or timed there.
 * **A reference clip must be longer than 5 seconds** for Turbo and Nano (the model asserts it). The worker answers a refused reference with `422` and the detail `the reference audio could not be used`; the application turns exactly that into a fallback to SV2TTS (S4.4b), so a short voice is served, but by the lower-quality engine.
 * The fallback was exercised against a killed and restarted worker, not against a network that drops packets.
-* No hosting provider has been chosen (plan question Q1); nothing here is deployed.
+* Hosting is Railway (a second service on the private network; `railway.toml` here and `CHATTERBOX_RUNBOOK.md` at the repo root), but nothing is deployed yet and the runbook's steps are unverified until R1.
 * The model's training data is undisclosed (`SPEECH_QUALITY_STUDY.md`), an owner decision before it serves real users.

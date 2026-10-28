@@ -12,6 +12,7 @@ the Railway dashboard. Staging measurements (R3) are separate and listed at the 
 | API (this repo, `backend/Dockerfile`) | one service, built from the repo root |
 | PostgreSQL | the Postgres plugin |
 | Uploads, outputs, model weights | one **volume** on the API service, mounted at `/data` |
+| Chatterbox inference worker (optional, `tts_worker/`) | a second service named `tts-worker`, reached over the private network; see `CHATTERBOX_RUNBOOK.md` |
 | Rate-limit state (optional) | the Redis plugin; without it limits reset on each deploy |
 
 Constraints that come from Railway, not from this repo (per Railway's volume docs):
@@ -92,6 +93,21 @@ variable is missing, the container stops with an error that names it.
   app and the API share a registrable domain (for example `app.example.com` and
   `api.example.com`) or when the web app proxies API calls. Use custom domains; a
   `*.up.railway.app` API with a differently hosted web app will not receive the cookie.
+
+## The inference worker (optional second service)
+
+The better-sounding Chatterbox Nano engine runs in a separate service because its dependencies cannot
+share this image. Setting it up, its variables, the weights/cold-start trade-off, roll-back and what to
+watch are in `CHATTERBOX_RUNBOOK.md`. On this API service it adds only these variables; without them the
+API serves everything with SV2TTS:
+
+| Variable | Value | Notes |
+|---|---|---|
+| `TTS_WORKER_URL` | `http://tts-worker.railway.internal:8100` | The worker's private address. No public domain. |
+| `TTS_WORKER_ALLOW_PRIVATE_HTTP` | `true` | Accepts plain http for `<service>.railway.internal` hosts only. |
+| `TTS_WORKER_TOKEN` | `${{tts-worker.TTS_WORKER_TOKEN}}` | Same secret as the worker's. |
+| `TTS_CANARY_ENGINE` | `chatterbox_nano` | Engine for the canary share of users. |
+| `TTS_CANARY_PERCENT` | `0` | Raise only after the rollout plan's go/no-go and the consent text. |
 
 ## Checks after the first deploy
 
