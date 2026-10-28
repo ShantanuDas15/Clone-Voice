@@ -1,5 +1,6 @@
 """Application configuration and environment settings."""
 
+import re
 from pathlib import Path
 from typing import List, Literal, get_args
 from urllib.parse import urlparse
@@ -9,6 +10,11 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Railway private-network service names (R0.2): one or more DNS labels, then "railway.internal".
+_RAILWAY_PRIVATE_HOST = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+railway\.internal"
+)
 
 # Seconds of silence inserted after a synthesized segment, by how the segment ended
 # (SPEECH_QUALITY_PLAN.md S1.3). The keys are the values of
@@ -215,6 +221,10 @@ class Settings(BaseSettings):
     TTS_WORKER_URL: str = ""
     TTS_WORKER_TOKEN: str = ""
     TTS_WORKER_TIMEOUT_SECONDS: float = Field(default=25.0, gt=0.0, le=300.0)
+    # CHATTERBOX_ROLLOUT_PLAN.md R0.2: when the worker is a second Railway service, traffic stays
+    # on Railway's private network, which is plain http. True accepts http for exactly
+    # "<service>.railway.internal" hosts and nothing else; any other plain-http host is still refused.
+    TTS_WORKER_ALLOW_PRIVATE_HTTP: bool = False
     # SPEECH_QUALITY_PLAN.md S7.4a: canary. This share of users (0-100, chosen by a stable hash of the
     # user id, so a user always gets the same engine) is served by TTS_CANARY_ENGINE instead of
     # TTS_ENGINE. 0 (default) is off. Rolling back is setting it to 0; the kill switch for the engine
@@ -448,13 +458,17 @@ class Settings(BaseSettings):
                 f"TTS_ENGINE={self.TTS_ENGINE} (canary {self.TTS_CANARY_ENGINE}, "
                 f"{self.TTS_CANARY_PERCENT}%) requires TTS_WORKER_URL (an http(s) URL)"
             )
-        if url.scheme != "https" and url.hostname not in {
-            "localhost",
-            "127.0.0.1",
-            "::1",
-        }:
+        private_http = self.TTS_WORKER_ALLOW_PRIVATE_HTTP and bool(
+            _RAILWAY_PRIVATE_HOST.fullmatch(url.hostname)
+        )
+        if (
+            url.scheme != "https"
+            and not private_http
+            and url.hostname not in {"localhost", "127.0.0.1", "::1"}
+        ):
             raise ValueError(
-                "TTS_WORKER_URL must be https unless the worker is on this machine: "
+                "TTS_WORKER_URL must be https unless the worker is on this machine "
+                "or (TTS_WORKER_ALLOW_PRIVATE_HTTP) a <service>.railway.internal host: "
                 "voice recordings are sent to it"
             )
         if len(self.TTS_WORKER_TOKEN) < 32:

@@ -209,6 +209,55 @@ def test_an_unsafe_or_incomplete_worker_configuration_fails_at_startup(over):
         _worker_settings(**over)
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "tts-worker.railway.internal",
+        "worker.production.railway.internal",
+        "a.railway.internal",
+    ],
+)
+def test_a_railway_private_host_is_accepted_over_http_only_when_allowed(host):
+    url = f"http://{host}:8100"
+    assert (
+        _worker_settings(
+            TTS_WORKER_URL=url, TTS_WORKER_ALLOW_PRIVATE_HTTP=True
+        ).TTS_WORKER_URL
+        == url
+    )
+    with pytest.raises(Exception):
+        _worker_settings(TTS_WORKER_URL=url)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "evilrailway.internal",
+        "railway.internal",
+        "railway.internal.evil.com",
+        "worker.railway.internal.evil.com",
+        "worker.railway.internal@evil.com",
+        "worker.example.com",
+        "10.0.0.5",
+        "-bad.railway.internal",
+    ],
+)
+def test_the_private_allowance_does_not_open_any_other_plain_http_host(host):
+    with pytest.raises(Exception):
+        _worker_settings(
+            TTS_WORKER_URL=f"http://{host}:8100", TTS_WORKER_ALLOW_PRIVATE_HTTP=True
+        )
+
+
+def test_the_private_allowance_still_requires_the_token():
+    with pytest.raises(Exception):
+        _worker_settings(
+            TTS_WORKER_URL="http://w.railway.internal:8100",
+            TTS_WORKER_ALLOW_PRIVATE_HTTP=True,
+            TTS_WORKER_TOKEN="short",
+        )
+
+
 # --- the reference-audio loader --------------------------------------------
 
 
