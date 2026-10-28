@@ -1,6 +1,6 @@
 # CloneVoice — Chatterbox Engine Rollout Plan
 
-> **Status**: 🟡 R0.1 done (`1d4660a`), R0.2 done (`8c94cb6`); the rest not started. **Last Reviewed**: 2026-10-28
+> **Status**: 🟡 R0.1 done (`1d4660a`), R0.2 done (`8c94cb6`), R0.4 written (`a3f3e1e`, unverified on Railway); the rest not started. **Last Reviewed**: 2026-10-28
 > **Scope**: put a Chatterbox engine in front of real users, behind a canary, with SV2TTS as the fallback and kill switch. This is a rollout plan; the engine, worker, fallback, canary, metrics, watermark and per-engine rate limit are already built and merged (`SPEECH_QUALITY_PLAN.md` S4.3, S4.4, S7.1–S7.4). What is missing is decisions, a deployed worker, evidence from real listeners, and a runbook.
 > **Rule**: backend and rollout work follow CLAUDE.md §3 (branch, tests, PR). Nothing in this plan changes the default `TTS_ENGINE=sv2tts` until the go/no-go in §6.
 
@@ -107,7 +107,7 @@ Ship (R3) only when **D1 accepted** and D4 text live, **R1 gates pass**, and **R
 | R0.1 worker image in CI | ✅ Done | `1d4660a` |
 | R0.2 private-network allow-list (if D3=b) | ✅ Done 2026-10-28: `TTS_WORKER_ALLOW_PRIVATE_HTTP` (default false) accepts http for `<service>.railway.internal` only; boundary hosts and the token rule tested; suite 2131 passed, 1 skipped, 11 warnings | `8c94cb6` |
 | R0.3 consent/terms text | ⬜ Needs D4 | — |
-| R0.4 runbook | ⬜ Not started | — |
+| R0.4 runbook | 🟡 Written 2026-10-28, not run on Railway: `CHATTERBOX_RUNBOOK.md`, `tts_worker/railway.toml`, worker section in `RAILWAY_DEPLOYMENT.md`, 8 guard tests; suite 2139 passed, 1 skipped, 11 warnings. Open for R1: IPv6 bind (`::`), Railway per-service CPU/memory limits, no-volume cold start | `a3f3e1e` |
 | R0.5 reference clip must exceed 5 s (new, found by R0.1) | 🟡 Fallback done (`1bceddf`); making short clips usable not started | `1bceddf` |
 | R0.6 CPU-only worker image (new, found by R0.1) | ✅ Done | `094a5c9`, `ddf6def` |
 | R1 worker on staging + measurements + fallback drills | ⬜ Needs D2 | — |

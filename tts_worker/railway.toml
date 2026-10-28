@@ -1,0 +1,21 @@
+# Railway config as code for the inference worker (CHATTERBOX_ROLLOUT_PLAN.md R0.4). In the
+# dashboard set this service's "Config file path" to /tts_worker/railway.toml (the repo-root
+# railway.toml belongs to the API service). Environment variables are NOT set here: see
+# CHATTERBOX_RUNBOOK.md (TORCH_BACKEND=cpu, PORT, TTS_WORKER_TOKEN, ...).
+
+[build]
+builder = "DOCKERFILE"
+# Built from the repo root: the Dockerfile copies tts_worker/ from there.
+dockerfilePath = "tts_worker/Dockerfile"
+# Redeploy only for changes that can affect the worker image.
+watchPatterns = ["tts_worker/**"]
+
+[deploy]
+# Ready once the model is loaded (the first start downloads the weights from Hugging Face).
+healthcheckPath = "/health"
+healthcheckTimeout = 600
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+# One synthesis runs at a time and TTS_WORKER_TIMEOUT_SECONDS (25) bounds the app's wait for it;
+# leave room for that call to finish before the platform stops the container.
+drainingSeconds = 35
