@@ -1682,3 +1682,9 @@ The form paints, the capabilities answer follows about 18 ms later, and the Deli
 8. **Files not reviewed** (§1): `refresh_token.py` and `user_identity.py` models, `tts_pipeline.py` beyond the pipeline signature, tests, Alembic, Dockerfile/compose/railway/CI. None are expected to change the UI contract, but nothing is claimed about them.
 9. **Real email delivery and verified sending domain** are still open on the backend side (`HARDENING_PLAN.md` §4 item 2) and gate Phases 2 and 8.
 10. **`HARDENING_PLAN.md` was read selectively**; there may be client-relevant notes in log rows not opened.
+
+### FE-SEC1 — Next 16 upgrade and JS budget (2026-11-01, branch `fix/frontend-advisories`, PR #144)
+
+Pre-Railway audit (`RAILWAY_READINESS_REPORT.md` F-01, F-03, F-05). Next 14.2 carried advisories up to unauthenticated RCE that no 14.x or 15.x release fixes, so the app moved to Next 16.4.3 (React stays 18). Also: ESLint 9 flat config (`next lint` is gone; `npm run lint` is `eslint app components hooks lib`, the same scope as before; two React-Compiler lints new in `eslint-plugin-react-hooks` 7 are off), async `cookies()` and `searchParams`, HSTS on the web app and the API, `npm audit fix` for postcss/follow-redirects/fast-uri, and a blocking runtime `npm audit` in CI (0 vulnerabilities).
+
+**Decision (owner, 2026-11-01): the public-route JS budget rises from 200 KB to 240 KB.** Next 16's framework chunks are about 30 KB larger than Next 14's on a route that had 3 % headroom (`/login` measured 211 to 227 KB gz in CI; webpack and Turbopack differ by about 1 KB). The only large cuts left (axios, 19 KB, which `lib/api/voice.ts` needs for upload progress; zod, 31 KB) would each be a client rewrite, deferred. LCP (2500 ms), CLS and TBT budgets are unchanged and still pass.

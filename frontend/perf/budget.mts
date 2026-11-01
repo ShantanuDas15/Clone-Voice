@@ -38,7 +38,7 @@ export interface Budget {
 export const BUDGET: Budget = {
   lcpMs: 2500,
   lcpDriftMs: 1800,
-  scriptKb: 200,
+  scriptKb: 240, // was 200 before Next 16 (framework +~30 KB); FRONTEND_IMPLEMENTATION_PLAN.md FE-SEC1
   cls: 0.1,
   tbtMs: 300,
 };

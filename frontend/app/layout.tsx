@@ -37,9 +37,9 @@ export const metadata: Metadata = {
   description: "Clone a voice from a short sample and synthesize speech from text.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   // Read on the server so an explicit theme is on <html> in the first byte (no flash).
-  const theme = parseTheme(cookies().get(THEME_COOKIE)?.value);
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   return (
     <html
       lang="en"

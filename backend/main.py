@@ -20,6 +20,7 @@ from backend.api.terms import router as terms_router
 from backend.api.voice import router as voice_router
 from backend.core import metrics
 from backend.core.body_limit import BodySizeLimitMiddleware
+from backend.core.security_headers import SecurityHeadersMiddleware
 from backend.core.config import settings
 from backend.core.database import SessionLocal
 from backend.core.db_errors import register_db_error_handlers
@@ -273,6 +274,10 @@ app.add_middleware(
 # lifetime of the request, including logs emitted by CORS/session layers.
 # The generated ID is echoed back to the client via the X-Request-ID header.
 app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
+
+# HSTS outside development (browsers ignore it over plain http, and Railway's edge
+# terminates TLS without adding it). Outermost so error responses carry it too.
+app.add_middleware(SecurityHeadersMiddleware, hsts=settings.APP_ENV != "development")
 
 API_V1_PREFIX = "/api/v1"
 

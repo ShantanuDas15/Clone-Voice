@@ -7,12 +7,13 @@ import { TextToSpeechForm } from "@/components/text-to-speech-form";
 
 export const metadata: Metadata = { title: "Generate speech" };
 
-export default function GeneratePage({
+export default async function GeneratePage({
   searchParams,
 }: {
-  searchParams: { voice?: string | string[] };
+  searchParams: Promise<{ voice?: string | string[] }>;
 }) {
-  const voice = typeof searchParams.voice === "string" ? searchParams.voice : undefined;
+  const { voice: voiceParam } = await searchParams;
+  const voice = typeof voiceParam === "string" ? voiceParam : undefined;
   return (
     <section>
       <PageHeader title="Generate speech">
