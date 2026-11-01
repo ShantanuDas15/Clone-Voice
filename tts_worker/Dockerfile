@@ -7,7 +7,7 @@
 # Built and smoke-tested on real Docker by .github/workflows/worker-docker-build.yml (non-root, no
 # baked token, pinned libraries, health, authentication and one real CPU synthesis). A GPU run is not
 # covered: TTS_WORKER_DEVICE=cuda needs an NVIDIA host with nvidia-container-toolkit.
-FROM python:3.11-slim@sha256:673719e071ecf27434fd2635bbd8d00f49f4fdd81f243143438a42ced8bedf60
+FROM python:3.15-slim@sha256:94d3426f1def7db4a106a232ac121bfd975393e5dfd40a619b955fae45fe7913
 
 # git: two requirements are installed from commits (chatterbox-tts and resemble-perth).
 RUN apt-get update \
