@@ -4,12 +4,13 @@ HARDENING_PLAN.md finding P2-L9: run this after editing requirements.txt so
 the hash-pinned lock (every transitive dependency, not just the direct pins)
 stays in sync. Needs `uv` (``pip install uv``; already in requirements-dev.txt).
 
-Usage: python -m backend.relock_requirements [--upgrade]
+Usage: python -m backend.relock_requirements [--upgrade] [--upgrade-package NAME ...]
 
 By default every package already in the lock keeps its version, so adding a dependency adds only
 that dependency and what it needs, and nothing else changes silently (a fresh resolve moves every
 unpinned transitive package, security-relevant ones included, to its newest release). Pass
-``--upgrade`` to take the newest versions of everything, and review the diff.
+``--upgrade`` to take the newest versions of everything, and review the diff. Pass
+``--upgrade-package NAME`` (repeatable) to move only that package, and what it needs, to its newest release.
 """
 
 import re
@@ -61,23 +62,39 @@ def _strip_torch_block(text: str) -> str:
     return "".join(out)
 
 
-def existing_pins(lock_text: str) -> str:
-    """The ``name==version`` lines of a lock file, as pip constraints (hashes and comments dropped)."""
+def _normalise(name: str) -> str:
+    """PEP 503 name normalisation, so ``Foo_Bar`` matches ``foo-bar``."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def existing_pins(lock_text: str, unpinned: frozenset = frozenset()) -> str:
+    """The ``name==version`` lines of a lock file, as pip constraints (hashes and comments dropped).
+
+    Packages named in ``unpinned`` are left out so the resolver may move them.
+    """
     pins = []
     for line in lock_text.splitlines():
-        match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*==[^\s\\;]+)", line)
+        match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\;]+)", line)
         if match and not line.startswith("torch=="):
-            pins.append(match.group(1))
+            if _normalise(match.group(1)) not in unpinned:
+                pins.append(f"{match.group(1)}=={match.group(2)}")
     return "\n".join(pins) + "\n"
 
 
 def main(argv=None) -> int:
-    upgrade = "--upgrade" in (argv if argv is not None else sys.argv[1:])
+    args = list(argv if argv is not None else sys.argv[1:])
+    upgrade = "--upgrade" in args
+    unpinned = frozenset(
+        _normalise(args[i + 1])
+        for i, arg in enumerate(args[:-1])
+        if arg == "--upgrade-package"
+    )
     keep = BACKEND_DIR / ".relock_keep.txt"
     keep_args = []
     if not upgrade and LOCK_FILE.exists():
         keep.write_text(
-            existing_pins(LOCK_FILE.read_text(encoding="utf-8")), encoding="utf-8"
+            existing_pins(LOCK_FILE.read_text(encoding="utf-8"), unpinned),
+            encoding="utf-8",
         )
         keep_args = ["-c", keep.name]
     # Run with relative filenames from BACKEND_DIR: `uv` mishandles absolute
