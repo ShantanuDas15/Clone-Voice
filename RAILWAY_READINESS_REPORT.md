@@ -3,7 +3,7 @@
 > **Audit date:** 2026-11-01 · **Method:** read-only static audit plus dependency-audit tooling · **Author:** automated audit (Claude Code)
 > **State audited:** `main` at `3db42a6` (includes PR #143, the backend dependency fixes), plus open **PR #144** (`fix/frontend-advisories`), assessed separately where it changes a finding. Sections 1, 3-6 and 8-11 below were brought up to date on 2026-11-01 after PRs #143-#145 merged; the Findings Register keeps the original wording, with a status table added after it.
 
-> **Update 2026-11-01 (second pass, PRs #148, #149, #157, #158 also merged: F-04, F-10, F-12 resolved):** F-13 (React 19 and `proxy.ts`) is also resolved in the next PR; no code items remain. Everything still open is Railway dashboard or staging work.
+> **Update 2026-11-01 (second pass, PRs #148, #149, #157, #158 also merged: F-04, F-10, F-12 resolved):** F-13 (React 19 and `proxy.ts`) was resolved in PR #160; no code items remain. Everything still open is Railway dashboard or staging work.
 
 > **Update 2026-11-01 (after PRs #143-#145 merged to `main`):** F-01 (Next 16, runtime audit 0), F-02 (web service: `frontend/Dockerfile`, `frontend/railway.toml`, runbook section, `frontend-docker-build` CI), F-03 (JS budget raised to 240 KB) and F-05 (HSTS) are resolved. Current verdict: **READY WITH CONDITIONS**. Remaining conditions: F-06 (set `TRUSTED_PROXY_COUNT=1`, add Redis), F-07 (verified email domain), custom domains on one parent domain, and a staging deploy to check the *Unverified* items.
 
@@ -52,7 +52,7 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 |---|---|
 | Purpose | Upload a voice sample, derive a speaker embedding, synthesize speech from text |
 | Backend | Python 3.11, FastAPI, SQLAlchemy, Alembic, PyTorch (CPU), SV2TTS (encoder, Tacotron 2, WaveRNN) |
-| Frontend | Next.js 16.4.3, React 18, Tailwind, TanStack Query, zod, axios |
+| Frontend | Next.js 16.4.3, React 19.3, Tailwind, TanStack Query, zod, axios |
 | Worker | Separate FastAPI service in `tts_worker/` (own image, Chatterbox models, bearer-token auth) |
 | Start command | `python -m backend.serve` → `uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1` (`backend/serve.py`) |
 | Data stores | PostgreSQL (psycopg2); volume at `/data` for uploads, outputs, weights; optional Redis for rate limits |
@@ -84,12 +84,12 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 | SSRF | **Pass** | Worker URL must be https or a Railway private host (`core/config.py:455-470`). |
 | Web hardening: CORS | **Pass** | Exact origins enforced by validator (`core/config.py:507`). |
 | Web hardening: cookies | **Pass** | `HttpOnly`, `Secure`, `SameSite=Lax` (`api/auth.py:66-72`). |
-| Web hardening: CSRF | **Warning** | No CSRF token; relies on SameSite=Lax, JSON bodies, exact-origin CORS (F-10). |
+| Web hardening: CSRF | **Pass** | No CSRF token; defence in depth: `SameSite=Lax`, JSON bodies, exact-origin CORS, and `X-Requested-With` required on `/auth/refresh` (F-10 fixed, PR #157). |
 | Web hardening: headers | **Pass (CSP report-only)** | nosniff/frame/referrer and HSTS on the web app; HSTS and nosniff on the API (F-05 fixed). CSP is report-only until enforced (F-11). |
 | Web hardening: rate limiting | **Warning** | Present on auth and synthesis; defaults to in-memory (`core/config.py:115`) and `TRUSTED_PROXY_COUNT=0` (`:119`) unless set (F-06). |
 | Exposure | **Pass** | Docs/OpenAPI disabled in production (`main.py:165`); `/metrics` needs token. |
 | Data protection | **Pass** | Search-text redaction in access logs (`core/log_redaction.py`); account export/erasure exist. Provider-side email and Sentry data handling **Unverified**. |
-| Container | **Pass** | Non-root runtime (uid 1000 / 10001); initial root only to chown the volume, then dropped (`backend/serve.py`). Base images tag-pinned, not digest-pinned (F-12). |
+| Container | **Pass** | Non-root runtime (uid 1000 / 10001); initial root only to chown the volume, then dropped (`backend/serve.py`). Base images pinned by digest and kept current by Dependabot (F-12 fixed, PRs #149, #158). |
 
 ---
 
@@ -107,7 +107,7 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 | F-08 | Medium | Platform fit | Single instance with a volume: redeploys cause brief downtime, and a volume rules out replicas. Weights (~424 MB) download on first boot (up to 10 min health window). | `railway.toml:15-24`; `RAILWAY_DEPLOYMENT.md` | Accept for MVP; plan object storage if scale or zero-downtime is needed. | L |
 | F-09 | Low | Supply chain | `setuptools` 79.0.1 carries `PYSEC-2026-3447` and `GHSA-xmj3-9gf7-h52w`, accepted because every patched release lacks `pkg_resources`, which `webrtcvad` imports. No runtime attack surface identified. | `backend/requirements.constraints.txt`; `.github/workflows/backend-audit.yml` | Revisit if `webrtcvad` drops `pkg_resources`. | M |
 | F-10 | Low | Web hardening | No CSRF token. Mitigated: `SameSite=Lax` cookie, JSON-only bodies, exact-origin credentialed CORS. | `api/auth.py:66-72`, `main.py:249` | Optionally require a custom header (e.g. `X-Requested-With`) on cookie-authenticated POSTs (`/auth/refresh`). | S |
-| F-11 | Low | Web hardening | CSP is report-only until `CSP_ENFORCE=1`. | `frontend/middleware.ts` | Soak in staging, then set `CSP_ENFORCE=1`. | S |
+| F-11 | Low | Web hardening | CSP is report-only until `CSP_ENFORCE=1`. | `frontend/proxy.ts` (was `middleware.ts` before F-13) | Soak in staging, then set `CSP_ENFORCE=1`. | S |
 | F-12 | Low | Container | Base images pinned by tag (`python:3.11-slim`), not by digest; builds can drift. | `backend/Dockerfile:20,56`; `tts_worker/Dockerfile:10` | Pin by digest and let Dependabot/Renovate bump it. | S |
 | F-13 | Low | Frontend | Next 16 warns React 18 is deprecated (removed in Next 17) and that `middleware.ts` is renamed `proxy.ts`. | `npm run build` output on PR #144 | Plan a React 19 and `proxy.ts` migration. | M |
 | F-14 | Low | Container | The container starts as root on Railway (`RAILWAY_RUN_UID=0`) to chown the volume, then drops to uid 1000 before serving. Safe as implemented, but a failure to drop is fatal by design. | `backend/serve.py` (`drop_privileges`) | None; keep the test coverage (`backend/tests/test_serve.py`). | — |
