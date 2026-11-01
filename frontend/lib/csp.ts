@@ -1,5 +1,5 @@
 /**
- * Content-Security-Policy builder (plan §5.9). Pure so it can be unit-tested; `middleware.ts`
+ * Content-Security-Policy builder (plan §5.9). Pure so it can be unit-tested; `proxy.ts`
  * supplies a fresh nonce per request. Scripts are nonce-gated (no `unsafe-inline`); only
  * development adds `unsafe-eval`, which React's dev tooling needs.
  */

@@ -29,7 +29,7 @@ const mono = localFont({
   preload: false,
 });
 
-// Dynamic rendering lets Next.js stamp the per-request CSP nonce (middleware.ts) on its scripts.
+// Dynamic rendering lets Next.js stamp the per-request CSP nonce (proxy.ts) on its scripts.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {

@@ -7,7 +7,7 @@ import { buildCsp, cspHeaderName, generateNonce } from "@/lib/csp";
  * Per-request CSP with a nonce. Next.js reads the nonce from the request's CSP header and
  * applies it to its own scripts. Report-only until `CSP_ENFORCE=1` (server env) after a soak.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const nonce = generateNonce();
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
   let apiOrigin = "";

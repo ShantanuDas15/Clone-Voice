@@ -69,7 +69,7 @@ unit-tested in `tests/perf-budget.test.ts`; the budget itself lives in `perf/bud
 
 ## Content-Security-Policy
 
-`middleware.ts` sends a per-request, nonce-based CSP (`lib/csp.ts`); pages render dynamically so
+`proxy.ts` sends a per-request, nonce-based CSP (`lib/csp.ts`); pages render dynamically so
 Next.js can stamp the nonce on its scripts. It ships as **`Content-Security-Policy-Report-Only`**
 so a bad directive cannot break the app: browse every flow with the console open, fix any
 reported violation, then set the server env `CSP_ENFORCE=1` to enforce it.
