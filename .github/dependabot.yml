@@ -1,3 +1,6 @@
+# Runtime versions are deliberate choices, not drift: Python stays on 3.11 (the torch and webrtcvad
+# wheels, backend/requirements.constraints.txt) and Node on the major in frontend/.nvmrc (CI). So the
+# Docker entries ignore minor and major tag bumps and only refresh the digest and patch level.
 # Keeps the digest-pinned base images (RAILWAY_READINESS_REPORT.md F-12) and the workflow actions
 # current. Python and npm dependencies are not listed: they are hash-locked and audited weekly
 # (backend-audit.yml, frontend.yml), and are bumped deliberately.
@@ -7,14 +10,28 @@ updates:
     directory: "/backend"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
   - package-ecosystem: "docker"
     directory: "/tts_worker"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
   - package-ecosystem: "docker"
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "node"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
