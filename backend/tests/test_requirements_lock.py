@@ -148,6 +148,7 @@ def test_backend_audit_workflow_also_scans_the_lock_file() -> None:
     workflow = _read(".github/workflows/backend-audit.yml")
     assert "backend/requirements.lock.txt" in workflow
     assert "--ignore-vuln PYSEC-2026-3447" in workflow
+    assert "--ignore-vuln GHSA-xmj3-9gf7-h52w" in workflow
 
 
 def test_docker_workflow_rebuilds_on_lock_file_changes() -> None:

@@ -28,4 +28,7 @@ typing==3.7.4.3
 # backend-audit.yml` passes `--ignore-vuln PYSEC-2026-3447` on the lock-file
 # scan for this reason. Revisit if webrtcvad ever drops or replaces its
 # `pkg_resources` import.
+#
+# GHSA-xmj3-9gf7-h52w (fixed in 84.1.0) is accepted for the same reason: every
+# patched version is newer than 82.0.0 and so lacks `pkg_resources`.
 setuptools==79.0.1

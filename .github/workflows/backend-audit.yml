@@ -27,6 +27,8 @@ jobs:
       # a macOS-sdist-only bug in setuptools 79.0.1, pinned there because
       # every version that fixes it dropped `pkg_resources`, which the
       # vendored webrtcvad needs (see requirements.constraints.txt).
+      # GHSA-xmj3-9gf7-h52w (fixed in setuptools 84.1.0) is accepted for the
+      # same reason.
       - run: |
           pip-audit -r backend/requirements.lock.txt --no-deps --disable-pip \
-            --ignore-vuln PYSEC-2026-3447
+            --ignore-vuln PYSEC-2026-3447 --ignore-vuln GHSA-xmj3-9gf7-h52w
