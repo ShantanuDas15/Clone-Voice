@@ -35,10 +35,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      # Next 14.x has advisories fixed only in 15+ (see FRONTEND_IMPLEMENTATION_PLAN.md
-      # task log, FE-P0). Non-blocking until the owner approves a Next upgrade.
+      # Blocking since the Next 16 upgrade cleared the runtime advisories (FE-P0).
       - run: npm audit --omit=dev --audit-level=high
-        continue-on-error: true
 
   # Lighthouse budget gate (FRONTEND_IMPLEMENTATION_PLAN.md, FE-P7f). Public routes only, so no
   # backend is needed. Lighthouse 13 requires Node 22+ (the `check` job stays on Node 20).
