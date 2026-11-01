@@ -19,7 +19,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           # 24, not 20/22: on Node 20 and 22 a multipart upload (FormData with a file) through
@@ -48,7 +48,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -89,7 +89,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
