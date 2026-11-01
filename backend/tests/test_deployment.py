@@ -107,8 +107,12 @@ def test_dockerfile_is_multi_stage_with_builder_and_runtime():
     wheel and must be compiled, so a builder stage has to exist."""
     stages = _dockerfile_stages()
     assert len(stages) == 2
-    assert re.match(r"FROM python:3\.11-slim AS builder", stages[0])
-    assert re.match(r"FROM python:3\.11-slim\s*$", stages[1].splitlines()[0])
+    assert re.match(
+        r"FROM python:3\.11-slim(@sha256:[0-9a-f]{64})? AS builder", stages[0]
+    )
+    assert re.match(
+        r"FROM python:3\.11-slim(@sha256:[0-9a-f]{64})?\s*$", stages[1].splitlines()[0]
+    )
 
 
 def test_compiler_is_only_in_builder_stage():
@@ -534,3 +538,25 @@ def test_uvicorn_graceful_timeout_is_set_and_keeps_single_worker():
     assert _uvicorn_graceful_timeout() > 0
     assert command[command.index("--workers") + 1] == "1"
     assert len(re.findall(r"^CMD ", dockerfile, re.MULTILINE)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Base images pinned by digest (RAILWAY_READINESS_REPORT.md F-12)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "dockerfile", ["backend/Dockerfile", "tts_worker/Dockerfile", "frontend/Dockerfile"]
+)
+def test_every_base_image_is_pinned_by_digest(dockerfile):
+    """A moved tag must not change what a build ships; Dependabot bumps the digest."""
+    froms = re.findall(r"^FROM (\S+)", _read(dockerfile), flags=re.MULTILINE)
+    assert froms
+    for image in froms:
+        assert re.search(r"@sha256:[0-9a-f]{64}$", image), f"{dockerfile}: {image}"
+
+
+def test_dependabot_watches_the_dockerfiles():
+    config = _read(".github/dependabot.yml")
+    for directory in ("/backend", "/tts_worker", "/frontend"):
+        assert f'directory: "{directory}"' in config

@@ -9,7 +9,7 @@
 # On Railway, every service variable is passed as a build argument for the ARGs declared
 # below, so set NEXT_PUBLIC_* on the web service before the first deploy.
 # Same major as CI (frontend/.nvmrc); Next 16 needs Node >= 20.9.
-FROM node:24-slim AS build
+FROM node:24-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS build
 
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
@@ -29,7 +29,7 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_TELEMETRY_DISABLED=1
 RUN npm run build && npm prune --omit=dev
 
-FROM node:24-slim
+FROM node:24-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c
 
 WORKDIR /app
 ENV NODE_ENV=production \
