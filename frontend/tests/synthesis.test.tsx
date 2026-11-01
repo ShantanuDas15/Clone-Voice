@@ -383,7 +383,8 @@ describe("TextToSpeechForm", () => {
     await generate("Keep me");
     unmount();
     wrap(<TextToSpeechForm />);
-    expect(await screen.findByLabelText("Text")).toHaveValue("Keep me");
+    // The draft is restored once the new session resolves, a moment after the box first renders.
+    await waitFor(() => expect(screen.getByLabelText("Text")).toHaveValue("Keep me"));
   });
 
   it("does not restore the draft after a deliberate sign-out, and not for another user", async () => {
