@@ -1,0 +1,19 @@
+# Railway config as code for the web app (RAILWAY_READINESS_REPORT.md F-02). In the dashboard set
+# this service's "Config file path" to /frontend/railway.toml (the repo-root railway.toml belongs
+# to the API service). Environment variables are NOT set here: see RAILWAY_DEPLOYMENT.md
+# ("The web app"). NEXT_PUBLIC_* must exist before the build, because they are inlined into it.
+
+[build]
+builder = "DOCKERFILE"
+# Built from the repo root: the Dockerfile copies frontend/ from there.
+dockerfilePath = "frontend/Dockerfile"
+# Redeploy only for changes that can affect the web image.
+watchPatterns = ["frontend/**"]
+
+[deploy]
+# A public, unauthenticated page that renders without the API being up.
+healthcheckPath = "/login"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+drainingSeconds = 15

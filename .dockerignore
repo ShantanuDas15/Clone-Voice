@@ -44,3 +44,10 @@ PHASE_1_BACKEND_PLAN.md
 PHASE_2_BACKEND_HARDENING_PLAN.md
 project_description.md
 backend-review.md
+
+# Web app (frontend/Dockerfile): installed and built inside the image, never copied from the host.
+frontend/node_modules/
+frontend/.next/
+frontend/test-results/
+frontend/.env*
+!frontend/.env.example

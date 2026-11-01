@@ -1,4 +1,4 @@
-# Deploying the backend to Railway
+# Deploying to Railway
 
 Runbook for HARDENING_PLAN.md milestone R1. The repo side is done: `railway.toml`
 (build, migrations, health check, draining), `backend/serve.py` (the image's
@@ -93,6 +93,36 @@ variable is missing, the container stops with an error that names it.
   app and the API share a registrable domain (for example `app.example.com` and
   `api.example.com`) or when the web app proxies API calls. Use custom domains; a
   `*.up.railway.app` API with a differently hosted web app will not receive the cookie.
+
+## The web app (frontend service)
+
+The Next.js app is its own service, built from `frontend/Dockerfile` with the config in
+`frontend/railway.toml`. In the dashboard set the service's **Config file path** to
+`/frontend/railway.toml` (the repo-root `railway.toml` belongs to the API). It needs no volume and no
+database; scale it however you like.
+
+| Variable | Value | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | `https://api.<your-domain>/api/v1` | **Build time.** Must end in `/api/v1`, no trailing slash. The build fails if it is missing or invalid. |
+| `NEXT_PUBLIC_APP_ORIGIN` | `https://app.<your-domain>` | **Build time.** The web app's own origin. |
+| `NEXT_PUBLIC_SENTRY_DSN` | from Sentry | Optional, **build time**. |
+| `CSP_ENFORCE` | `1` | Run time. Leave unset (report-only) until the policy has soaked in staging. |
+
+`NEXT_PUBLIC_*` values are inlined into the client bundle: changing one needs a **rebuild**, not just a restart.
+`PORT` is injected by Railway.
+
+**Domains.** Attach `app.<your-domain>` to the web service and `api.<your-domain>` to the API service. They must
+share a registrable domain: the refresh cookie is `SameSite=Lax` and is not sent otherwise (see "Same site"
+above). Then point the API at the app: `ALLOWED_ORIGINS=["https://app.<your-domain>"]`,
+`FRONTEND_URL=https://app.<your-domain>` and the Google redirect URI on the API's domain.
+
+**Order for a first deploy.** Deploy the API and its domain first (the web build needs only the URL, not a running
+API), then create the web service with its three variables, then add both domains and update the API's variables.
+
+**Checks.** The deployment is green when `/login` answers 200. Then
+`curl -sI https://app.<your-domain>/login` should show `Strict-Transport-Security`, `X-Content-Type-Options` and a
+`Content-Security-Policy` (or `-Report-Only`) header, and a sign-in should end with a working session.
+The `frontend-docker-build` workflow builds and runs this image on real Docker for every frontend change.
 
 ## The inference worker (optional second service)
 
