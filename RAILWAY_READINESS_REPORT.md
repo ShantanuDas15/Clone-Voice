@@ -3,6 +3,8 @@
 > **Audit date:** 2026-11-01 · **Method:** read-only static audit plus dependency-audit tooling · **Author:** automated audit (Claude Code)
 > **State audited:** `main` at `3db42a6` (includes PR #143, the backend dependency fixes), plus open **PR #144** (`fix/frontend-advisories`), assessed separately where it changes a finding. Sections 1, 3-6 and 8-11 below were brought up to date on 2026-11-01 after PRs #143-#145 merged; the Findings Register keeps the original wording, with a status table added after it.
 
+> **Update 2026-11-01 (second pass, PRs #148, #149, #157, #158 also merged: F-04, F-10, F-12 resolved):** only code item left is F-13 (React 19 and `proxy.ts`); everything else open is Railway dashboard or staging work.
+
 > **Update 2026-11-01 (after PRs #143-#145 merged to `main`):** F-01 (Next 16, runtime audit 0), F-02 (web service: `frontend/Dockerfile`, `frontend/railway.toml`, runbook section, `frontend-docker-build` CI), F-03 (JS budget raised to 240 KB) and F-05 (HSTS) are resolved. Current verdict: **READY WITH CONDITIONS**. Remaining conditions: F-06 (set `TRUSTED_PROXY_COUNT=1`, add Redis), F-07 (verified email domain), custom domains on one parent domain, and a staging deploy to check the *Unverified* items.
 
 ---
@@ -19,9 +21,9 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 |---|:---:|:---:|:---:|
 | Critical | 1 | 1 (F-01) | 0 |
 | High | 2 | 2 (F-02 in the repo, F-03) | 0 |
-| Medium | 5 | 1 (F-05) | 4 (F-04, F-06, F-07, F-08) |
-| Low | 8 | 1 (F-09, accepted risk) | 7 |
-| **Total** | **16** | **5** | **11** |
+| Medium | 5 | 2 (F-04, F-05) | 3 (F-06, F-07, F-08) |
+| Low | 8 | 3 (F-09 accepted risk, F-10, F-12) | 5 (F-11, F-13, F-14, F-15, F-16) |
+| **Total** | **16** | **8** | **8** |
 
 **Original blockers:** 3 (F-01, F-02, F-03). **All resolved.** The register was first reported as 15 findings; the correct count is 16 (five Medium, not four).
 
@@ -119,15 +121,15 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 | F-01 | **Resolved** | PR #144 |
 | F-02 | **Resolved (repo); dashboard pending** | PR #145 |
 | F-03 | **Resolved** | Budget 240 KB |
-| F-04 | Open | `vitest` upgrade; dev-only |
+| F-04 | **Resolved** | PR #148: vitest 5, vite 7. Critical/high dev advisories cleared; 16 moderate remain (one accepted `minimatch` ReDoS in the ESLint plugins, FE-SEC2) |
 | F-05 | **Resolved** | HSTS on web app and API (PR #144); `includeSubDomains` intentionally not set |
 | F-06 | Open | Set `TRUSTED_PROXY_COUNT=1` and add Redis in Railway; defaults are still `0` and `memory://` |
 | F-07 | Open | Verified email domain and keys |
 | F-08 | Accepted | MVP trade-off |
 | F-09 | Accepted | Documented exceptions in `backend-audit.yml` |
-| F-10 | Open (optional) | No custom-header check on `/auth/refresh` |
+| F-10 | **Resolved** | PR #157: `/auth/refresh` answers 403 without `X-Requested-With: XMLHttpRequest` |
 | F-11 | Open | Enforce CSP after a staging soak |
-| F-12 | Open (optional) | Base images still tag-pinned; no Dependabot/Renovate config |
+| F-12 | **Resolved** | PRs #149, #158: all three Dockerfiles pin base images by digest; Dependabot refreshes digests and patches, and ignores Python minor and Node major bumps |
 | F-13 | Open (optional) | React 18 and `middleware.ts` still in use |
 | F-14 | No action | Safe as implemented |
 | F-15 | Unverified | Needs a staging deploy and provider review |
@@ -185,9 +187,9 @@ Ordered by impact:
 2. **F-07** — Verified email domain and provider key before inviting users.
 3. **F-05** — HSTS is merged; add `includeSubDomains` once every subdomain is served over HTTPS.
 4. **F-11** — Enforce the CSP after a staging soak.
-5. **F-10** — Custom-header check on `/auth/refresh`.
-6. **F-04** — Upgrade `vitest` to clear dev-only advisories.
-7. **F-12** — Digest-pin base images.
+5. ~~**F-10** — Custom-header check on `/auth/refresh`.~~ Done.
+6. ~~**F-04** — Upgrade `vitest` to clear dev-only advisories.~~ Done.
+7. ~~**F-12** — Digest-pin base images.~~ Done.
 8. **F-13** — React 19 and `proxy.ts` migration.
 9. **F-08** — Evaluate object storage and replicas.
 
@@ -238,12 +240,12 @@ Leave `PORT` unset (injected by Railway), `APP_ENV` at `production`, `DEVICE` at
 - [ ] Enforce the CSP after a soak (F-11)
 - [ ] Re-check Railway behavior against docs.railway.com (volume ownership, proxy headers, SMTP policy) in a staging deploy
 - [ ] Measure `TORCH_NUM_THREADS` and inference timeouts on the real CPU (R3 in `RAILWAY_DEPLOYMENT.md`)
-- [ ] Upgrade `vitest` (F-04)
+- [x] Upgrade `vitest` (F-04)
 
 ### Nice to have
-- [ ] Digest-pin base images (F-12)
+- [x] Digest-pin base images (F-12)
 - [ ] React 19 and `proxy.ts` migration (F-13)
-- [ ] Custom-header check on `/auth/refresh` (F-10)
+- [x] Custom-header check on `/auth/refresh` (F-10)
 - [ ] Object storage instead of a volume (F-08)
 
 ---
@@ -260,7 +262,7 @@ Leave `PORT` unset (injected by Railway), `APP_ENV` at `production`, `DEVICE` at
 - Exact-origin credentialed CORS; `HttpOnly`/`Secure`/`SameSite` cookies
 - Weights verified by checksum before loading; worker URL restricted to https or Railway private hosts
 - Non-root runtime in all three images (API, worker, web app); backend dependencies free of unaccepted advisories (PR #143); frontend runtime dependencies at 0 advisories (PR #144)
-- 2143 backend tests and 729 frontend tests pass; CI includes schema drift, Docker builds for all three images, Lighthouse and visual gates
+- 2151 backend tests and 730 frontend tests pass; CI includes schema drift, Docker builds for all three images, Lighthouse and visual gates
 
 ---
 
