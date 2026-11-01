@@ -107,7 +107,7 @@ describe("FirstRunChecklist", () => {
 
   it("sits below the form on the Generate page, so its late arrival moves nothing above it", async () => {
     setup({ verified: true, profiles: [] });
-    wrap(<GeneratePage searchParams={{}} />);
+    wrap(await GeneratePage({ searchParams: Promise.resolve({}) }));
     const heading = await screen.findByRole("heading", { name: "Get your first result" });
     const text = screen.getByLabelText("Text");
     expect(text.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
