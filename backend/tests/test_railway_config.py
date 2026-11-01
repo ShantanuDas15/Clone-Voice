@@ -89,7 +89,11 @@ def test_deployment_doc_lists_each_required_variable(name):
 
 def test_every_setting_named_in_the_doc_exists():
     """A renamed or removed setting must not linger in the runbook."""
-    named = set(re.findall(r"^\| `([A-Z][A-Z0-9_]+)`", DOC, re.MULTILINE))
+    # The web app's own variables (NEXT_PUBLIC_*, CSP_ENFORCE) are not API settings.
+    api_doc = (
+        DOC.split("## The web app", 1)[0] + DOC.split("## The inference worker", 1)[-1]
+    )
+    named = set(re.findall(r"^\| `([A-Z][A-Z0-9_]+)`", api_doc, re.MULTILINE))
     assert named, "the variables table was not found"
     unknown = named - set(Settings.model_fields) - PLATFORM_VARIABLES
     assert not unknown, f"documented but not a setting: {sorted(unknown)}"
