@@ -1,7 +1,7 @@
 # CloneVoice — Railway Readiness & Security Report
 
 > **Audit date:** 2026-11-01 · **Method:** read-only static audit plus dependency-audit tooling · **Author:** automated audit (Claude Code)
-> **State audited:** `main` at `3db42a6` (includes PR #143, the backend dependency fixes), plus open **PR #144** (`fix/frontend-advisories`), assessed separately where it changes a finding.
+> **State audited:** `main` at `3db42a6` (includes PR #143, the backend dependency fixes), plus open **PR #144** (`fix/frontend-advisories`), assessed separately where it changes a finding. Sections 1, 3-6 and 8-11 below were brought up to date on 2026-11-01 after PRs #143-#145 merged; the Findings Register keeps the original wording, with a status table added after it.
 
 > **Update 2026-11-01 (after PRs #143-#145 merged to `main`):** F-01 (Next 16, runtime audit 0), F-02 (web service: `frontend/Dockerfile`, `frontend/railway.toml`, runbook section, `frontend-docker-build` CI), F-03 (JS budget raised to 240 KB) and F-05 (HSTS) are resolved. Current verdict: **READY WITH CONDITIONS**. Remaining conditions: F-06 (set `TRUSTED_PROXY_COUNT=1`, add Redis), F-07 (verified email domain), custom domains on one parent domain, and a staging deploy to check the *Unverified* items.
 
@@ -9,21 +9,21 @@
 
 ## 1. Executive Summary
 
-CloneVoice is a voice-cloning web application: a FastAPI/PyTorch API with PostgreSQL, an optional separate Chatterbox inference worker, and a Next.js web app. The **backend and worker are unusually well prepared for Railway** (Railway-specific entrypoint, config-as-code, pre-deploy migrations, readiness health check, hash-locked dependencies, non-root runtime, and a documented runbook). The blockers are on the **frontend**: the Next.js version on `main` carries advisories up to unauthenticated RCE, and there is no Railway deployment path for the web app at all.
+CloneVoice is a voice-cloning web application: a FastAPI/PyTorch API with PostgreSQL, an optional separate Chatterbox inference worker, and a Next.js web app. The **backend and worker are unusually well prepared for Railway** (Railway-specific entrypoint, config-as-code, pre-deploy migrations, readiness health check, hash-locked dependencies, non-root runtime, and a documented runbook). The original blockers were on the **frontend**: a Next.js version with advisories up to unauthenticated RCE, and no Railway deployment path for the web app. **Both are now fixed on `main`.**
 
-### Overall verdict: **NOT READY** (on `main` today)
+### Overall verdict: **READY WITH CONDITIONS** (was NOT READY at the time of the audit)
 
-Expected verdict once PR #144 merges and the frontend service exists: **READY WITH CONDITIONS** (conditions listed in §6 and §9).
+The conditions are operational, not code: Railway dashboard setup (domains, variables), a verified email domain, shared rate-limit state, and a staging deploy to check the *Unverified* items. See §9.
 
-| Severity | Count (on `main`) | Of which resolved by PR #144 |
-|---|:---:|:---:|
-| Critical | 1 | 1 |
-| High | 2 | 0 (one is blocked by a CI budget decision) |
-| Medium | 4 | 2 |
-| Low | 8 | 1 |
-| **Total** | **15** | **4** |
+| Severity | Found | Resolved on `main` | Open |
+|---|:---:|:---:|:---:|
+| Critical | 1 | 1 (F-01) | 0 |
+| High | 2 | 2 (F-02 in the repo, F-03) | 0 |
+| Medium | 5 | 1 (F-05) | 4 (F-04, F-06, F-07, F-08) |
+| Low | 8 | 1 (F-09, accepted risk) | 7 |
+| **Total** | **16** | **5** | **11** |
 
-**Blockers:** 3 (F-01, F-02, F-03).
+**Original blockers:** 3 (F-01, F-02, F-03). **All resolved.** The register was first reported as 15 findings; the correct count is 16 (five Medium, not four).
 
 ---
 
@@ -50,7 +50,7 @@ Expected verdict once PR #144 merges and the frontend service exists: **READY WI
 |---|---|
 | Purpose | Upload a voice sample, derive a speaker embedding, synthesize speech from text |
 | Backend | Python 3.11, FastAPI, SQLAlchemy, Alembic, PyTorch (CPU), SV2TTS (encoder, Tacotron 2, WaveRNN) |
-| Frontend | Next.js 14.2 on `main` (16.4.3 in PR #144), React 18, Tailwind, TanStack Query, zod, axios |
+| Frontend | Next.js 16.4.3, React 18, Tailwind, TanStack Query, zod, axios |
 | Worker | Separate FastAPI service in `tts_worker/` (own image, Chatterbox models, bearer-token auth) |
 | Start command | `python -m backend.serve` → `uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1` (`backend/serve.py`) |
 | Data stores | PostgreSQL (psycopg2); volume at `/data` for uploads, outputs, weights; optional Redis for rate limits |
@@ -59,7 +59,7 @@ Expected verdict once PR #144 merges and the frontend service exists: **READY WI
 | Migrations | Alembic as Railway `preDeployCommand`; schema-drift guard and readiness check |
 | CI/CD | Six GitHub Actions workflows (lint/test/build/visual/perf, schema, dependency audit, Docker builds) |
 | Existing platform config | `railway.toml` (API), `tts_worker/railway.toml`, `RAILWAY_DEPLOYMENT.md`, `CHATTERBOX_RUNBOOK.md` |
-| Missing | Any config or documentation for deploying `frontend/` |
+| Web app platform config | `frontend/Dockerfile`, `frontend/railway.toml`, web app section of `RAILWAY_DEPLOYMENT.md`, `frontend-docker-build` workflow (added in PR #145) |
 
 ---
 
@@ -74,8 +74,8 @@ Expected verdict once PR #144 merges and the frontend service exists: **READY WI
 | Health and observability | **Pass** | `/health/ready` as Railway check (`railway.toml`), JSON logs to stdout, Sentry optional, protected `/metrics`. |
 | Database | **Pass** | Alembic pre-deploy, pooling with `pool_pre_ping` (`core/database.py:25`), no create-all/drop-all in app code. TLS to DB **Unverified** (private network). |
 | Dependencies (backend) | **Pass** | Both `pip-audit` runs clean apart from accepted `setuptools` advisories (F-09). |
-| Dependencies (frontend) | **Fail** | `next` Critical on `main`; fixed in PR #144 (F-01). |
-| Frontend deployment | **Fail** | No service config or docs (F-02). |
+| Dependencies (frontend) | **Pass** | Runtime `npm audit` reports 0 vulnerabilities and is blocking in CI (F-01 fixed). Dev-only advisories remain (F-04). |
+| Frontend deployment | **Pass (repo) / Pending (dashboard)** | Dockerfile, `railway.toml`, runbook and CI image build exist (F-02). The Railway service and domains still have to be created. |
 | Secrets | **Pass** | `.env`, `frontend/.env.local` ignored and untracked; no secret patterns in tree or history. |
 | Auth and authorization | **Pass** | bcrypt (`core/security.py:33`), short-lived access JWT with `jti`, rotating refresh tokens, algorithm pinned (`core/security.py:117`), email verification, soft-delete checks. |
 | Input and injection | **Pass (partial)** | ORM queries; magic-byte and type validation, UUID-named uploads (`services/audio_processing.py:92,107`); no `shell=True`/`pickle` in app code; weights checksum-verified before `torch.load`. Deep review **Unverified**. |
@@ -83,7 +83,7 @@ Expected verdict once PR #144 merges and the frontend service exists: **READY WI
 | Web hardening: CORS | **Pass** | Exact origins enforced by validator (`core/config.py:507`). |
 | Web hardening: cookies | **Pass** | `HttpOnly`, `Secure`, `SameSite=Lax` (`api/auth.py:66-72`). |
 | Web hardening: CSRF | **Warning** | No CSRF token; relies on SameSite=Lax, JSON bodies, exact-origin CORS (F-10). |
-| Web hardening: headers | **Warning** | Frontend has nosniff/frame/referrer headers and report-only CSP; **no HSTS on `main`** (F-05, fixed in PR #144). |
+| Web hardening: headers | **Pass (CSP report-only)** | nosniff/frame/referrer and HSTS on the web app; HSTS and nosniff on the API (F-05 fixed). CSP is report-only until enforced (F-11). |
 | Web hardening: rate limiting | **Warning** | Present on auth and synthesis; defaults to in-memory (`core/config.py:115`) and `TRUSTED_PROXY_COUNT=0` (`:119`) unless set (F-06). |
 | Exposure | **Pass** | Docs/OpenAPI disabled in production (`main.py:165`); `/metrics` needs token. |
 | Data protection | **Pass** | Search-text redaction in access logs (`core/log_redaction.py`); account export/erasure exist. Provider-side email and Sentry data handling **Unverified**. |
@@ -112,48 +112,68 @@ Expected verdict once PR #144 merges and the frontend service exists: **READY WI
 | F-15 | Low | Data protection | Database TLS and provider-side retention (Resend, Sentry, Hugging Face) are **Unverified**. Postgres is reached over Railway's private network. | `DATABASE_URL` reference variable | Confirm private-network URL is used; review provider data-processing terms. | S |
 | F-16 | Low | Worker | Worker traffic is plain http on the private network (explicitly allowed for `*.railway.internal` only) with a 32-char bearer token. | `core/config.py:455-470`; `tts_worker/app.py:102` | Keep the worker without a public domain. | — |
 
+### Status of each finding (2026-11-01)
+
+| ID | Status | Notes |
+|---|---|---|
+| F-01 | **Resolved** | PR #144 |
+| F-02 | **Resolved (repo); dashboard pending** | PR #145 |
+| F-03 | **Resolved** | Budget 240 KB |
+| F-04 | Open | `vitest` upgrade; dev-only |
+| F-05 | **Resolved** | HSTS on web app and API (PR #144); `includeSubDomains` intentionally not set |
+| F-06 | Open | Set `TRUSTED_PROXY_COUNT=1` and add Redis in Railway; defaults are still `0` and `memory://` |
+| F-07 | Open | Verified email domain and keys |
+| F-08 | Accepted | MVP trade-off |
+| F-09 | Accepted | Documented exceptions in `backend-audit.yml` |
+| F-10 | Open (optional) | No custom-header check on `/auth/refresh` |
+| F-11 | Open | Enforce CSP after a staging soak |
+| F-12 | Open (optional) | Base images still tag-pinned; no Dependabot/Renovate config |
+| F-13 | Open (optional) | React 18 and `middleware.ts` still in use |
+| F-14 | No action | Safe as implemented |
+| F-15 | Unverified | Needs a staging deploy and provider review |
+| F-16 | No action | Keep the worker private |
+
 ---
 
-## 6. Required Fixes (Blockers)
+## 6. Required Fixes (Blockers) — all resolved
 
-### F-01 + F-03 — Ship the Next.js security upgrade
+### F-01 + F-03 — Ship the Next.js security upgrade: **Done** (PR #144)
 
-1. Decide the JS budget question (F-03). Recommended: raise the budget and record why.
+- JS budget raised to 240 KB (`frontend/perf/budget.mts:41`) and recorded as FE-SEC1 in `FRONTEND_IMPLEMENTATION_PLAN.md`.
+- PR #144 merged with `check`, `perf` and `visual` green; `npm audit --omit=dev` reports 0 vulnerabilities on `main`.
 
-   ```js
-   // frontend/perf/run.mjs — budget constant
-   scriptKb: 240, // Next 16 framework +~30 KB; see FRONTEND_IMPLEMENTATION_PLAN.md
-   ```
+### F-02 — Add a frontend Railway service: **Done in the repo** (PR #145); dashboard steps remain
 
-2. Re-run CI on PR #144 until `check`, `perf`, `visual` are green, then merge (`gh pr merge 144 --merge --delete-branch`).
-3. Confirm `npm audit --omit=dev --audit-level=high` reports 0 on `main`.
+Implemented as a Dockerfile built from the repo root (matching the API and worker), not Railpack:
 
-### F-02 — Add a frontend Railway service
+```toml
+# frontend/railway.toml
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "frontend/Dockerfile"
+watchPatterns = ["frontend/**"]
 
-1. Create a Railway service from the same repo with root directory `frontend`.
-2. Set build-time variables (inlined at build, so changing them needs a rebuild):
+[deploy]
+healthcheckPath = "/login"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+drainingSeconds = 15
+```
+
+`frontend/Dockerfile` takes `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_APP_ORIGIN` and `NEXT_PUBLIC_SENTRY_DSN` as build arguments, runs as the unprivileged `node` user and starts with `npm run start` on `$PORT`. The `frontend-docker-build` workflow builds and runs it on real Docker (non-root, `/login` on `$PORT`, HSTS/nosniff/CSP headers). The runbook section is "The web app" in `RAILWAY_DEPLOYMENT.md`.
+
+**Still to do in the Railway dashboard (not code):**
+
+1. Create the web service from this repo and set its **Config file path** to `/frontend/railway.toml` (no root directory needed).
+2. Set the build-time variables before the first deploy:
 
    ```bash
    NEXT_PUBLIC_API_BASE_URL=https://api.<YOUR_DOMAIN>/api/v1
    NEXT_PUBLIC_APP_ORIGIN=https://app.<YOUR_DOMAIN>
    ```
 
-3. Add `frontend/railway.toml` (health path must exist and be public; verify `/login` returns 200):
-
-   ```toml
-   [build]
-   builder = "RAILPACK"
-
-   [deploy]
-   startCommand = "npm run start"
-   healthcheckPath = "/login"
-   healthcheckTimeout = 120
-   restartPolicyType = "ON_FAILURE"
-   restartPolicyMaxRetries = 5
-   ```
-
-4. Attach custom domains `app.<YOUR_DOMAIN>` and `api.<YOUR_DOMAIN>` (same registrable domain, required by the `SameSite=Lax` refresh cookie), then set on the API: `ALLOWED_ORIGINS=["https://app.<YOUR_DOMAIN>"]`, `FRONTEND_URL=https://app.<YOUR_DOMAIN>`, `GOOGLE_REDIRECT_URI=https://api.<YOUR_DOMAIN>/api/v1/auth/google/callback`.
-5. Add the web app's runbook section to `RAILWAY_DEPLOYMENT.md`.
+3. Attach `app.<YOUR_DOMAIN>` and `api.<YOUR_DOMAIN>` (same registrable domain, required by the `SameSite=Lax` refresh cookie), then set on the API: `ALLOWED_ORIGINS=["https://app.<YOUR_DOMAIN>"]`, `FRONTEND_URL=https://app.<YOUR_DOMAIN>`, `GOOGLE_REDIRECT_URI=https://api.<YOUR_DOMAIN>/api/v1/auth/google/callback`.
 
 ---
 
@@ -163,7 +183,7 @@ Ordered by impact:
 
 1. **F-06** — Redis for rate limiting and `TRUSTED_PROXY_COUNT=1`, verified in staging.
 2. **F-07** — Verified email domain and provider key before inviting users.
-3. **F-05** — Merge HSTS (in PR #144); later add `includeSubDomains`.
+3. **F-05** — HSTS is merged; add `includeSubDomains` once every subdomain is served over HTTPS.
 4. **F-11** — Enforce the CSP after a staging soak.
 5. **F-10** — Custom-header check on `/auth/refresh`.
 6. **F-04** — Upgrade `vitest` to clear dev-only advisories.
@@ -175,7 +195,7 @@ Ordered by impact:
 
 ## 8. Items Needed for Railway
 
-**Files:** `frontend/railway.toml` (new, §6); frontend section in `RAILWAY_DEPLOYMENT.md`; budget change in `frontend/perf/run.mjs`.
+**Files (all added):** `frontend/Dockerfile`, `frontend/railway.toml`, `.github/workflows/frontend-docker-build.yml`, the web app section of `RAILWAY_DEPLOYMENT.md`, and the budget change in `frontend/perf/budget.mts`.
 
 **API service variables (existing runbook, plus the changes below):**
 
@@ -206,9 +226,10 @@ Leave `PORT` unset (injected by Railway), `APP_ENV` at `production`, `DEVICE` at
 ## 9. Remediation Roadmap
 
 ### Must fix before deploy
-- [ ] Decide the JS budget and get PR #144 green (**F-03**)
-- [ ] Merge PR #144: Next 16, ESLint 9, HSTS, blocking runtime audit (**F-01**, F-05)
-- [ ] Add the frontend Railway service, domains and docs (**F-02**)
+- [x] Decide the JS budget and get PR #144 green (**F-03**)
+- [x] Merge PR #144: Next 16, ESLint 9, HSTS, blocking runtime audit (**F-01**, F-05)
+- [x] Add the frontend Railway service config and docs (**F-02**, repo side)
+- [ ] Create the web service in Railway and attach both custom domains (**F-02**, dashboard side)
 - [ ] Verify an email sending domain and set the email variables (F-07)
 - [ ] Set `TRUSTED_PROXY_COUNT=1` and confirm client IPs in staging logs (F-06)
 
@@ -238,13 +259,13 @@ Leave `PORT` unset (injected by Railway), `APP_ENV` at `production`, `DEVICE` at
 - Upload validation by type and magic bytes; random file names; request body size limit
 - Exact-origin credentialed CORS; `HttpOnly`/`Secure`/`SameSite` cookies
 - Weights verified by checksum before loading; worker URL restricted to https or Railway private hosts
-- Non-root runtime in both images; backend dependencies free of unaccepted advisories (PR #143)
-- 2143 backend tests pass, plus 724 frontend tests; CI includes schema drift, Docker build, Lighthouse and visual gates
+- Non-root runtime in all three images (API, worker, web app); backend dependencies free of unaccepted advisories (PR #143); frontend runtime dependencies at 0 advisories (PR #144)
+- 2143 backend tests and 729 frontend tests pass; CI includes schema drift, Docker builds for all three images, Lighthouse and visual gates
 
 ---
 
 ## 11. Conclusion
 
-**Verdict: NOT READY** for production on Railway today, because `main` still ships a Next.js version with Critical advisories and the web app has no deployment path. The platform and the backend are in good shape; the fixes are bounded and mostly already built.
+**Verdict: READY WITH CONDITIONS.** The three original blockers (Next.js advisories, the JS budget gate, and the missing web app deployment path) are fixed and merged. What remains is operational: dashboard setup, email and rate-limit configuration, and a staging deploy to verify the items this audit could not.
 
-**Single most important next step:** decide the JS performance budget so PR #144 can merge (**F-03**), which unblocks the Critical upgrade (F-01); then add the frontend Railway service (F-02).
+**Single most important next step:** do a staging deploy of all three services on custom domains under one parent domain, with `TRUSTED_PROXY_COUNT=1`, Redis and a verified email domain, then work through the *Unverified* items (client IP, volume ownership, email delivery, cold start).
