@@ -1,7 +1,7 @@
 # CloneVoice — Railway Readiness & Security Report
 
 > **Audit date:** 2026-11-01 · **Method:** read-only static audit plus dependency-audit tooling · **Author:** automated audit (Claude Code)
-> **State audited:** `main` at `3db42a6` (includes PR #143, the backend dependency fixes), plus open **PR #144** (`fix/frontend-advisories`), assessed separately where it changes a finding. Sections 1, 3-6 and 8-11 below were brought up to date on 2026-11-01 after PRs #143-#145 merged; the Findings Register keeps the original wording, with a status table added after it.
+> **State audited:** `main` at `7f9a572` (PRs #143-#161 merged). Re-verified on 2026-11-01: runtime `npm audit` 0 vulnerabilities; `pip-audit` on the hash lock clean apart from the 3 accepted advisories; only the three `.env.example` files are tracked (no `.env`, key or certificate files); no private keys or token-pattern secrets in the tree or in history; all three Dockerfiles digest-pinned and non-root. The Findings Register keeps its original wording, with a status table added after it.
 
 > **Update 2026-11-01 (second pass, PRs #148, #149, #157, #158 also merged: F-04, F-10, F-12 resolved):** F-13 (React 19 and `proxy.ts`) was resolved in PR #160; no code items remain. Everything still open is Railway dashboard or staging work.
 
@@ -33,7 +33,7 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 
 **Reviewed:** the whole repository: `backend/` (API, services, models, Alembic migrations, tests), `tts_worker/`, `frontend/`, `Dockerfile`s, `railway.toml` files, `.github/workflows/`, `.env.example` files, `.gitignore`/`.dockerignore`, and the existing `RAILWAY_DEPLOYMENT.md` and `CHATTERBOX_RUNBOOK.md`.
 
-**Tooling run:** `pip-audit` (requirements and hash lock), `npm audit` (with and without dev dependencies), a secret-pattern scan of the working tree and of all 952 commits, file-tracking checks for `.env`/key files, and the backend test suite (2143 passed, 1 skipped).
+**Tooling run:** `pip-audit` (requirements and hash lock), `npm audit` (with and without dev dependencies), a secret-pattern scan of the working tree and of all 952 commits, file-tracking checks for `.env`/key files, and the backend test suite (2151 passed, 1 skipped on `main` at `7f9a572`).
 
 **Could not be verified (marked *Unverified* below):**
 - Current Railway platform behavior against docs.railway.com (no live documentation check was made; platform statements here come from the repository's own runbook and should be re-checked before go-live).
