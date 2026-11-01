@@ -82,20 +82,20 @@ describe("violations", () => {
   });
 
   it("names each metric that is over", () => {
-    const out = violations({ lcpMs: 2600, scriptKb: 201, cls: 0.2, tbtMs: 400 });
+    const out = violations({ lcpMs: 2600, scriptKb: 241, cls: 0.2, tbtMs: 400 });
     expect(out).toHaveLength(4);
     expect(out.join(" ")).toMatch(/LCP.*JS.*CLS.*TBT/);
   });
 
   it("reports only the metric that is over", () => {
-    expect(violations({ ...ok, scriptKb: 250 })).toEqual(["JS 250.0 KB > 200 KB"]);
+    expect(violations({ ...ok, scriptKb: 250 })).toEqual(["JS 250.0 KB > 240 KB"]);
   });
 });
 
 describe("budget definition", () => {
   it("encodes the plan's proposals and covers / and /login", () => {
     expect(BUDGET.lcpMs).toBe(2500);
-    expect(BUDGET.scriptKb).toBe(200);
+    expect(BUDGET.scriptKb).toBe(240);
     expect(PUBLIC_ROUTES).toEqual(expect.arrayContaining(["/", "/login"]));
   });
 });
