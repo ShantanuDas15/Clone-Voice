@@ -1,0 +1,96 @@
+# Render Blueprint (RENDER_DEPLOYMENT.md). Secrets are never written here:
+# `generateValue` creates them on Render and `sync: false` prompts for them when
+# the Blueprint is first created. Custom domains are attached in the dashboard.
+services:
+  - type: web
+    name: clonevoice-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    region: oregon
+    # PyTorch plus the three SV2TTS models need about 2 GB; 4 GB leaves headroom.
+    # A disk needs a paid plan and limits the service to one instance.
+    plan: 2c-4g
+    numInstances: 1
+    # Readiness, not liveness: the deploy goes live only once the database is
+    # reachable, the schema is at head and the models are loaded.
+    healthCheckPath: /health/ready
+    # Runs in its own container; the disk is not mounted during it.
+    preDeployCommand: alembic -c backend/alembic.ini upgrade head
+    disk:
+      name: clonevoice-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: clonevoice-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: SESSION_SECRET_KEY
+        generateValue: true
+      - key: METRICS_AUTH_TOKEN
+        generateValue: true
+      - key: DATA_DIR
+        value: /data
+      - key: FETCH_WEIGHTS_ON_START
+        value: "true"
+      - key: RATE_LIMIT_STORAGE_URI
+        fromService:
+          type: keyvalue
+          name: clonevoice-cache
+          property: connectionString
+      # Set TRUSTED_PROXY_COUNT after checking which header carries the client IP
+      # (RENDER_DEPLOYMENT.md, "Client IP").
+      - key: TRUSTED_PROXY_COUNT
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: EMAIL_BACKEND
+        value: resend
+      - key: EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+
+  - type: web
+    name: clonevoice-web
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: .
+    region: oregon
+    plan: 0.5c-512mb
+    healthCheckPath: /login
+    # Render passes these to the Docker build as build arguments; they are baked
+    # into the client bundle, so changing one needs a redeploy.
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_ORIGIN
+        sync: false
+
+  - type: keyvalue
+    name: clonevoice-cache
+    region: oregon
+    plan: 256mb
+    maxmemoryPolicy: allkeys-lru
+    # Empty: reachable only over Render's private network.
+    ipAllowList: []
+
+databases:
+  - name: clonevoice-db
+    region: oregon
+    plan: 0.5c-1g
+    postgresMajorVersion: "17"
+    databaseName: clonevoice
+    user: clonevoice
+    ipAllowList: []
