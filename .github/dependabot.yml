@@ -1,0 +1,21 @@
+# Keeps the digest-pinned base images (RAILWAY_READINESS_REPORT.md F-12) and the workflow actions
+# current. Python and npm dependencies are not listed: they are hash-locked and audited weekly
+# (backend-audit.yml, frontend.yml), and are bumped deliberately.
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/tts_worker"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -39,7 +39,7 @@ describe("web app Railway config (RAILWAY_READINESS_REPORT.md F-02)", () => {
     expect(dockerfile).toMatch(/^USER node$/m);
     expect(dockerfile).toContain("NODE_ENV=production");
     const nvmrc = root("frontend/.nvmrc").trim();
-    expect(dockerfile).toContain(`FROM node:${nvmrc}-slim`);
+    expect(dockerfile).toMatch(new RegExp(`^FROM node:${nvmrc}-slim@sha256:[0-9a-f]{64}`, "m"));
   });
 
   it("keeps host build output and secrets out of the build context", () => {
