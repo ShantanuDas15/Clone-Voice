@@ -17,7 +17,7 @@
 # `webrtcvad`, which publishes no py3.11 binary wheel, so pip compiles it from
 # source and needs a C compiler. The compiler lives only in this stage; the
 # runtime stage below copies the finished virtualenv and ships no toolchain.
-FROM python:3.11-slim@sha256:673719e071ecf27434fd2635bbd8d00f49f4fdd81f243143438a42ced8bedf60 AS builder
+FROM python:3.15-slim@sha256:94d3426f1def7db4a106a232ac121bfd975393e5dfd40a619b955fae45fe7913 AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
@@ -53,7 +53,7 @@ RUN grep -E '^torch==' /tmp/requirements.txt > /tmp/torch-requirement.txt \
 # merely satisfies requirements.txt's ranges/transitive deps.
 RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock.txt
 
-FROM python:3.11-slim@sha256:673719e071ecf27434fd2635bbd8d00f49f4fdd81f243143438a42ced8bedf60
+FROM python:3.15-slim@sha256:94d3426f1def7db4a106a232ac121bfd975393e5dfd40a619b955fae45fe7913
 
 # System dependencies:
 # - libsndfile1: required by the `soundfile` package (services/tts_pipeline.py
