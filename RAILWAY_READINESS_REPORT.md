@@ -1,7 +1,7 @@
 # CloneVoice — Railway Readiness & Security Report
 
 > **Audit date:** 2026-11-01 · **Method:** read-only static audit plus dependency-audit tooling · **Author:** automated audit (Claude Code)
-> **State audited:** `main` at `7f9a572` (PRs #143-#161 merged). Re-verified on 2026-11-01: runtime `npm audit` 0 vulnerabilities; `pip-audit` on the hash lock clean apart from the 3 accepted advisories; only the three `.env.example` files are tracked (no `.env`, key or certificate files); no private keys or token-pattern secrets in the tree or in history; all three Dockerfiles digest-pinned and non-root. The Findings Register keeps its original wording, with a status table added after it.
+> **State audited:** `main` at `9ffd13a` (PRs #143-#162 and the four Dependabot Actions bumps merged). Re-verified on 2026-11-01: runtime `npm audit` 0 vulnerabilities; `pip-audit` on the hash lock clean apart from the 3 accepted advisories; only the three `.env.example` files are tracked (no `.env`, key or certificate files); no private keys or token-pattern secrets in the tree or in history; all three Dockerfiles digest-pinned and non-root. The Findings Register keeps its original wording, with a status table added after it.
 
 > **Update 2026-11-01 (second pass, PRs #148, #149, #157, #158 also merged: F-04, F-10, F-12 resolved):** F-13 (React 19 and `proxy.ts`) was resolved in PR #160; no code items remain. Everything still open is Railway dashboard or staging work.
 
@@ -33,7 +33,7 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 
 **Reviewed:** the whole repository: `backend/` (API, services, models, Alembic migrations, tests), `tts_worker/`, `frontend/`, `Dockerfile`s, `railway.toml` files, `.github/workflows/`, `.env.example` files, `.gitignore`/`.dockerignore`, and the existing `RAILWAY_DEPLOYMENT.md` and `CHATTERBOX_RUNBOOK.md`.
 
-**Tooling run:** `pip-audit` (requirements and hash lock), `npm audit` (with and without dev dependencies), a secret-pattern scan of the working tree and of all 952 commits, file-tracking checks for `.env`/key files, and the backend test suite (2151 passed, 1 skipped on `main` at `7f9a572`).
+**Tooling run:** `pip-audit` (requirements and hash lock), `npm audit` (with and without dev dependencies), a secret-pattern scan of the working tree and of all 952 commits, file-tracking checks for `.env`/key files, and the backend test suite (2151 passed, 1 skipped, last run on `main` at `7f9a572`; later commits changed only docs and CI actions).
 
 **Could not be verified (marked *Unverified* below):**
 - Current Railway platform behavior against docs.railway.com (no live documentation check was made; platform statements here come from the repository's own runbook and should be re-checked before go-live).
@@ -59,7 +59,7 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 | External services | Google OAuth, Resend/SMTP email, Hugging Face (weights), Sentry (optional) |
 | Background work | In-process token/storage pruning; inference behind a semaphore; no WebSockets |
 | Migrations | Alembic as Railway `preDeployCommand`; schema-drift guard and readiness check |
-| CI/CD | Six GitHub Actions workflows (lint/test/build/visual/perf, schema, dependency audit, Docker builds) |
+| CI/CD | Seven GitHub Actions workflows (lint/test/build/visual/perf, schema, dependency audit, Docker builds) |
 | Existing platform config | `railway.toml` (API), `tts_worker/railway.toml`, `RAILWAY_DEPLOYMENT.md`, `CHATTERBOX_RUNBOOK.md` |
 | Web app platform config | `frontend/Dockerfile`, `frontend/railway.toml`, web app section of `RAILWAY_DEPLOYMENT.md`, `frontend-docker-build` workflow (added in PR #145) |
 
@@ -262,7 +262,7 @@ Leave `PORT` unset (injected by Railway), `APP_ENV` at `production`, `DEVICE` at
 - Exact-origin credentialed CORS; `HttpOnly`/`Secure`/`SameSite` cookies
 - Weights verified by checksum before loading; worker URL restricted to https or Railway private hosts
 - Non-root runtime in all three images (API, worker, web app); backend dependencies free of unaccepted advisories (PR #143); frontend runtime dependencies at 0 advisories (PR #144)
-- 2151 backend tests and 730 frontend tests pass (React 19); CI includes schema drift, Docker builds for all three images, Lighthouse and visual gates
+- 2151 backend tests (last full run at `7f9a572`) and 730 frontend tests pass (React 19; re-run in CI on `9ffd13a`); CI includes schema drift, Docker builds for all three images, Lighthouse and visual gates
 
 ---
 
