@@ -36,11 +36,23 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 **Tooling run:** `pip-audit` (requirements and hash lock), `npm audit` (with and without dev dependencies), a secret-pattern scan of the working tree and of all 952 commits, file-tracking checks for `.env`/key files, and the backend test suite (2151 passed, 1 skipped, last run on `main` at `7f9a572`; later commits changed only docs and CI actions).
 
 **Could not be verified (marked *Unverified* below):**
-- Current Railway platform behavior against docs.railway.com (no live documentation check was made; platform statements here come from the repository's own runbook and should be re-checked before go-live).
+- Current Railway platform behavior: **checked against docs.railway.com on 2026-11-01** (see the table after this list). Behavior that needs a running project is still *Unverified*.
 - Anything that needs a running Railway project: proxy hop count (`TRUSTED_PROXY_COUNT`), outbound SMTP/Resend behavior, volume ownership, real cold-start timing.
 - Contents of git history beyond pattern matches. No token-shaped strings or key/`.env` files were found, but a pattern scan is not proof of absence.
 - Line-by-line injection review of every endpoint. Evidence below is from targeted greps and the project's own hardening log (`HARDENING_PLAN.md`), not an independent penetration test.
 - Docker image builds locally (no Docker daemon); CI's `backend-docker-build` passes on `main`.
+
+**Railway documentation check (2026-11-01):**
+
+| Topic | Documented behavior | Matches the repo? |
+|---|---|---|
+| Volume permissions | Non-root images get permission errors on a volume; set `RAILWAY_RUN_UID=0` | Yes: `RAILWAY_RUN_UID=0`, then `backend/serve.py` chowns and drops to uid 1000 |
+| Volumes and replicas | One volume per service; replicas cannot be used with volumes; redeploys have a short downtime even with a health check | Yes: single instance (F-08) |
+| Health check | Host `healthcheck.railway.app`; default timeout 300 s; runs only at deploy start; `PORT` injected | Yes: `healthcheckTimeout = 600`. Confirm the app accepts that Host header |
+| Request limits | 15 min maximum while data flows, 5 min idle; body upload within 5 min; 32 KB headers | No conflict found; keep inference timeouts below these |
+| Proxy headers | `X-Real-IP` is the client IP; `X-Forwarded-Proto` is always `https`. `X-Forwarded-For` is **not documented** | **Gap for F-06:** `backend/core/rate_limit.py:41-44` reads only `X-Forwarded-For` |
+| Outbound email | SMTP is Pro-plan only; HTTPS email APIs (Resend is recommended) work on every plan | Yes: `EMAIL_BACKEND=resend` is the right choice |
+| TLS | Free automatic certificates; HSTS not added by Railway | Yes: HSTS is set by the app (F-05) |
 
 **Assumptions:** deploy target is three Railway services (API, web app, optional worker) plus the Postgres plugin and one volume; custom domains on a shared registrable domain.
 
@@ -102,7 +114,7 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 | **F-03** | **High** | Delivery | PR #144 fails the `perf` budget: public-route JS is 211-227 KB gz against 200 KB because Next 16 is ~30 KB larger. The required check blocks the merge, so F-01 cannot reach `main`. | CI run on PR #144; `frontend/perf/run.mjs` | Decide: raise the JS budget (recommended 240 KB, recorded in the plan) or undertake a client refactor (replace axios with XHR code, move zod to `zod/mini`). | S (budget) / L (refactor) |
 | F-04 | Medium | Supply chain | Frontend dev dependencies carry advisories (`vitest`/`tinypool` critical, `vite` high, ESLint plugins). Dev-only: not in the runtime bundle. 33 before, 22 after PR #144. | `npm audit` (full) | Upgrade `vitest` to a patched major in a separate PR; CI audits runtime only. | M |
 | F-05 | Medium | Web hardening | No HSTS header on `main`, in the API or the web app. Railway's edge terminates TLS but does not add HSTS. | `frontend/next.config.mjs`, `backend/main.py` (no header) | PR #144 adds `Strict-Transport-Security` to both (`backend/core/security_headers.py`). Consider `includeSubDomains` once all subdomains are HTTPS. | S (done in PR) |
-| F-06 | Medium | Platform fit | Rate limiter is in-memory and resets each deploy; `TRUSTED_PROXY_COUNT` defaults to 0, so behind Railway every client could share the edge IP (throttling everyone) or, if mis-set, be spoofable. Proxy hop count is **Unverified**. | `backend/core/config.py:115,119`; `core/rate_limit.py:40` | Set `TRUSTED_PROXY_COUNT=1`, add Redis (`RATE_LIMIT_STORAGE_URI`), and confirm the client IP in staging logs. | S |
+| F-06 | Medium | Platform fit | Rate limiter is in-memory and resets each deploy; `TRUSTED_PROXY_COUNT` defaults to 0, so behind Railway every client could share the edge IP (throttling everyone) or, if mis-set, be spoofable. Proxy hop count is **Unverified**. | `backend/core/config.py:115,119`; `core/rate_limit.py:40` | Set `TRUSTED_PROXY_COUNT=1`, add Redis (`RATE_LIMIT_STORAGE_URI`), and confirm the client IP in staging logs. Railway documents `X-Real-IP` as the client IP and does not document `X-Forwarded-For`; if staging shows no `X-Forwarded-For`, make `get_client_ip` fall back to `X-Real-IP`. | S |
 | F-07 | Medium | Operations | Email verification is required (default); without a verified sending domain and `RESEND_API_KEY`, no local user can verify, upload or synthesize. | `backend/.env.example` (`REQUIRE_EMAIL_VERIFICATION`, `EMAIL_BACKEND=disabled`) | Verify a sending domain (SPF/DKIM) and set the three email variables before launch. | S |
 | F-08 | Medium | Platform fit | Single instance with a volume: redeploys cause brief downtime, and a volume rules out replicas. Weights (~424 MB) download on first boot (up to 10 min health window). | `railway.toml:15-24`; `RAILWAY_DEPLOYMENT.md` | Accept for MVP; plan object storage if scale or zero-downtime is needed. | L |
 | F-09 | Low | Supply chain | `setuptools` 79.0.1 carries `PYSEC-2026-3447` and `GHSA-xmj3-9gf7-h52w`, accepted because every patched release lacks `pkg_resources`, which `webrtcvad` imports. No runtime attack surface identified. | `backend/requirements.constraints.txt`; `.github/workflows/backend-audit.yml` | Revisit if `webrtcvad` drops `pkg_resources`. | M |
@@ -238,7 +250,8 @@ Leave `PORT` unset (injected by Railway), `APP_ENV` at `production`, `DEVICE` at
 ### Should fix soon
 - [ ] Add Redis for rate-limit state (F-06)
 - [ ] Enforce the CSP after a soak (F-11)
-- [ ] Re-check Railway behavior against docs.railway.com (volume ownership, proxy headers, SMTP policy) in a staging deploy
+- [x] Re-check Railway behavior against docs.railway.com (done 2026-11-01, see §2)
+- [ ] Confirm in staging which header carries the client IP (`X-Real-IP` vs `X-Forwarded-For`, F-06)
 - [ ] Measure `TORCH_NUM_THREADS` and inference timeouts on the real CPU (R3 in `RAILWAY_DEPLOYMENT.md`)
 - [x] Upgrade `vitest` (F-04)
 
