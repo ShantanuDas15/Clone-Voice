@@ -46,7 +46,7 @@ describe("visual baselines workflow (UX plan §12 M4)", () => {
     expect(update.indexOf("--update-snapshots")).toBeLessThan(
       update.lastIndexOf("npm run test:visual"),
     );
-    expect(update).toContain("actions/upload-artifact@v4");
+    expect(update).toContain("actions/upload-artifact@v7");
     expect(update).toContain("path: frontend/visual/__screenshots__");
     expect(update).toContain("if-no-files-found: error");
   });
