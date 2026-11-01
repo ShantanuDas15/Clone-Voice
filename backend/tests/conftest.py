@@ -179,7 +179,10 @@ def client(db_session, monkeypatch):
     # same in-memory test engine `TestingSessionLocal` uses, so it still runs
     # against the test DB instead of the real DATABASE_URL.
     monkeypatch.setattr(main_module, "SessionLocal", TestingSessionLocal)
-    yield TestClient(app, follow_redirects=False)
+    test_client = TestClient(app, follow_redirects=False)
+    # What the web app sends on every refresh (F-10); test_refresh_header.py drops it.
+    test_client.headers["X-Requested-With"] = "XMLHttpRequest"
+    yield test_client
     app.dependency_overrides.clear()
 
 

@@ -61,6 +61,13 @@ GOOGLE_SUCCESS_PATH = "/auth/callback"
 GOOGLE_FAILURE_PATH = "/login"
 
 
+# A cross-site page can neither add this header to a request nor pass the CORS preflight that a
+# custom header forces, so requiring it on the cookie-authenticated refresh adds a second barrier
+# beside SameSite=Lax (RAILWAY_READINESS_REPORT.md F-10).
+REFRESH_REQUIRED_HEADER = "x-requested-with"
+REFRESH_REQUIRED_VALUE = "XMLHttpRequest"
+
+
 def _set_refresh_cookie(response: Response, token: str) -> None:
     """Attach the refresh cookie, aged to match the token's own lifetime."""
     response.set_cookie(
@@ -184,6 +191,10 @@ def refresh(
     db: Session = Depends(get_db),
 ):
     """Rotate a refresh token and issue a new access token."""
+    if request.headers.get(REFRESH_REQUIRED_HEADER) != REFRESH_REQUIRED_VALUE:
+        raise HTTPException(
+            status_code=403, detail="Missing X-Requested-With: XMLHttpRequest header"
+        )
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
 
