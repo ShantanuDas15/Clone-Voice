@@ -125,7 +125,7 @@ if (withAccount) {
     const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
     const refresh = await fetch(`${apiBase}/auth/refresh`, {
       method: "POST",
-      headers: { Origin: webOrigin, Cookie: cookie },
+      headers: { Origin: webOrigin, Cookie: cookie, "X-Requested-With": "XMLHttpRequest" },
     });
     add(
       refresh.status === 200

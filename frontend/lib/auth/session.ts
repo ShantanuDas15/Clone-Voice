@@ -89,7 +89,10 @@ export function subscribe(listener: Listener): () => void {
 
 async function requestRefresh(): Promise<string | null> {
   try {
-    const { data } = await plainClient.post<TokenResponse>("/auth/refresh");
+    const { data } = await plainClient.post<TokenResponse>("/auth/refresh", undefined, {
+      // The API refuses a refresh without it: a cross-site page cannot send a custom header.
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
     setAccessToken(data.access_token);
     return data.access_token;
   } catch (error) {

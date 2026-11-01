@@ -81,7 +81,7 @@ variable is missing, the container stops with an error that names it.
   `FRONTEND_URL/login?error=<code>` (`google_failed`, `google_no_email`,
   `google_email_unverified`, `google_account_conflict` when the address already belongs to
   an account linked to a different Google account). The page at `/auth/callback` calls
-  `POST /api/v1/auth/refresh` (with credentials) to obtain its access token; no token
+  `POST /api/v1/auth/refresh` (with credentials and the header `X-Requested-With: XMLHttpRequest`, which the API requires; without it the answer is 403) to obtain its access token; no token
   is ever placed in a URL.
 - **Emailed links:** they open `FRONTEND_URL/verify-email#token=...` and
   `FRONTEND_URL/reset-password#token=...`, with the token in the URL fragment so it never

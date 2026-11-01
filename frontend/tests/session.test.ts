@@ -29,6 +29,18 @@ beforeEach(() => __resetSessionForTests());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("refreshAccessToken", () => {
+  it("sends X-Requested-With, which the API requires on a refresh (F-10)", async () => {
+    let header: string | null = null;
+    server.use(
+      mswHttp.post(REFRESH, ({ request }) => {
+        header = request.headers.get("x-requested-with");
+        return HttpResponse.json({ access_token: "tok", token_type: "bearer" });
+      }),
+    );
+    await refreshAccessToken();
+    expect(header).toBe("XMLHttpRequest");
+  });
+
   it("shares one network call between concurrent callers (single-flight)", async () => {
     const calls = countRefreshes();
     const results = await Promise.all([
