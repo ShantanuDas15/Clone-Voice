@@ -46,7 +46,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://clonevoice:clonevoice_ci@localhost:5432/clonevoice
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:

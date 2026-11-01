@@ -52,7 +52,7 @@ jobs:
       TORCH_BACKEND: ${{ matrix.torch_backend }}
       SIZE_LIMIT_MB: ${{ matrix.size_limit_mb }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The lock pulls PyPI's CUDA torch, so the image is large. Free the
       # runner's pre-installed toolchains first; the build needs the room.
