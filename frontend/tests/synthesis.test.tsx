@@ -662,6 +662,29 @@ describe("generate screen details", () => {
     expect(ready).toHaveClass("sr-only");
   });
 
+  it("shows an empty-state card beside the form until there is a result, then the take with its controls", async () => {
+    okSynthesis();
+    wrap(<TextToSpeechForm />);
+    const empty = await screen.findByRole("region", { name: "Your audio appears here" });
+    expect(empty).toHaveTextContent("Choose a voice.");
+    expect(screen.queryByRole("group", { name: "Playback speed" })).not.toBeInTheDocument();
+
+    await generate();
+    expect(await screen.findByRole("group", { name: "Playback speed" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back 15 seconds" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Forward 15 seconds" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Your audio appears here" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the Generate button in a sticky row clear of the mobile tab bar", async () => {
+    wrap(<TextToSpeechForm />);
+    const button = await screen.findByRole("button", { name: "Generate speech" });
+    const row = button.parentElement as HTMLElement;
+    expect(row).toHaveClass("sticky", "bottom-14", "sm:bottom-0");
+  });
+
   it("preselects the only ready voice", async () => {
     wrap(<TextToSpeechForm />);
     const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
