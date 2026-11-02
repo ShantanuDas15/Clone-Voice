@@ -414,7 +414,8 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           </p>
         )}
 
-        <div className="flex flex-wrap gap-2">
+        {/* Stays in view as the text grows. On a phone it sits above the fixed tab bar (h-14). */}
+        <div className="sticky bottom-14 z-10 flex flex-wrap gap-2 border-t border-border bg-background py-3 sm:bottom-0">
           <Button
             type="submit"
             className="whitespace-nowrap"
@@ -445,6 +446,24 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
         </div>
       </form>
 
+      {!result && (
+        // Fills the empty column beside the form on wide screens; below `lg` the form is the whole page.
+        <section
+          aria-labelledby="result-empty-title"
+          className="hidden max-w-xl space-y-3 rounded border border-border p-4 lg:block"
+        >
+          <h2 id="result-empty-title" className="font-medium">
+            Your audio appears here
+          </h2>
+          <div aria-hidden className="h-0.5 w-full border-t border-dashed border-line" />
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>Choose a voice.</li>
+            <li>Type or paste your text.</li>
+            <li>Press Generate speech, then play or download.</li>
+          </ol>
+        </section>
+      )}
+
       {result && audioUrl && (
         <section
           ref={resultRef}
@@ -461,6 +480,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             filename={result.filename}
             label="Generated speech"
             animateIn
+            extraControls
           />
           <ExpandableText
             text={`“${result.text}”`}

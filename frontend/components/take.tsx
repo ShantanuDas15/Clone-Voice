@@ -21,9 +21,15 @@ interface TakeProps {
   animateIn?: boolean;
   /** Move keyboard focus to the play control on mount (a take that replaced the control that was pressed). */
   focusPlay?: boolean;
+  /** Add skip back and forward ({@link SKIP_SECONDS} s) and a playback-speed choice beside play.
+   * The visible labels are inside the accessible names (WCAG 2.5.3). */
+  extraControls?: boolean;
 }
 
 const BARS = 64;
+const SKIP_SECONDS = 15;
+const SPEEDS = [1, 1.25, 1.5] as const;
+type Speed = (typeof SPEEDS)[number];
 
 /**
  * One take of audio: a waveform with a playhead, play/pause, a seek slider and a monospaced
@@ -41,6 +47,7 @@ export function Take({
   hideDownload,
   animateIn,
   focusPlay,
+  extraControls,
 }: TakeProps) {
   const audio = useRef<HTMLAudioElement>(null);
   const playButton = useRef<HTMLButtonElement>(null);
@@ -49,6 +56,16 @@ export function Take({
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [speed, setSpeed] = useState<Speed>(1);
+
+  // Loading a new source resets the element's rate to its default, so set both: the chosen speed
+  // then also holds when the same Take shows a regenerated clip.
+  useEffect(() => {
+    const el = audio.current;
+    if (!el) return;
+    el.defaultPlaybackRate = speed;
+    el.playbackRate = speed;
+  }, [speed, src]);
 
   useEffect(() => {
     if (focusPlay) playButton.current?.focus();
@@ -126,7 +143,18 @@ export function Take({
         }}
         onError={() => setFailed(true)}
       />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {extraControls && (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={duration === 0}
+            onClick={() => seekTo(time - SKIP_SECONDS)}
+            aria-label={`Back ${SKIP_SECONDS} seconds`}
+          >
+            Back {SKIP_SECONDS} s
+          </Button>
+        )}
         <Button
           ref={playButton}
           variant="secondary"
@@ -136,10 +164,40 @@ export function Take({
         >
           {playing ? "Pause" : "Play"}
         </Button>
-        <span className="font-mono text-sm tabular-nums" data-testid="take-time">
+        {extraControls && (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={duration === 0}
+            onClick={() => seekTo(time + SKIP_SECONDS)}
+            aria-label={`Forward ${SKIP_SECONDS} seconds`}
+          >
+            Forward {SKIP_SECONDS} s
+          </Button>
+        )}
+        <span className="ml-1 font-mono text-sm tabular-nums" data-testid="take-time">
           {stamp}
         </span>
       </div>
+      {extraControls && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span aria-hidden>Speed</span>
+          <div role="group" aria-label="Playback speed" className="flex gap-1">
+            {SPEEDS.map((value) => (
+              <Button
+                key={value}
+                variant="secondary"
+                size="sm"
+                className={`font-mono tabular-nums text-foreground ${speed === value ? "bg-muted" : ""}`.trim()}
+                aria-pressed={speed === value}
+                onClick={() => setSpeed(value)}
+              >
+                {value}x
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="relative h-12 rounded focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary">
         {peaks && <Waveform peaks={peaks} progress={progress} animateIn={animateIn} />}
         {!peaks && <div aria-hidden className="absolute inset-x-0 top-1/2 h-0.5 bg-border" />}

@@ -136,6 +136,81 @@ describe("Take", () => {
     expect(screen.getByRole("button", { name: "Play Speech" })).toBeInTheDocument();
   });
 
+  it("has no skip or speed controls unless asked", () => {
+    render(<Take src="blob:x" filename="a.wav" label="Speech" />);
+    expect(screen.queryByRole("button", { name: /seconds/ })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Playback speed" })).toBeNull();
+  });
+
+  describe("with extra controls", () => {
+    it("skips 15 s back and forward, clamped to the clip, and is disabled until the length is known", async () => {
+      const { container } = render(
+        <Take src="blob:x" filename="a.wav" label="Speech" extraControls />,
+      );
+      const el = audioEl(container);
+      const back = screen.getByRole("button", { name: "Back 15 seconds" });
+      const forward = screen.getByRole("button", { name: "Forward 15 seconds" });
+      expect(back).toBeDisabled();
+      expect(forward).toBeDisabled();
+
+      setDuration(el, 40);
+      expect(back).toBeEnabled();
+      await userEvent.click(forward);
+      expect(el.currentTime).toBe(15);
+      fireEvent.timeUpdate(el);
+      await userEvent.click(forward);
+      expect(el.currentTime).toBe(30);
+      fireEvent.timeUpdate(el);
+      await userEvent.click(forward);
+      expect(el.currentTime).toBe(40); // never past the end
+      fireEvent.timeUpdate(el);
+      await userEvent.click(back);
+      expect(el.currentTime).toBe(25);
+      fireEvent.timeUpdate(el);
+      await userEvent.click(back);
+      await userEvent.click(back);
+      expect(el.currentTime).toBe(0); // never before the start
+      expect(screen.getByTestId("take-time")).toHaveTextContent("0:00 / 0:40");
+    });
+
+    it("offers 1x, 1.25x and 1.5x, marks the active one and sets the playback rate", async () => {
+      const { container } = render(
+        <Take src="blob:x" filename="a.wav" label="Speech" extraControls />,
+      );
+      const el = audioEl(container);
+      const group = screen.getByRole("group", { name: "Playback speed" });
+      const buttons = Array.from(group.querySelectorAll("button"));
+      expect(buttons.map((b) => b.textContent)).toEqual(["1x", "1.25x", "1.5x"]);
+      expect(buttons.map((b) => b.getAttribute("aria-pressed"))).toEqual([
+        "true",
+        "false",
+        "false",
+      ]);
+      expect(el.playbackRate).toBe(1);
+
+      await userEvent.click(screen.getByRole("button", { name: "1.25x" }));
+      expect(el.playbackRate).toBe(1.25);
+      expect(el.defaultPlaybackRate).toBe(1.25);
+      expect(screen.getByRole("button", { name: "1.25x" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "1x" })).toHaveAttribute("aria-pressed", "false");
+
+      await userEvent.click(screen.getByRole("button", { name: "1.5x" }));
+      expect(el.playbackRate).toBe(1.5);
+    });
+
+    it("keeps the chosen speed when the same take shows a new clip", async () => {
+      const { container, rerender } = render(
+        <Take src="blob:one" filename="a.wav" label="Speech" extraControls />,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "1.5x" }));
+      const el = audioEl(container);
+      // A new source makes the browser reset the element to its default rate.
+      el.playbackRate = 1;
+      rerender(<Take src="blob:two" filename="b.wav" label="Speech" extraControls />);
+      expect(audioEl(container).playbackRate).toBe(1.5);
+    });
+  });
+
   it("draws the waveform in only when asked, and gives every take its own clip id", async () => {
     vi.stubGlobal(
       "AudioContext",
