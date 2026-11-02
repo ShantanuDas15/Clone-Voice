@@ -159,7 +159,7 @@ def test_torch_version_is_read_from_requirements_not_duplicated():
 def test_runtime_stage_smoke_tests_the_copied_venv():
     """A bad venv copy must fail `docker build`, after the copy and as root."""
     _, runtime = _dockerfile_stages()
-    smoke = 'RUN python -c "import torch, webrtcvad, resemblyzer, librosa, soundfile"'
+    smoke = 'RUN python -c "import torch, webrtcvad, resemblyzer, librosa, soundfile, email_validator"'
     assert smoke in runtime
     assert runtime.index("COPY --from=builder /opt/venv /opt/venv") < runtime.index(
         smoke
