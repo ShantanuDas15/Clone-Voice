@@ -175,14 +175,29 @@ def test_weights_are_not_fetched_unless_enabled(monkeypatch):
     fetch.assert_not_called()
 
 
-@pytest.mark.parametrize("ok", [True, False])
-def test_weights_are_fetched_into_weights_dir_when_enabled(monkeypatch, ok):
+@pytest.mark.parametrize(
+    "checkpoints, watermark, expected",
+    [
+        (True, True, True),
+        (True, False, False),
+        (False, True, False),
+        (False, False, False),
+    ],
+)
+def test_weights_and_watermark_are_fetched_into_weights_dir_when_enabled(
+    monkeypatch, checkpoints, watermark, expected
+):
+    """Both fetchers always run (one failure must not hide the other's error)."""
     monkeypatch.setattr(settings, "FETCH_WEIGHTS_ON_START", True)
     with patch(
-        "backend.download_weights.fetch_and_verify_checkpoints", return_value=ok
-    ) as fetch:
-        assert serve.provision_weights() is ok
+        "backend.download_weights.fetch_and_verify_checkpoints",
+        return_value=checkpoints,
+    ) as fetch, patch(
+        "backend.download_weights.fetch_watermark_weights", return_value=watermark
+    ) as fetch_wm:
+        assert serve.provision_weights() is expected
     fetch.assert_called_once_with(settings.WEIGHTS_DIR)
+    fetch_wm.assert_called_once_with(settings.WEIGHTS_DIR)
 
 
 # --- prepare / main ----------------------------------------------------------

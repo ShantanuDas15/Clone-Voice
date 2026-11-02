@@ -157,14 +157,19 @@ def ensure_writable(dirs: List[str]) -> None:
 
 
 def provision_weights() -> bool:
-    """Download missing or corrupt checkpoints when FETCH_WEIGHTS_ON_START."""
+    """Download missing or corrupt checkpoints and watermark nets when enabled."""
     if not settings.FETCH_WEIGHTS_ON_START:
         return True
     # Imported here: huggingface_hub is only needed on this path.
-    from backend.download_weights import fetch_and_verify_checkpoints
+    from backend.download_weights import (fetch_and_verify_checkpoints,
+                                          fetch_watermark_weights)
 
     logger.info("Provisioning model weights in %s", settings.WEIGHTS_DIR)
-    return fetch_and_verify_checkpoints(settings.WEIGHTS_DIR)
+    # Both always run, so one failure does not hide the other's error. Without
+    # the watermark networks /health/ready stays 503 (WATERMARK_ENABLED is on).
+    checkpoints_ready = fetch_and_verify_checkpoints(settings.WEIGHTS_DIR)
+    watermark_ready = fetch_watermark_weights(settings.WEIGHTS_DIR)
+    return checkpoints_ready and watermark_ready
 
 
 def prepare(dirs: Optional[List[str]] = None) -> None:
