@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider, __resetBootstrapForTests } from "@/components/auth-provider";
 import { Recorder } from "@/components/recorder";
+import { TRACE_BARS } from "@/hooks/use-input-level";
+import { RECORDING_PROMPTS } from "@/lib/recording-prompts";
 import { UploadVoiceForm } from "@/components/upload-voice-form";
 import { __resetSessionForTests } from "@/lib/auth/session";
 import {
@@ -139,6 +141,43 @@ describe("Recorder", () => {
     await begin();
     expect(screen.getByRole("alert")).toHaveTextContent(pattern);
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("offers a line to read while idle, steps through the lines, and wraps", async () => {
+    render(<Recorder onChange={vi.fn()} />);
+    const first = screen.getByTestId("reading-prompt").textContent;
+    expect(screen.getByText(/not sure what to say, try reading/i)).toBeInTheDocument();
+    const more = screen.getByRole("button", { name: "Show another line" });
+    await userEvent.click(more);
+    const second = screen.getByTestId("reading-prompt").textContent;
+    expect(second).not.toBe(first);
+    // One click per line in total brings it round to the first again.
+    for (let i = 1; i < RECORDING_PROMPTS.length; i++) await userEvent.click(more);
+    expect(screen.getByTestId("reading-prompt").textContent).toBe(first);
+    expect(RECORDING_PROMPTS.length).toBeGreaterThan(1);
+  });
+
+  it("gives every line enough words for about ten seconds of speech", () => {
+    for (const line of RECORDING_PROMPTS) {
+      expect(line.split(/\s+/).length).toBeGreaterThanOrEqual(20);
+    }
+  });
+
+  it("shows the live trace as the microphone meter and says in words how the take is going", async () => {
+    vi.useFakeTimers();
+    await begin();
+    expect(screen.queryByTestId("reading-prompt")).not.toBeInTheDocument();
+    const meter = screen.getByRole("meter", { name: "Microphone level" });
+    expect(meter.children).toHaveLength(TRACE_BARS);
+    expect(screen.getByText(/Keep going: at least 5 seconds are needed/)).toBeInTheDocument();
+
+    await act(async () => void vi.advanceTimersByTime(6000));
+    expect(screen.getByText(/Long enough to stop\. 10–30 seconds works best/)).toBeInTheDocument();
+    await act(async () => void vi.advanceTimersByTime(6000));
+    expect(screen.getByText(/Good length\. 10–30 seconds works best/)).toBeInTheDocument();
+    await act(async () => void vi.advanceTimersByTime(25_000));
+    expect(screen.getByText(/You can stop whenever you like/)).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it("records, enforces the minimum length, then offers a preview and a webm File", async () => {

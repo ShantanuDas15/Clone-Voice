@@ -5,10 +5,11 @@ import { useState } from "react";
 import { notify } from "@/lib/toast";
 
 import { useDeleteProfile, useProfiles } from "@/hooks/use-voice-profiles";
-import type { VoiceProfile } from "@/lib/api/voice";
+import type { VoiceProfile, VoiceSample } from "@/lib/api/voice";
 import { ApiError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { voiceAdvice } from "@/lib/voice-advice";
+import { QUALITY_LABEL, overallQuality } from "@/lib/voice-quality";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -21,6 +22,25 @@ function StatusChip({ status }: { status: string }) {
 }
 
 /** Modal confirmation for deleting a voice; traps focus and closes on Escape or a scrim click. */
+/** How many clips a voice is made from and how good the worst of them is, so it reads at a glance. */
+function VoiceSummary({ samples }: { samples: readonly VoiceSample[] }) {
+  const quality = overallQuality(samples);
+  if (samples.length === 0 && quality === null) return null;
+  return (
+    <>
+      {samples.length > 0 && (
+        <>
+          <span aria-hidden>·</span>
+          <span>{samples.length === 1 ? "1 clip" : `${samples.length} clips`}</span>
+        </>
+      )}
+      {quality && (
+        <Badge tone={quality === "good" ? "neutral" : "notice"}>{QUALITY_LABEL[quality]}</Badge>
+      )}
+    </>
+  );
+}
+
 function DeleteDialog({
   profile,
   onCancel,
@@ -99,8 +119,9 @@ export function VoiceProfileList() {
               <p className="font-medium">
                 {p.name} <StatusChip status={p.status} />
               </p>
-              <p className="text-sm text-muted-foreground">
-                Created {formatDateTime(p.created_at)}
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                <span>Created {formatDateTime(p.created_at)}</span>
+                {p.status === "ready" && <VoiceSummary samples={p.samples ?? []} />}
               </p>
               {p.status === "ready" && voiceAdvice(p.samples ?? []) && (
                 <p className="text-sm">{voiceAdvice(p.samples ?? [])} Open Clips for tips.</p>

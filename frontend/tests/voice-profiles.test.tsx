@@ -70,6 +70,47 @@ describe("VoiceProfileList", () => {
     expect(screen.getByText(/couldn't be processed/i)).toBeInTheDocument();
   });
 
+  it("summarises each ready voice: its clip count and the quality of its worst clip", async () => {
+    const clip = (position: number, rating?: string) => ({
+      position,
+      agreement: 1,
+      mismatch: false,
+      quality: rating ? { rating, hints: [] } : null,
+    });
+    server.use(
+      mswHttp.get(`${API}/voice/profiles`, () =>
+        HttpResponse.json([
+          profile({
+            id: "a",
+            name: "Three",
+            samples: [clip(0, "good"), clip(1, "fair"), clip(2, "good")],
+          }),
+          profile({ id: "b", name: "One", samples: [clip(0, "good")] }),
+          profile({ id: "c", name: "Old", samples: [] }),
+          profile({ id: "d", name: "Broken", status: "failed", samples: [clip(0, "poor")] }),
+        ]),
+      ),
+    );
+    wrap(<VoiceProfileList />);
+    const item = async (name: string) =>
+      (await screen.findByText(name)).closest("li") as HTMLElement;
+
+    const three = within(await item("Three"));
+    expect(three.getByText("3 clips")).toBeInTheDocument();
+    expect(three.getByText("Fair quality")).toBeInTheDocument();
+
+    const one = within(await item("One"));
+    expect(one.getByText("1 clip")).toBeInTheDocument();
+    expect(one.getByText("Good quality")).toBeInTheDocument();
+
+    const old = within(await item("Old"));
+    expect(old.queryByText(/^\d+ clips?$/)).not.toBeInTheDocument();
+    expect(old.queryByText(/ quality$/)).not.toBeInTheDocument();
+
+    const broken = within(await item("Broken"));
+    expect(broken.queryByText(/ quality$/)).not.toBeInTheDocument();
+  });
+
   it("shows an empty state, and an error state with retry", async () => {
     server.use(mswHttp.get(`${API}/voice/profiles`, () => HttpResponse.json([])));
     const { unmount } = wrap(<VoiceProfileList />);
