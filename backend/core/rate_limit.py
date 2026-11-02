@@ -37,9 +37,14 @@ from backend.services.tts_engine import engine_name_for_user
 
 
 def get_client_ip(request: Request) -> str:
-    """Return the client IP, honouring X-Forwarded-For only behind trusted proxies."""
+    """Return the client IP, honouring proxy headers only behind trusted proxies."""
     proxies = settings.TRUSTED_PROXY_COUNT
-    if proxies > 0:
+    if proxies > 0 and settings.CLIENT_IP_HEADER == "x-real-ip":
+        # Set by the platform edge (Railway), which replaces any client value.
+        real_ip = request.headers.get("x-real-ip", "").strip()
+        if real_ip:
+            return real_ip
+    elif proxies > 0:
         forwarded = request.headers.get("x-forwarded-for", "")
         hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
         # Each trusted proxy appends the peer it saw, so the last `proxies`

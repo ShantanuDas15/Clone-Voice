@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     # the socket peer is the client and X-Forwarded-For is ignored, since it
     # is attacker-controlled when no proxy overwrites it.
     TRUSTED_PROXY_COUNT: int = 0
+    # Header that carries the client address when TRUSTED_PROXY_COUNT > 0.
+    # ``x-forwarded-for`` (default) is parsed hop by hop; ``x-real-ip`` is the
+    # single address Railway's edge documents, used as is.
+    CLIENT_IP_HEADER: Literal["x-forwarded-for", "x-real-ip"] = "x-forwarded-for"
     AUTH_LOGIN_RATE_LIMIT: str = "10/minute"
     AUTH_SIGNUP_RATE_LIMIT: str = "5/minute"
     # Rate limits for the endpoints that send email (resend-verification,

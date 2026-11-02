@@ -160,9 +160,13 @@ from backend.core import rate_limit
 from backend.core.config import Settings, settings
 
 
-def _request(peer: str = "10.0.0.9", xff: str | None = None) -> Request:
-    """Build a bare Starlette request with a socket peer and optional XFF."""
+def _request(
+    peer: str = "10.0.0.9", xff: str | None = None, real_ip: str | None = None
+) -> Request:
+    """Build a bare Starlette request with a socket peer and optional proxy headers."""
     headers = [(b"x-forwarded-for", xff.encode())] if xff is not None else []
+    if real_ip is not None:
+        headers.append((b"x-real-ip", real_ip.encode()))
     return Request(
         {"type": "http", "headers": headers, "client": (peer, 1234)},
     )
@@ -249,6 +253,27 @@ def test_client_ip_with_trusted_proxies(monkeypatch, proxies, xff, expected):
     """Key is the hop written by the outermost trusted proxy, never client text."""
     monkeypatch.setattr(settings, "TRUSTED_PROXY_COUNT", proxies)
     assert rate_limit.get_client_ip(_request(xff=xff)) == expected
+
+
+@pytest.mark.parametrize(
+    "proxies, real_ip, xff, expected",
+    [
+        (1, "198.51.100.7", None, "198.51.100.7"),
+        # X-Real-IP wins over a client-supplied X-Forwarded-For.
+        (1, "198.51.100.7", "6.6.6.6", "198.51.100.7"),
+        # Header absent or empty: fall back to the socket peer.
+        (1, None, "6.6.6.6", "10.0.0.9"),
+        (1, "  ", None, "10.0.0.9"),
+        # No trusted proxy: the header is attacker-controlled and ignored.
+        (0, "6.6.6.6", None, "10.0.0.9"),
+    ],
+)
+def test_client_ip_from_x_real_ip(monkeypatch, proxies, real_ip, xff, expected):
+    """CLIENT_IP_HEADER=x-real-ip reads the platform header, only behind a proxy."""
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_COUNT", proxies)
+    monkeypatch.setattr(settings, "CLIENT_IP_HEADER", "x-real-ip")
+    request = _request(xff=xff, real_ip=real_ip)
+    assert rate_limit.get_client_ip(request) == expected
 
 
 def test_build_limiter_uses_configured_storage_uri(monkeypatch):
