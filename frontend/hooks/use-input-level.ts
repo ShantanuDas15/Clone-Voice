@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** Below this (0..1) the microphone is treated as silent. */
 export const SILENT_LEVEL = 0.02;
@@ -85,4 +85,36 @@ export function useInputLevel(stream: MediaStream | null): { level: number; sile
   }, [stream]);
 
   return { level, silent };
+}
+
+/** Bars in the live trace. */
+export const TRACE_BARS = 48;
+/** Time between trace steps; slower under reduced motion so the trace does not stream past. */
+export const TRACE_STEP_MS = 120;
+export const TRACE_STEP_REDUCED_MS = 500;
+
+/**
+ * A short history of the input level for a scrolling waveform: every step the newest level enters
+ * on the right and the oldest drops off the left. It reads the level `useInputLevel` already
+ * produces, so it adds no second audio analyser. Flat (all zeros) while `active` is false.
+ */
+export function useLevelTrace(level: number, active: boolean, bars = TRACE_BARS): number[] {
+  const [trace, setTrace] = useState<number[]>(() => new Array<number>(bars).fill(0));
+  const latest = useRef(level);
+  useEffect(() => {
+    latest.current = level;
+  }, [level]);
+
+  useEffect(() => {
+    setTrace(new Array<number>(bars).fill(0));
+    if (!active) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const id = setInterval(
+      () => setTrace((prev) => [...prev.slice(1), latest.current]),
+      reduce ? TRACE_STEP_REDUCED_MS : TRACE_STEP_MS,
+    );
+    return () => clearInterval(id);
+  }, [active, bars]);
+
+  return trace;
 }

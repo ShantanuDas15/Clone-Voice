@@ -1,7 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SILENT_AFTER_MS, rmsLevel, useInputLevel } from "@/hooks/use-input-level";
+import {
+  SILENT_AFTER_MS,
+  TRACE_BARS,
+  TRACE_STEP_MS,
+  TRACE_STEP_REDUCED_MS,
+  rmsLevel,
+  useInputLevel,
+  useLevelTrace,
+} from "@/hooks/use-input-level";
 
 describe("rmsLevel", () => {
   it("is 0 for silence and for no data", () => {
@@ -108,5 +116,52 @@ describe("useInputLevel", () => {
     unmount();
     expect(disconnected).toHaveBeenCalled();
     expect(closed).toHaveBeenCalled();
+  });
+});
+
+describe("useLevelTrace", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    window.matchMedia = vi.fn(() => ({ matches: false })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("is flat while not active, and has a fixed number of bars", () => {
+    const { result } = renderHook(() => useLevelTrace(0.8, false));
+    act(() => void vi.advanceTimersByTime(TRACE_STEP_MS * 5));
+    expect(result.current).toHaveLength(TRACE_BARS);
+    expect(result.current.every((v) => v === 0)).toBe(true);
+  });
+
+  it("scrolls: the newest level enters on the right and the oldest drops off the left", () => {
+    const { result, rerender } = renderHook(({ level }) => useLevelTrace(level, true, 4), {
+      initialProps: { level: 0.5 },
+    });
+    act(() => void vi.advanceTimersByTime(TRACE_STEP_MS));
+    expect(result.current).toEqual([0, 0, 0, 0.5]);
+    rerender({ level: 1 });
+    act(() => void vi.advanceTimersByTime(TRACE_STEP_MS));
+    expect(result.current).toEqual([0, 0, 0.5, 1]);
+    act(() => void vi.advanceTimersByTime(TRACE_STEP_MS * 3));
+    expect(result.current).toEqual([1, 1, 1, 1]);
+  });
+
+  it("clears when it stops being active", () => {
+    const { result, rerender } = renderHook(({ on }) => useLevelTrace(0.6, on, 3), {
+      initialProps: { on: true },
+    });
+    act(() => void vi.advanceTimersByTime(TRACE_STEP_MS * 3));
+    expect(result.current).toEqual([0.6, 0.6, 0.6]);
+    rerender({ on: false });
+    expect(result.current).toEqual([0, 0, 0]);
+  });
+
+  it("steps more slowly when the user prefers reduced motion", () => {
+    window.matchMedia = vi.fn(() => ({ matches: true })) as unknown as typeof window.matchMedia;
+    const { result } = renderHook(() => useLevelTrace(0.7, true, 3));
+    act(() => void vi.advanceTimersByTime(TRACE_STEP_MS * 3));
+    expect(result.current).toEqual([0, 0, 0]);
+    act(() => void vi.advanceTimersByTime(TRACE_STEP_REDUCED_MS));
+    expect(result.current).toEqual([0, 0, 0.7]);
   });
 });
