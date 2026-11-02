@@ -136,6 +136,74 @@ describe("Take", () => {
     expect(screen.getByRole("button", { name: "Play Speech" })).toBeInTheDocument();
   });
 
+  describe("a clip whose length the browser does not know", () => {
+    const unknownLength = (el: HTMLAudioElement) => {
+      Object.defineProperty(el, "duration", { configurable: true, value: Infinity });
+      fireEvent.loadedMetadata(el);
+    };
+    const knowLength = (el: HTMLAudioElement, d: number) => {
+      Object.defineProperty(el, "duration", { configurable: true, value: d });
+      fireEvent.durationChange(el);
+    };
+
+    it("seeks past the end to have it measured, then goes back to the start with the real length", () => {
+      const { container } = render(<Take src="blob:x" filename="a.wav" label="Speech" />);
+      const el = audioEl(container);
+      unknownLength(el);
+      expect(el.currentTime).toBe(1e101);
+      expect(screen.getByRole("slider")).toBeDisabled();
+
+      knowLength(el, 3.9);
+      expect(el.currentTime).toBe(0);
+      expect(screen.getByRole("slider")).toBeEnabled();
+      expect(screen.getByRole("slider")).toHaveAttribute("max", "3.9");
+      expect(screen.getByTestId("take-time")).toHaveTextContent("0:00 / 0:03");
+    });
+
+    it("does not show the jump past the end as the playhead", () => {
+      const { container } = render(<Take src="blob:x" filename="a.wav" label="Speech" />);
+      const el = audioEl(container);
+      unknownLength(el);
+      fireEvent.timeUpdate(el); // the jump landing, length still unknown
+      expect(screen.getByTestId("take-time")).toHaveTextContent("0:00 / 0:00");
+      knowLength(el, 5);
+      el.currentTime = 2;
+      fireEvent.timeUpdate(el);
+      expect(screen.getByTestId("take-time")).toHaveTextContent("0:02 / 0:05");
+    });
+
+    it("gives up cleanly if the browser still cannot measure it, and does not try again", () => {
+      const { container } = render(<Take src="blob:x" filename="a.wav" label="Speech" />);
+      const el = audioEl(container);
+      unknownLength(el);
+      fireEvent.timeUpdate(el); // landed, but the length is still unknown
+      expect(el.currentTime).toBe(0);
+      el.currentTime = 1.5;
+      fireEvent.timeUpdate(el);
+      expect(screen.getByTestId("take-time")).toHaveTextContent("0:01 / 0:00"); // playhead works
+      fireEvent.durationChange(el);
+      expect(el.currentTime).toBe(1.5); // no second jump
+    });
+
+    it("leaves a clip with a known length alone, and measures the next clip again", () => {
+      const { container, rerender } = render(
+        <Take src="blob:one" filename="a.wav" label="Speech" />,
+      );
+      const el = audioEl(container);
+      setDuration(el, 8);
+      expect(el.currentTime).toBe(0);
+
+      unknownLength(el);
+      expect(el.currentTime).toBe(1e101);
+      knowLength(el, 4);
+      expect(el.currentTime).toBe(0);
+
+      rerender(<Take src="blob:two" filename="b.wav" label="Speech" />);
+      unknownLength(audioEl(container));
+      expect(audioEl(container).currentTime).toBe(1e101);
+    });
+  });
+
   it("has no skip or speed controls unless asked", () => {
     render(<Take src="blob:x" filename="a.wav" label="Speech" />);
     expect(screen.queryByRole("button", { name: /seconds/ })).toBeNull();

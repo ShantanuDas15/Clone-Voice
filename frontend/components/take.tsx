@@ -57,6 +57,10 @@ export function Take({
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
+  // True while we are seeking past the end of a clip of unknown length to make the browser measure it.
+  const measuring = useRef(false);
+  // Measure a clip at most once, so a browser that cannot do it is not asked again and again.
+  const attempted = useRef(false);
 
   // Loading a new source resets the element's rate to its default, so set both: the chosen speed
   // then also holds when the same Take shows a regenerated clip.
@@ -76,6 +80,11 @@ export function Take({
   }, [focusPlay]);
 
   useEffect(() => {
+    attempted.current = false;
+    measuring.current = false;
+  }, [src]);
+
+  useEffect(() => {
     setPeaks(null);
     if (!blob) return;
     let live = true;
@@ -88,6 +97,30 @@ export function Take({
       live = false;
     };
   }, [blob]);
+
+  /**
+   * Read the clip's length. A clip recorded in chunks (MediaRecorder with a timeslice) has no length
+   * in its header, so the browser reports Infinity and the seek bar would stay disabled at 0:00.
+   * Seeking far past the end makes it measure the clip; once it reports a real length we go back
+   * to the start.
+   */
+  function measure(el: HTMLAudioElement) {
+    if (Number.isFinite(el.duration)) {
+      setDuration(el.duration);
+      if (measuring.current) {
+        measuring.current = false;
+        el.currentTime = 0;
+        setTime(0);
+      }
+      return;
+    }
+    setDuration(0);
+    if (el.duration === Infinity && !attempted.current) {
+      attempted.current = true;
+      measuring.current = true;
+      el.currentTime = 1e101;
+    }
+  }
 
   function seekTo(next: number) {
     const clamped = Math.min(duration, Math.max(0, next));
@@ -125,13 +158,22 @@ export function Take({
         preload="metadata"
         autoPlay={autoPlay}
         aria-label={label}
-        onLoadedMetadata={(e) =>
-          setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)
-        }
-        onDurationChange={(e) =>
-          setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)
-        }
-        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => measure(e.currentTarget)}
+        onDurationChange={(e) => measure(e.currentTarget)}
+        onTimeUpdate={(e) => {
+          const el = e.currentTarget;
+          if (measuring.current) {
+            // The jump past the end has landed: it is not the playhead. Take the length if the
+            // browser now knows it; either way return to the start and carry on.
+            if (Number.isFinite(el.duration)) measure(el);
+            else {
+              measuring.current = false;
+              el.currentTime = 0;
+            }
+            return;
+          }
+          setTime(el.currentTime);
+        }}
         onPlay={(e) => {
           claimPlayback(e.currentTarget);
           setPlaying(true);
