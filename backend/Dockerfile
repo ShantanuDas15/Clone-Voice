@@ -84,7 +84,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Fail the build, not the first request, if the copied virtualenv is unusable
 # (HARDENING_PLAN.md finding P2-H3): imports the compiled webrtcvad, torch and
 # the audio stack against this stage's system libraries.
-RUN python -c "import torch, webrtcvad, resemblyzer, librosa, soundfile"
+RUN python -c "import torch, webrtcvad, resemblyzer, librosa, soundfile, email_validator"
 
 # Application code. Model checkpoints (backend/weights/), uploads/, and
 # outputs/ are deliberately NOT baked into the image — see .dockerignore and

@@ -61,3 +61,13 @@ def test_dockerfile_only_installs_runtime_requirements() -> None:
     assert not any("requirements-dev.txt" in line for line in install_lines)
     assert sum("-r /tmp/requirements.lock.txt" in line for line in install_lines) == 1
     assert any("--require-hashes" in line for line in install_lines)
+
+
+def test_pydantic_email_extra_is_a_runtime_dependency():
+    """EmailStr imports email-validator at startup; without it the image crashes."""
+    with open(f"{REPO_ROOT}/backend/requirements.txt") as f:
+        text = f.read()
+    with open(f"{REPO_ROOT}/backend/requirements.lock.txt") as f:
+        lock = f.read()
+    assert "pydantic[email]==" in text
+    assert "email-validator==" in lock
