@@ -135,7 +135,7 @@ The conditions are operational, not code: Railway dashboard setup (domains, vari
 | F-03 | **Resolved** | Budget 240 KB |
 | F-04 | **Resolved** | PR #148: vitest 5, vite 7. Critical/high dev advisories cleared; 16 moderate remain (one accepted `minimatch` ReDoS in the ESLint plugins, FE-SEC2) |
 | F-05 | **Resolved** | HSTS on web app and API (PR #144); `includeSubDomains` intentionally not set |
-| F-06 | Open | Set `TRUSTED_PROXY_COUNT=1` and add Redis in Railway; defaults are still `0` and `memory://` |
+| F-06 | Partly resolved | Code: `CLIENT_IP_HEADER=x-real-ip` setting added (reads Railway's documented header). Still in Railway: set `TRUSTED_PROXY_COUNT=1`, `CLIENT_IP_HEADER=x-real-ip`, add Redis; confirm the header in staging |
 | F-07 | Open | Verified email domain and keys |
 | F-08 | Accepted | MVP trade-off |
 | F-09 | Accepted | Documented exceptions in `backend-audit.yml` |

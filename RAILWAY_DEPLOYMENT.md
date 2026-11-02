@@ -51,7 +51,8 @@ Set these on the API service. `PORT` is injected by Railway; do not set it.
 | `DATA_DIR` | `/data` | Puts `uploads/`, `outputs/` and `weights/` on the volume. |
 | `FETCH_WEIGHTS_ON_START` | `true` | Downloads missing or corrupt checkpoints (checksum-verified) on boot. |
 | `RAILWAY_RUN_UID` | `0` | See "Why root" below. The app still runs as uid 1000. |
-| `TRUSTED_PROXY_COUNT` | `1` | Railway's edge proxy sets `X-Forwarded-For`. Confirm in staging (R3). |
+| `TRUSTED_PROXY_COUNT` | `1` | One trusted proxy (Railway's edge). |
+| `CLIENT_IP_HEADER` | `x-real-ip` | Railway documents `X-Real-IP` as the client IP and does not document `X-Forwarded-For`. Confirm in staging (R3). |
 | `ALLOWED_ORIGINS` | `["https://app.example.com"]` | JSON list of the web app's origin(s). |
 | `FRONTEND_URL` | `https://app.example.com` | Base of the emailed verification and reset links. |
 | `GOOGLE_CLIENT_ID` | from Google Cloud | |
