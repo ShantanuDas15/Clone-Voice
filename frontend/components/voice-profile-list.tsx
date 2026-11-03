@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { notify } from "@/lib/toast";
 
+import { useListMotion } from "@/hooks/use-list-motion";
 import { useDeleteProfile, useProfiles } from "@/hooks/use-voice-profiles";
 import type { VoiceProfile, VoiceSample } from "@/lib/api/voice";
 import { ApiError } from "@/lib/errors";
@@ -73,6 +74,7 @@ function DeleteDialog({
 
 /** The user's voices with loading, empty, error and failed-row states, and confirmed deletion. */
 export function VoiceProfileList() {
+  const listRef = useListMotion();
   const { data, isPending, isError, refetch } = useProfiles();
   const remove = useDeleteProfile();
   const [confirming, setConfirming] = useState<VoiceProfile | null>(null);
@@ -109,7 +111,7 @@ export function VoiceProfileList() {
 
   return (
     <>
-      <ul className="space-y-2">
+      <ul ref={listRef} className="space-y-2">
         {data.map((p) => (
           <li
             key={p.id}

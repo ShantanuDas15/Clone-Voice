@@ -7,6 +7,7 @@ import { ExpandableText } from "@/components/expandable-text";
 import { Take } from "@/components/take";
 import { WaveformPreview } from "@/components/waveform-preview";
 import { flattenHistory, useDeleteGeneration, useHistory } from "@/hooks/use-history";
+import { useListMotion } from "@/hooks/use-list-motion";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useObjectUrl } from "@/hooks/use-object-url";
 import { useProfiles } from "@/hooks/use-voice-profiles";
@@ -288,6 +289,7 @@ function HistoryBody({
 }) {
   const { data, isPending, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useHistory(voiceId || undefined, search || undefined);
+  const listRef = useListMotion();
   const retention = describeRetention(useTerms().data?.output_retention_days);
   const [announcement, setAnnouncement] = useState("");
   const remove = useDeleteGeneration();
@@ -404,7 +406,7 @@ function HistoryBody({
           Audio is kept for {retention}. The text and date stay here after the audio expires.
         </p>
       )}
-      <ul className="space-y-2">
+      <ul ref={listRef} className="space-y-2">
         {items.map((gen) => (
           <HistoryItem key={gen.id} gen={gen} onDelete={setConfirming} />
         ))}
