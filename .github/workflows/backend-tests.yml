@@ -43,12 +43,15 @@ jobs:
           # Test tooling only: the pins in requirements-dev.txt, without its `-r requirements.txt`.
           grep -E '^(pytest|pytest-asyncio|httpx2)==' backend/requirements-dev.txt > /tmp/dev-requirements.txt
           pip install -r /tmp/dev-requirements.txt
-      # The compose-file tests need the env file the compose file names; the example is enough.
-      - run: cp backend/.env.example backend/.env
+      # The compose-file tests need the env file the compose file names; the example is enough. It says
+      # `APP_ENV=production`, where the metrics endpoint demands a token and the metrics tests fail, so
+      # development is set in the FILE, as on a developer machine. It must not be a process variable:
+      # `test_app_env_defaults_to_production` checks the default with the variable unset.
+      - run: |
+          cp backend/.env.example backend/.env
+          sed -i 's/^APP_ENV=.*/APP_ENV=development/' backend/.env
       - name: Run the backend tests
         env:
-          # `.env.example` says production, where the metrics endpoint demands a token; tests expect development.
-          APP_ENV: development
           DATABASE_URL: sqlite:///./ci-tests.db
           # Throwaway values that only satisfy the length checks; nothing here is a secret.
           JWT_SECRET_KEY: ci-only-signing-key-not-a-secret-0123456789
