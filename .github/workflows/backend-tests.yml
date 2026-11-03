@@ -1,0 +1,59 @@
+name: backend-tests
+
+# The backend's pytest suite on every pull request and every push to `main` (it was never run in CI:
+# only the image build, schema drift and dependency audit were). It has NO `paths:` filter, on
+# purpose: it is a required status check on `main`, and a required check that is skipped for a
+# change that touches no backend file would block that change forever (the same reason
+# `frontend.yml` has none). It also gates the automatic deploy of the API to Railway.
+#
+# It runs as a clean checkout would: no model weights (the tests mock the models; the real-weights
+# tests skip themselves), no secrets, and the environment below. Install recipe = backend/Dockerfile:
+# CPU torch from its own index, then the hash-locked requirements, so CI tests the same wheels the
+# image ships.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock.txt
+      - name: System libraries (audio decoding)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsndfile1 ffmpeg
+      - name: Install CPU torch, then the hash-locked requirements
+        run: |
+          grep -E '^torch==' backend/requirements.txt > /tmp/torch-requirement.txt
+          pip install --index-url https://download.pytorch.org/whl/cpu -r /tmp/torch-requirement.txt
+          pip install --require-hashes -r backend/requirements.lock.txt
+          # Test tooling only: the pins in requirements-dev.txt, without its `-r requirements.txt`.
+          grep -E '^(pytest|pytest-asyncio|httpx2)==' backend/requirements-dev.txt > /tmp/dev-requirements.txt
+          pip install -r /tmp/dev-requirements.txt
+      # The compose-file tests need the env file the compose file names; the example is enough. It says
+      # `APP_ENV=production`, where the metrics endpoint demands a token and the metrics tests fail, so
+      # development is set in the FILE, as on a developer machine. It must not be a process variable:
+      # `test_app_env_defaults_to_production` checks the default with the variable unset.
+      - run: |
+          cp backend/.env.example backend/.env
+          sed -i 's/^APP_ENV=.*/APP_ENV=development/' backend/.env
+      - name: Run the backend tests
+        env:
+          DATABASE_URL: sqlite:///./ci-tests.db
+          # Throwaway values that only satisfy the length checks; nothing here is a secret.
+          JWT_SECRET_KEY: ci-only-signing-key-not-a-secret-0123456789
+          SESSION_SECRET_KEY: ci-only-session-key-not-a-secret-0123456789
+        run: python -m pytest backend -q -p no:cacheprovider
