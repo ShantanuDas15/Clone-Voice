@@ -52,17 +52,30 @@ function SideBars({ side }: { side: "left" | "right" }) {
   );
 }
 
+/** How long the ribbons drift after the page loads. Kept under WCAG 2.2.2's five seconds with room to spare. */
+export const INTRO_DRIFT_MS = 3000;
+
 /**
  * The home page's decorative background: voice bars in the side margins and three slow sine ribbons
  * in a text-free band at the foot of the hero. Everything is `aria-hidden` and ignores the pointer.
  *
- * Motion (§4.10 exception for this page, §12.19): the ribbons drift (transform only), swell while
- * the sample plays (`live`), pause whenever the band is off screen, and do not move at all under
+ * Motion (§4.10 exception for this page, §12.19, §12.20): the ribbons drift (transform only) for
+ * {@link INTRO_DRIFT_MS} after the page loads, then come to rest, and drift again only while the
+ * sample the visitor started is playing (`live`), when they also swell. Nothing moves on its own for
+ * more than five seconds, which is what WCAG 2.2.2 (Pause, Stop, Hide) asks of motion with no
+ * control. They also stop whenever the band is off screen and never move under
  * `prefers-reduced-motion`. No colour is invented: bars use `line`, ribbons use `primary`.
  */
 export function HomeBackdrop({ live }: { live: boolean }) {
   const band = useRef<HTMLDivElement>(null);
-  const [paused, setPaused] = useState(false);
+  const [offscreen, setOffscreen] = useState(false);
+  const [intro, setIntro] = useState(true);
+
+  // The opening drift ends on its own; the ribbons then rest where they are.
+  useEffect(() => {
+    const timer = setTimeout(() => setIntro(false), INTRO_DRIFT_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Stop the drift while the band is out of view; without IntersectionObserver it just keeps running.
   useEffect(() => {
@@ -70,11 +83,13 @@ export function HomeBackdrop({ live }: { live: boolean }) {
     if (!el || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver((entries) => {
       const last = entries[entries.length - 1];
-      if (last) setPaused(!last.isIntersecting);
+      if (last) setOffscreen(!last.isIntersecting);
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  const paused = offscreen || (!intro && !live);
 
   return (
     <div
