@@ -36,7 +36,7 @@ export function HomeActions({
           </Link>
         ) : (
           <Link href="/signup" className={buttonVariants()}>
-            Try it with your own voice
+            Get started
           </Link>
         )}
       </div>

@@ -57,7 +57,7 @@ describe("landing page", () => {
   it("offers the sample and ends with one differently named call to action", () => {
     render(<HomePage />);
     expect(screen.getByRole("group", { name: "Hear a sample" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Try it with your own voice" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute(
       "href",
       "/signup",
     );
