@@ -105,6 +105,7 @@ def erase_generation(db: Session, generation: Generation) -> List[str]:
     files = [generation.output_audio_path] if generation.output_audio_path else []
     generation.input_text = ERASED_TEXT
     generation.output_audio_path = None
+    generation.waveform_peaks = None
     generation.deleted_at = _now()
     return files
 

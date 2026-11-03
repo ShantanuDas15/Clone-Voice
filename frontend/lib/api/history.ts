@@ -3,6 +3,8 @@ import { http } from "@/lib/api/http";
 export const HISTORY_PAGE_SIZE = 50;
 /** The longest search the server accepts (backend `HISTORY_SEARCH_MAX_LENGTH`). */
 export const HISTORY_SEARCH_MAX_LENGTH = 200;
+/** Bar heights from the server run 0..PEAK_SCALE (backend `PEAK_SCALE`). */
+export const PEAK_SCALE = 100;
 
 export interface Generation {
   id: string;
@@ -26,6 +28,8 @@ export interface Generation {
   sound_tags_dropped?: string[] | null;
   seed?: number | null;
   seed_applied?: boolean | null;
+  /** Bar heights 0..100 of the audio for a preview; null/absent when there is none (old row, silence). */
+  waveform_peaks?: number[] | null;
 }
 
 export interface HistoryPage {

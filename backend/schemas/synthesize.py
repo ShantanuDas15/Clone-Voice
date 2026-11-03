@@ -117,6 +117,8 @@ class GenerationOut(BaseModel):
     # the sound tags (``[laugh]``) the engine that spoke could not make. None = none / old row.
     emotions_used: Optional[List[str]] = None
     sound_tags_dropped: Optional[List[str]] = None
+    # 64 bar heights 0..100 of the audio for a preview, or None (no audio, silence, old row).
+    waveform_peaks: Optional[List[int]] = None
 
     @field_validator("emotions_used", "sound_tags_dropped", mode="before")
     @classmethod

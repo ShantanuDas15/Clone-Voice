@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ExpandableText } from "@/components/expandable-text";
 import { Take } from "@/components/take";
+import { WaveformPreview } from "@/components/waveform-preview";
 import { flattenHistory, useDeleteGeneration, useHistory } from "@/hooks/use-history";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useObjectUrl } from "@/hooks/use-object-url";
@@ -108,6 +109,7 @@ function Playback({ gen }: { gen: Generation }) {
   const busy = state.phase === "loading" || saving;
   return (
     <div className="space-y-1">
+      <WaveformPreview peaks={gen.waveform_peaks} />
       <div className="flex flex-wrap gap-2">
         <Button
           variant="secondary"

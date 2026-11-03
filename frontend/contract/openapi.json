@@ -327,6 +327,20 @@
           "voice_profile_name": {
             "title": "Voice Profile Name",
             "type": "string"
+          },
+          "waveform_peaks": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waveform Peaks"
           }
         },
         "required": [

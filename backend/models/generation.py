@@ -49,6 +49,9 @@ class Generation(Base):
     # or the row predates this.
     emotions_used = Column(Text, nullable=True)
     sound_tags_dropped = Column(String(100), nullable=True)
+    # UX plan H4: 64 bar heights (0..100) of the output, for the History preview. NULL = none (a
+    # failed row, silence, an unreadable file, or a row from before this); scrubbed with the audio.
+    waveform_peaks = Column(JSON_TYPE, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

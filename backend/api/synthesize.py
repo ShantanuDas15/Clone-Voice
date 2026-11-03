@@ -42,6 +42,7 @@ from backend.services.tts_pipeline import (
     run_inference_pipeline,
 )
 from backend.services.voice_embedding import EMBEDDING_VERSION
+from backend.services.waveform import compute_waveform_peaks
 
 logger = logging.getLogger(__name__)
 
@@ -435,6 +436,7 @@ async def synthesize(
         input_text=req.text,
         output_audio_path=out_path,
         duration_seconds=duration,
+        waveform_peaks=await asyncio.to_thread(compute_waveform_peaks, out_path),
         status="completed",
         # Plain-tuple results (a test double) carry no engine facts: those columns stay NULL.
         engine=getattr(result, "engine", None),
@@ -589,6 +591,11 @@ def get_history(
                 seed_applied=gen.seed_applied,
                 emotions_used=gen.emotions_used,
                 sound_tags_dropped=gen.sound_tags_dropped,
+                waveform_peaks=(
+                    gen.waveform_peaks
+                    if _output_file(gen.output_audio_path) is not None
+                    else None
+                ),
             )
         )
 

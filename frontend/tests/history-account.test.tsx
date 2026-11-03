@@ -187,6 +187,23 @@ describe("HistoryList", () => {
     expect(await screen.findByText(/audio is no longer available/i)).toBeInTheDocument();
   });
 
+  it("draws the stored waveform before the audio is fetched, and none when there are no peaks", async () => {
+    server.use(
+      mswHttp.get(`${API}/synthesize/history`, () =>
+        HttpResponse.json([
+          gen({ id: "with", waveform_peaks: [20, 80, 100] }),
+          gen({ id: "without", waveform_peaks: null }),
+        ]),
+      ),
+    );
+    wrap(<HistoryList />);
+    await screen.findAllByRole("button", { name: /^Play:/ });
+    const withRow = document.querySelector('li[data-gen-id="with"]') as HTMLElement;
+    const withoutRow = document.querySelector('li[data-gen-id="without"]') as HTMLElement;
+    expect(withRow.querySelectorAll("[data-testid='waveform-preview'] rect")).toHaveLength(3);
+    expect(withoutRow.querySelector("[data-testid='waveform-preview']")).toBeNull();
+  });
+
   it("shows expiry up front when audio_available is false", async () => {
     server.use(
       mswHttp.get(`${API}/synthesize/history`, () =>
