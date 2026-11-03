@@ -7,8 +7,8 @@ import { buttonVariants } from "@/components/ui/button";
 
 /**
  * Landing-page calls to action: sign-up/sign-in for visitors, a way back into the app when signed in.
- * `closing` is the single link that ends the page; its wording differs from the hero's, so no two
- * links on the page share a name.
+ * `closing` is the single link that ends the page. The sign-up action keeps its one label, "Create
+ * account" (UX-13), wherever it appears.
  */
 export function HomeActions({
   align = "center",
@@ -36,7 +36,7 @@ export function HomeActions({
           </Link>
         ) : (
           <Link href="/signup" className={buttonVariants()}>
-            Get started
+            Create account
           </Link>
         )}
       </div>

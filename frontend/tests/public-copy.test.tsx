@@ -36,7 +36,10 @@ describe("landing page", () => {
   it("has one h1, a primary and a secondary action, and the three plain statements", () => {
     render(<HomePage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "Create account" })).toHaveAttribute("href", "/signup");
+    expect(screen.getAllByRole("link", { name: "Create account" })[0]).toHaveAttribute(
+      "href",
+      "/signup",
+    );
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
     // The three plain statements, each under a short title; the steps are a separate, ordered list.
     const statements = screen.getAllByRole("list")[0];
@@ -54,15 +57,14 @@ describe("landing page", () => {
     expect(titles).toEqual(["Add a sample", "Type your text", "Play or download"]);
   });
 
-  it("offers the sample and ends with one differently named call to action", () => {
+  it("offers the sample and ends with the same sign-up action, under the same label", () => {
     render(<HomePage />);
     expect(screen.getByRole("group", { name: "Hear a sample" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute(
-      "href",
-      "/signup",
-    );
-    // No two links share a name, so a locator for "Create account" still finds exactly one.
-    expect(screen.getAllByRole("link", { name: "Create account" })).toHaveLength(1);
+    // One action, one label (UX-13): the hero's link and the closing link both say "Create account".
+    const links = screen.getAllByRole("link", { name: "Create account" });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link).toHaveAttribute("href", "/signup");
+    expect(screen.queryByRole("link", { name: "Get started" })).not.toBeInTheDocument();
   });
 
   it("ends a signed-in visit with a way to add a voice", () => {
