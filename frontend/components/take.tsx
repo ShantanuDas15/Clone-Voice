@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { usePlaybackPulse } from "@/hooks/use-playback-pulse";
+import type { Envelope } from "@/lib/audio-peaks";
 import { claimPlayback, releasePlayback } from "@/lib/exclusive-playback";
+import { PULSE_BARS, PULSE_REST_BAR } from "@/lib/playback-pulse";
 import { formatClock } from "@/lib/recording";
 
 interface TakeProps {
@@ -26,6 +29,12 @@ interface TakeProps {
   extraControls?: boolean;
   /** Put the waveform above the controls (the Generate stage, where it continues the resting line). */
   waveformFirst?: boolean;
+  /**
+   * The playback pulse (UX plan §12.22): while it plays, the bars around the playhead rise and light up
+   * with how loud the take is at that moment. It needs `blob` (the loudness comes from the same decode
+   * as the waveform), is still under `prefers-reduced-motion`, and leaves the audio untouched.
+   */
+  pulse?: boolean;
 }
 
 const BARS = 64;
@@ -51,10 +60,13 @@ export function Take({
   focusPlay,
   extraControls,
   waveformFirst,
+  pulse,
 }: TakeProps) {
   const audio = useRef<HTMLAudioElement>(null);
   const playButton = useRef<HTMLButtonElement>(null);
   const [peaks, setPeaks] = useState<number[] | null>(null);
+  const [envelope, setEnvelope] = useState<Envelope | null>(null);
+  const pulseLayer = useRef<SVGGElement>(null);
   const [duration, setDuration] = useState(0);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -91,17 +103,34 @@ export function Take({
 
   useEffect(() => {
     setPeaks(null);
+    setEnvelope(null);
     if (!blob) return;
     let live = true;
     // Loaded on demand so the decoder is not part of any page's first-load JavaScript.
-    void import("@/lib/audio-peaks").then(async ({ computePeaks }) => {
+    void import("@/lib/audio-peaks").then(async ({ analyseBlob, computePeaks }) => {
+      if (pulse) {
+        const result = await analyseBlob(blob, BARS);
+        if (live) {
+          setPeaks(result?.peaks ?? null);
+          setEnvelope(result?.envelope ?? null);
+        }
+        return;
+      }
       const result = await computePeaks(blob, BARS);
       if (live) setPeaks(result);
     });
     return () => {
       live = false;
     };
-  }, [blob]);
+  }, [blob, pulse]);
+
+  usePlaybackPulse({
+    audio,
+    layer: pulseLayer,
+    envelope,
+    peaks,
+    active: Boolean(pulse) && playing,
+  });
 
   /**
    * Read the clip's length. A clip recorded in chunks (MediaRecorder with a timeslice) has no length
@@ -257,7 +286,14 @@ export function Take({
         }}
         onPointerLeave={() => setHover(null)}
       >
-        {peaks && <Waveform peaks={peaks} progress={progress} animateIn={animateIn} />}
+        {peaks && (
+          <Waveform
+            peaks={peaks}
+            progress={progress}
+            animateIn={animateIn}
+            pulseLayer={pulse ? pulseLayer : undefined}
+          />
+        )}
         {!peaks && <div aria-hidden className="absolute inset-x-0 top-1/2 h-0.5 bg-border" />}
         {duration > 0 && (
           <span
@@ -322,16 +358,19 @@ function Waveform({
   peaks,
   progress,
   animateIn,
+  pulseLayer,
 }: {
   peaks: number[];
   progress: number;
   animateIn?: boolean;
+  /** Present when the playback pulse is on: its bars are drawn above the waveform (and rest shorter, to leave headroom). */
+  pulseLayer?: RefObject<SVGGElement | null>;
 }) {
   // Unique per take: several takes can share a page (History), and clip ids are document-global.
   const clipId = `take-played-${useId().replace(/:/g, "")}`;
   const w = peaks.length * 4;
   const bars = peaks.map((p, i) => {
-    const h = Math.max(2, p * 44);
+    const h = Math.max(2, p * (pulseLayer ? PULSE_REST_BAR : 44));
     return <rect key={i} x={i * 4 + 0.5} y={24 - h / 2} width={3} height={h} rx={1.5} />;
   });
   return (
@@ -351,6 +390,14 @@ function Waveform({
       <g className="fill-primary" clipPath={`url(#${clipId})`}>
         {bars}
       </g>
+      {pulseLayer && (
+        // Moved by `usePlaybackPulse` while the take plays; every bar is hidden otherwise.
+        <g ref={pulseLayer} data-testid="take-pulse" className="fill-primary">
+          {Array.from({ length: PULSE_BARS }, (_, i) => (
+            <rect key={i} x={0} y={24} width={3} height={0} rx={1.5} opacity={0} />
+          ))}
+        </g>
+      )}
     </svg>
   );
 }
