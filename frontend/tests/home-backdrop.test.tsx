@@ -3,7 +3,14 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HomeBackdrop } from "@/components/home-backdrop";
-import { RIBBON_WIDTH, SIDE_BAR_COUNT, ribbons, sideBars } from "@/lib/home-backdrop";
+import {
+  DRAW_DELAY_CLASSES,
+  RIBBON_WIDTH,
+  SIDE_BAR_COUNT,
+  drawDelay,
+  ribbons,
+  sideBars,
+} from "@/lib/home-backdrop";
 
 vi.mock("@/components/auth-provider", () => ({ useAuth: () => ({ status: "unauthenticated" }) }));
 
@@ -38,6 +45,21 @@ describe("backdrop geometry", () => {
   });
 });
 
+describe("draw-in stagger", () => {
+  it("steps up by 12 ms from 160 ms, one literal class each, so Tailwind can generate them", () => {
+    const ms = DRAW_DELAY_CLASSES.map((c) => Number(/animation-delay:(\d+)ms/.exec(c)?.[1]));
+    expect(ms[0]).toBe(160);
+    expect(ms.slice(1).every((v, i) => v === (ms[i] as number) + 12)).toBe(true);
+    expect(DRAW_DELAY_CLASSES.every((c) => c.startsWith("motion-safe:"))).toBe(true);
+  });
+
+  it("delays later bars more, and holds the last step for any bars beyond it", () => {
+    expect(drawDelay(0, 4)).toBe(DRAW_DELAY_CLASSES[0]);
+    expect(drawDelay(7, 4)).toBe(DRAW_DELAY_CLASSES[1]);
+    expect(drawDelay(10_000, 4)).toBe(DRAW_DELAY_CLASSES[DRAW_DELAY_CLASSES.length - 1]);
+  });
+});
+
 describe("HomeBackdrop", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -54,6 +76,20 @@ describe("HomeBackdrop", () => {
     expect(container.querySelectorAll("path")).toHaveLength(3);
     expect(screen.getAllByTestId("home-bars")).toHaveLength(2);
     expect(container.querySelectorAll("line")).toHaveLength(2 * SIDE_BAR_COUNT);
+  });
+
+  it("ripples the side bars outward: every bar draws itself, later ones a little after", () => {
+    render(<HomeBackdrop live={false} />);
+    const [left] = screen.getAllByTestId("home-bars");
+    const lines = [...(left as Element).querySelectorAll("line")];
+    expect(
+      lines.every((l) => l.getAttribute("class")!.includes("motion-safe:animate-bar-in")),
+    ).toBe(true);
+    expect(lines[0]!.getAttribute("class")).toContain(DRAW_DELAY_CLASSES[0]);
+    expect(lines[lines.length - 1]!.getAttribute("class")).toContain(
+      drawDelay(lines.length - 1, 4),
+    );
+    expect(drawDelay(lines.length - 1, 4)).not.toBe(DRAW_DELAY_CLASSES[0]);
   });
 
   it("swells while the sample plays and settles after", () => {

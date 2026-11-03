@@ -54,6 +54,22 @@ describe("HomeSampleCard", () => {
     expect(play).not.toHaveBeenCalled();
   });
 
+  it("draws its waveform in, bar by bar from the left, and only where motion is allowed", () => {
+    render(<HomeSampleCard sample={sample} />);
+    const bars = [...screen.getByTestId("sample-wave").querySelectorAll("rect")];
+    expect(bars).toHaveLength(sample.peaks.length);
+    for (const bar of bars) {
+      const cls = bar.getAttribute("class")!;
+      expect(cls).toContain("motion-safe:animate-bar-in");
+      expect(cls).toContain("[transform-box:fill-box]"); // each bar grows from its own centre
+      expect(bar.getAttribute("style")).toBeNull(); // the site's CSP forbids inline styles
+    }
+    const delay = (el: Element) =>
+      Number(/animation-delay:(\d+)ms/.exec(el.getAttribute("class")!)?.[1]);
+    expect(delay(bars[0]!)).toBe(160);
+    expect(delay(bars[bars.length - 1]!)).toBeGreaterThanOrEqual(delay(bars[0]!));
+  });
+
   it("plays on a press, shows Pause, and tells the page it is playing", async () => {
     const onPlayingChange = vi.fn();
     const { container } = render(

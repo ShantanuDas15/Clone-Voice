@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { BAR_PITCH, RIBBON_WIDTH, ribbons, sideBars } from "@/lib/home-backdrop";
+import { BAR_PITCH, RIBBON_WIDTH, drawDelay, ribbons, sideBars } from "@/lib/home-backdrop";
 
 const BARS = sideBars();
 const RIBBONS = ribbons();
@@ -11,7 +11,7 @@ const RIBBONS = ribbons();
  * One margin of faint voice bars, from the content column outward. Shown only where the page leaves
  * room either side of its 64 rem column (about 1200 px and up). One SVG per margin, drawn with
  * presentation attributes only: the site's Content-Security-Policy forbids inline `style` attributes,
- * so no height, opacity or delay can live in one. The group draws once, then rests.
+ * so no height, opacity or delay can live in one. Each bar draws once, rippling outward from the content, then rests.
  */
 function SideBars({ side }: { side: "left" | "right" }) {
   const width = BARS.length * BAR_PITCH;
@@ -26,9 +26,7 @@ function SideBars({ side }: { side: "left" | "right" }) {
         viewBox={`0 0 ${width} 100`}
         preserveAspectRatio="none"
         focusable="false"
-        className={`absolute top-0 h-full origin-center motion-safe:animate-bar-in ${
-          side === "left" ? "right-0" : "left-0"
-        }`}
+        className={`absolute top-0 h-full ${side === "left" ? "right-0" : "left-0"}`}
         width={width}
       >
         {BARS.map((bar, i) => {
@@ -41,7 +39,7 @@ function SideBars({ side }: { side: "left" | "right" }) {
               x2={x}
               y1={50 - bar.height / 2}
               y2={50 + bar.height / 2}
-              className="stroke-line"
+              className={`origin-center stroke-line [transform-box:fill-box] motion-safe:animate-bar-in ${drawDelay(i, 4)}`}
               strokeWidth={4}
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
