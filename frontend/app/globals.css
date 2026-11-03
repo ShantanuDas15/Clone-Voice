@@ -139,6 +139,51 @@ main h1[tabindex="-1"]:focus {
 }
 
 /*
+ * Home page only (§4.10 exception, §12.19). The background is as wide as the screen (`w-screen`),
+ * which counts the scrollbar, and the side bars reach the screen edge, so the page must not scroll
+ * sideways. The clip goes on the root: a clip on `body` does not contain absolutely positioned
+ * descendants (measured: the page scrolled 528 px), while the root's becomes the viewport's rule.
+ */
+html:has([data-home-hero]) {
+  overflow-x: clip;
+}
+
+/*
+ * The ribbons stop while the band is out of view (`data-paused`, set by HomeBackdrop). This is a rule
+ * here, with more specificity than the `motion-safe` animation utility, because that utility's
+ * shorthand would otherwise reset the play state: utility order must not decide whether it pauses.
+ */
+.home-wave[data-paused="true"] svg {
+  animation-play-state: paused;
+}
+
+/*
+ * Sections below the hero ease in as they scroll into view, with CSS alone: no script, no library.
+ * Chrome, Edge and Safari support `animation-timeline`; elsewhere the block is skipped and the
+ * content is simply there. Opacity and transform only, once, and never under reduced motion.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @keyframes home-reveal {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .home-reveal {
+      animation: home-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
+  }
+}
+
+/*
  * Range sliders (the Strength control): a track in the `line` token (>= 3:1 on the page, WCAG
  * 1.4.11) and a primary thumb, instead of each browser's pale default. In forced-colors mode the
  * native control is used, so the system colours apply.

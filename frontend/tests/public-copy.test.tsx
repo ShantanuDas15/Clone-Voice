@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,7 +38,37 @@ describe("landing page", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Create account" })).toHaveAttribute("href", "/signup");
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    // The three plain statements, each under a short title; the steps are a separate, ordered list.
+    const statements = screen.getAllByRole("list")[0];
+    expect(within(statements as HTMLElement).getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByText("Consent first")).toBeInTheDocument();
+    expect(screen.getByText("Always labelled")).toBeInTheDocument();
+  });
+
+  it("walks the real three steps in order", () => {
+    const { container } = render(<HomePage />);
+    const ordered = container.querySelector("ol") as HTMLElement;
+    const titles = within(ordered)
+      .getAllByRole("listitem")
+      .map((li) => li.querySelector("h3")?.textContent);
+    expect(titles).toEqual(["Add a sample", "Type your text", "Play or download"]);
+  });
+
+  it("offers the sample and ends with one differently named call to action", () => {
+    render(<HomePage />);
+    expect(screen.getByRole("group", { name: "Hear a sample" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Try it with your own voice" })).toHaveAttribute(
+      "href",
+      "/signup",
+    );
+    // No two links share a name, so a locator for "Create account" still finds exactly one.
+    expect(screen.getAllByRole("link", { name: "Create account" })).toHaveLength(1);
+  });
+
+  it("ends a signed-in visit with a way to add a voice", () => {
+    status = "authenticated";
+    render(<HomePage />);
+    expect(screen.getByRole("link", { name: "Add a voice" })).toHaveAttribute("href", "/voices");
   });
 
   it("publishes no retention figure (it is a server setting, UX plan §11.3)", () => {
