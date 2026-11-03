@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { claimPlayback, releasePlayback } from "@/lib/exclusive-playback";
+import { drawDelay } from "@/lib/home-backdrop";
 import type { HomeSample } from "@/lib/home-sample";
 import { formatClock } from "@/lib/recording";
 
@@ -26,7 +27,10 @@ function PlayIcon({ playing }: { playing: boolean }) {
   );
 }
 
-/** The clip's shape; bars up to the playhead take the accent colour. Decorative (`aria-hidden`). */
+/**
+ * The clip's shape; bars up to the playhead take the accent colour. Each bar grows from its own
+ * centre once, left to right, as the card appears. Decorative (`aria-hidden`).
+ */
 function Wave({ peaks, progress }: { peaks: readonly number[]; progress: number }) {
   const played = Math.floor(progress * peaks.length);
   return (
@@ -48,7 +52,9 @@ function Wave({ peaks, progress }: { peaks: readonly number[]; progress: number 
             width={3}
             height={h}
             rx={1.5}
-            className={i < played ? "fill-primary" : "fill-muted-foreground/50"}
+            className={`origin-center [transform-box:fill-box] motion-safe:animate-bar-in ${drawDelay(i, 4)} ${
+              i < played ? "fill-primary" : "fill-muted-foreground/50"
+            }`}
           />
         );
       })}
