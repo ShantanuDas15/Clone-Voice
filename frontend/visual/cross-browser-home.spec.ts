@@ -59,25 +59,73 @@ test("the side bars appear only where the page leaves room for them", async ({ p
   await expect(bar).toBeVisible();
 });
 
-test("the ribbons drift where motion is allowed, and pause once scrolled out of view", async ({
+const ribbonState = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => {
+    const svg = document.querySelector('[data-testid="home-wave"] svg') as SVGElement;
+    const s = getComputedStyle(svg);
+    return { name: s.animationName, play: s.animationPlayState };
+  });
+
+test("the ribbons drift at first, rest after three seconds, and stop while off screen", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.goto(`${ORIGIN}/`);
+  const wave = page.getByTestId("home-wave");
+  await expect.poll(async () => (await ribbonState(page)).name).toBe("drift");
+  // WCAG 2.2.2: nothing may move on its own for more than five seconds, so they come to rest.
+  await expect(wave).toHaveAttribute("data-paused", "true", { timeout: 8_000 });
+  expect((await ribbonState(page)).play).toBe("paused");
+});
+
+test("the ribbons move again while the visitor's sample plays, and rest when it ends", async ({
+  page,
+}) => {
+  test.setTimeout(45_000);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${ORIGIN}/`);
+  const wave = page.getByTestId("home-wave");
+  await expect(wave).toHaveAttribute("data-paused", "true", { timeout: 8_000 });
+  await page.getByRole("button", { name: "Play sample" }).click();
+  await expect(page.getByRole("button", { name: "Pause sample" })).toBeVisible({ timeout: 10_000 });
+  await expect(wave).toHaveAttribute("data-paused", "false");
+  expect((await ribbonState(page)).play).toBe("running");
+  await expect(page.getByRole("button", { name: "Play sample" })).toBeVisible({ timeout: 15_000 });
+  await expect(wave).toHaveAttribute("data-paused", "true");
+  expect((await ribbonState(page)).play).toBe("paused");
+});
+
+test("the ribbons stop while scrolled out of view, even during the opening drift", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.setViewportSize({ width: 1280, height: 600 });
   await page.goto(`${ORIGIN}/`);
-  const state = () =>
-    page.evaluate(() => {
-      const svg = document.querySelector('[data-testid="home-wave"] svg') as SVGElement;
-      const s = getComputedStyle(svg);
-      return { name: s.animationName, play: s.animationPlayState };
-    });
-  await expect.poll(async () => (await state()).name).toBe("drift");
-  expect((await state()).play).toBe("running");
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await expect(page.getByTestId("home-wave")).toHaveAttribute("data-paused", "true");
-  expect((await state()).play).toBe("paused");
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await expect(page.getByTestId("home-wave")).toHaveAttribute("data-paused", "false");
+  expect((await ribbonState(page)).play).toBe("paused");
+});
+
+test("six seconds after load, nothing on the page is still moving by itself", async ({ page }) => {
+  test.setTimeout(30_000);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.goto(`${ORIGIN}/`);
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(6_000);
+  // WCAG 2.2.2 (Pause, Stop, Hide): no endless animation may be running without a control for it.
+  const endless = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter(
+        (a) => a.playState === "running" && a.effect?.getComputedTiming().iterations === Infinity,
+      )
+      .map((a) => (a as CSSAnimation).animationName),
+  );
+  expect(endless).toEqual([]);
 });
 
 test("under reduced motion nothing on the home page animates", async ({ page }) => {

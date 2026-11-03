@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HomeBackdrop } from "@/components/home-backdrop";
+import { HomeBackdrop, INTRO_DRIFT_MS } from "@/components/home-backdrop";
 import {
   DRAW_DELAY_CLASSES,
   RIBBON_WIDTH,
@@ -139,6 +139,55 @@ describe("HomeBackdrop", () => {
     expect(readFileSync("app/globals.css", "utf8")).toMatch(
       /\.home-wave\[data-paused="true"\] svg\s*\{\s*animation-play-state:\s*paused/,
     );
+  });
+});
+
+describe("WCAG 2.2.2: nothing moves on its own for more than five seconds", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps the opening drift well under five seconds", () => {
+    expect(INTRO_DRIFT_MS).toBeLessThanOrEqual(3000);
+  });
+
+  it("drifts for the opening seconds, then comes to rest", () => {
+    vi.useFakeTimers();
+    render(<HomeBackdrop live={false} />);
+    const wave = screen.getByTestId("home-wave");
+    expect(wave).toHaveAttribute("data-paused", "false");
+    act(() => void vi.advanceTimersByTime(INTRO_DRIFT_MS - 1));
+    expect(wave).toHaveAttribute("data-paused", "false");
+    act(() => void vi.advanceTimersByTime(1));
+    expect(wave).toHaveAttribute("data-paused", "true");
+  });
+
+  it("moves again only while the sample the visitor started is playing", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<HomeBackdrop live={false} />);
+    act(() => void vi.advanceTimersByTime(INTRO_DRIFT_MS));
+    const wave = screen.getByTestId("home-wave");
+    expect(wave).toHaveAttribute("data-paused", "true");
+    rerender(<HomeBackdrop live />);
+    expect(wave).toHaveAttribute("data-paused", "false");
+    rerender(<HomeBackdrop live={false} />);
+    expect(wave).toHaveAttribute("data-paused", "true");
+  });
+
+  it("stays stopped while off screen even during the opening drift or playback", () => {
+    let notify: (entries: Array<{ isIntersecting: boolean }>) => void = () => {};
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(cb: typeof notify) {
+          notify = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    render(<HomeBackdrop live />);
+    act(() => notify([{ isIntersecting: false }]));
+    expect(screen.getByTestId("home-wave")).toHaveAttribute("data-paused", "true");
+    vi.unstubAllGlobals();
   });
 });
 
