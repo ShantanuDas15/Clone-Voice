@@ -919,3 +919,17 @@ A web review of voice-AI interfaces (voice-visualizer pattern guides, open-sourc
 **H3 detail (a deliberate change from the shortlist wording).** The shortlist said "Preparing → Synthesizing → Ready". The synthesize endpoint is one request with no stage signal, so naming stages would be invented progress. Instead `components/generation-status.tsx` (extracted from `text-to-speech-form.tsx`, same DOM and test hooks) shows what is actually known: **Generating…** with the seconds and the usual note, then after `SLOW_AFTER_SECONDS` (20) **Still generating…** with "This is taking longer than usual. Keep this page open, or cancel and try again." Each state has its own static icon (waveform bars, then a clock), so the change does not rely on text alone. It stays one polite live region, so the wording change is announced once; the ticking seconds stay `aria-hidden`. No new motion (the existing bar and its reduced-motion fallback are unchanged). "Ready" is already announced ("Your audio is ready.") and shown by the result card, so it was not duplicated.
 
 **H3 verified:** frontend 766 tests (5 new in `tests/generation-status.test.tsx`; the existing progress test passes unchanged); lint (0 errors), tsc, prettier; Chromium visual 102 pass, no baseline changed. **Not done:** the slow state was not seen in a browser; screen-reader announcement not tried; no e2e (needs a real backend). **Open:** 20 s is a guess; the real generation time distribution (the CPU tier is slow) should set it.
+
+### 12.18 H-series: checked in real browsers (2026-11-03, `cb6d93e`)
+
+The "Not done" lines of §12.17 (H1-H5 never watched in a browser, no Firefox or WebKit) are closed by `frontend/visual/cross-browser-h-series.spec.ts`, which runs in the existing `test:cross-browser` job (WebKit and Firefox) and is also run by hand on Chromium. The API is mocked; audio is a generated 3 s sine WAV; Firefox has a fake microphone through `firefoxUserPrefs` in `playwright.visual.config.ts`.
+
+| Check | Chromium | Chromium, reduced motion | Firefox | WebKit |
+|---|---|---|---|---|
+| H1 the recorder shows the orb, ring and level meter while recording, and the take after stopping | pass | pass | pass | not run (no fake microphone) |
+| H2 a loaded take reads its length, has a playhead, shows the hover time for a mouse and hides it when the pointer leaves, and ArrowRight moves the position | pass | pass | pass | pass |
+| H3 the status changes from Generating to Still generating after 20 s, shows its icon, and the result still arrives | pass | pass | pass | pass |
+| H4 a History row with peaks shows a sized waveform preview; a row without shows none | pass | pass | pass | pass |
+| H5 deleting a row removes it with no page error (the old row is present twice for a moment, which is the exit animation) | pass | pass | pass | pass |
+
+**Verified:** the full cross-browser job locally, 41 passed and 1 skipped (the WebKit recorder), on a production build; tsc, eslint, prettier. **Not done:** the animation itself is not judged (the spec checks that rows go and nothing throws, not how the easing looks); a real microphone and real server audio were not used; Safari on a device was not tried. No product code changed, and no bug was found.
