@@ -26,6 +26,7 @@ import {
   hasLikelyUnsupportedChars,
   synthesisTextSchema,
 } from "@/lib/validation/text";
+import { GenerationStatus } from "@/components/generation-status";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Select, Textarea } from "@/components/ui/field";
@@ -385,23 +386,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           {announcement}
         </span>
 
-        {pending && (
-          <div role="status" aria-live="polite" className="space-y-2 text-sm">
-            <p>
-              Generating…{" "}
-              {/* Hidden from assistive tech so the ticking seconds are not announced every second. */}
-              <span aria-hidden className="font-mono tabular-nums">
-                {elapsed} s
-              </span>
-            </p>
-            <p className="text-muted-foreground">
-              This can take a minute or more on slow servers; please keep this page open.
-            </p>
-            <div aria-hidden className="h-1 overflow-hidden rounded bg-muted">
-              <div className="h-full w-1/3 animate-indeterminate rounded bg-primary motion-reduce:w-full motion-reduce:animate-none" />
-            </div>
-          </div>
-        )}
+        {pending && <GenerationStatus elapsed={elapsed} />}
         {formError && <Alert tone="danger">{formError}</Alert>}
         {degraded && (
           <p id="tts-paused" role="status" className="text-sm">
