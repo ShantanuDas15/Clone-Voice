@@ -184,6 +184,37 @@ html:has([data-home-hero]) {
 }
 
 /*
+ * The thin length meter under the Generate text box: how much of the limit is used. A native
+ * `progress` (so no inline style), in the `muted` track and `primary` fill; `danger` past the limit.
+ * Decorative: the count beside it is what is announced.
+ */
+progress.length-meter {
+  appearance: none;
+  flex: 1 1 auto;
+  height: 4px;
+  border: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: hsl(var(--muted));
+}
+progress.length-meter::-webkit-progress-bar {
+  background: hsl(var(--muted));
+}
+progress.length-meter::-webkit-progress-value {
+  background: hsl(var(--primary));
+  transition: width 120ms linear;
+}
+progress.length-meter::-moz-progress-bar {
+  background: hsl(var(--primary));
+}
+progress.length-meter[data-over="true"]::-webkit-progress-value {
+  background: hsl(var(--danger));
+}
+progress.length-meter[data-over="true"]::-moz-progress-bar {
+  background: hsl(var(--danger));
+}
+
+/*
  * Range sliders (the Strength control): a track in the `line` token (>= 3:1 on the page, WCAG
  * 1.4.11) and a primary thumb, instead of each browser's pale default. In forced-colors mode the
  * native control is used, so the system colours apply.

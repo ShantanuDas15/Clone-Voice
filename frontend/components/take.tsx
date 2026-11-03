@@ -24,6 +24,8 @@ interface TakeProps {
   /** Add skip back and forward ({@link SKIP_SECONDS} s) and a playback-speed choice beside play.
    * The visible labels are inside the accessible names (WCAG 2.5.3). */
   extraControls?: boolean;
+  /** Put the waveform above the controls (the Generate stage, where it continues the resting line). */
+  waveformFirst?: boolean;
 }
 
 const BARS = 64;
@@ -48,6 +50,7 @@ export function Take({
   animateIn,
   focusPlay,
   extraControls,
+  waveformFirst,
 }: TakeProps) {
   const audio = useRef<HTMLAudioElement>(null);
   const playButton = useRef<HTMLButtonElement>(null);
@@ -152,7 +155,7 @@ export function Take({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={waveformFirst ? "flex flex-col gap-2" : "space-y-2"}>
       {/* eslint-disable-next-line jsx-a11y/media-has-caption -- synthesized speech; the source text is shown beside it */}
       <audio
         ref={audio}
@@ -243,7 +246,9 @@ export function Take({
         </div>
       )}
       <div
-        className="relative h-12 rounded focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary"
+        className={`relative h-12 rounded focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary ${
+          waveformFirst ? "order-first" : ""
+        }`}
         onPointerMove={(e) => {
           if (e.pointerType !== "mouse" || duration === 0) return;
           const box = e.currentTarget.getBoundingClientRect();
