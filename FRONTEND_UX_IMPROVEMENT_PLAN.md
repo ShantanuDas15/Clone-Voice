@@ -900,7 +900,7 @@ A web review of voice-AI interfaces (voice-visualizer pattern guides, open-sourc
 |---|---|---|---|
 | H1 | **Recorder ring**: a mic orb whose ring swells with the live input level; dims and reads "off" when silent; static scale under reduced motion | `useInputLevel` | **Done** (`b3e9339`) |
 | H2 | **Seekable `Take`**: a visible playhead and a mouse-hover time readout on the waveform (click/drag/keys already seek) | `components/take.tsx` | **Done** (`52f0dcc`) |
-| H3 | **Generation status line**: Generating → Still generating (after 20 s), an icon per state, in the live region | existing progress bar, live region | **Done** (see below) |
+| H3 | **Generation status line**: Generating → Still generating (after 20 s), an icon per state, in the live region | existing progress bar, live region | **Done** (`65aa694`) |
 | H4 | **Waveform previews on History rows**: static, drawn once, peaks precomputed | `Take` waveform | Planned (check whether the API can supply peaks) |
 | H5 | Optional list enter/exit smoothing (AutoAnimate, <3 kB) | none | **Needs owner approval**: §4.10 does not list list reordering |
 
