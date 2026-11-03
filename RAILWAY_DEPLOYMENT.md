@@ -148,6 +148,52 @@ API serves everything with SV2TTS:
   `EMAIL_BACKEND` working and a verified domain).
 - `curl https://<api-domain>/metrics` returns 401 without the token.
 
+## Automatic deploys
+
+Merging a pull request into `main` deploys it, once CI has passed. `.github/workflows/deploy.yml` does it;
+the logic is in `scripts/ci/` (each script has tests in `backend/tests/test_deploy_pipeline.py`).
+
+**What happens on a push to `main`**
+1. **Decide.** `changed-services.sh` lists what changed: `backend/` or the root `railway.toml` means the API,
+   `frontend/` means the web app, anything else (docs, CI files, scripts) deploys nothing.
+2. **Gate.** `wait-for-checks.sh` waits for the four checks `main` requires (`check`, `perf`, `visual`,
+   `backend-tests`) on that exact commit. One that failed, was cancelled or never started stops the deploy.
+3. **Deploy.** `deploy-service.sh` uploads the commit to each affected service with `railway up`, tagged
+   `ci:<sha>`, and waits for that deployment to pass its health check. The API goes first, then the web app.
+   The API runs its migrations before it takes traffic (`preDeployCommand`).
+4. **Smoke-test.** `smoke.sh` checks the live service: for the web app `/login` and its security headers, the
+   home page and the sample clip; for the API `/health/ready` with a reachable database.
+
+A failed deploy is a red run, not an outage: Railway keeps the previous deployment serving until a new one is
+healthy. Deploys are queued one at a time and a newer push never cancels one that is running.
+
+**One-time setup** (the pipeline does nothing until both exist)
+1. Create a Railway **project token** for the `production` environment (Project > Settings > Tokens), and
+   store it as the repository secret `RAILWAY_TOKEN` (GitHub > Settings > Secrets and variables > Actions).
+   It is only ever passed to the deploy steps as an environment variable, and the scripts never print it.
+2. Set the repository variable `AUTO_DEPLOY` to `true`. This is also the **emergency stop**: set it to anything
+   else and merges stop deploying.
+3. Keep `check`, `perf`, `visual` and `backend-tests` as required checks on `main` (a test fails if the
+   workflow names a check that no workflow defines).
+
+**By hand.** Actions > deploy > Run workflow. Choose the service (`web`, `api` or `both`) and, to **roll back**,
+the last good commit as `ref` (tick `skip_ci_gate` if that commit predates a required check). A manual run
+ignores `AUTO_DEPLOY`. You can also use Redeploy on an earlier deployment in the Railway dashboard.
+
+**Why not Railway's own GitHub autodeploy?** It was tried (2026-11-03) and does not fit this repo yet. When
+Railway builds from GitHub, the repo-root `railway.toml` (the API's Dockerfile, health check and migration
+step) applies to every service that has no config-file path of its own, and Railway no longer lets that path
+be set through its API. The trial build of `web` ran the backend image and failed its health check (the live
+site was never affected, and `web` was disconnected again). Uploading with `railway up` to a named service
+has worked for every deploy. **Deadline:** Railway has deprecated Config-as-Code files (`railway.toml`) and says
+they keep working "until **2026-12-01**". Before then, move the services to Infrastructure as Code
+(`.railway/railway.ts`, with `railway config plan` reviewed before any apply); that also makes native autodeploy
+with "Wait for CI" possible.
+
+**Limits.** There is one environment: the project is named `clonevoice-staging` but its only environment is the
+live `production` one, so every merge that passes CI goes straight to the real site. A separate staging
+environment would put a gate between the two, at the cost of extra Railway services.
+
 ## Not covered here (R3, staging measurements)
 
 `TORCH_NUM_THREADS`, `INFERENCE_CALL_TIMEOUT_SECONDS` and the maximum text length
