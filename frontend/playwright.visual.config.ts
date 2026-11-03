@@ -23,7 +23,20 @@ export default defineConfig({
     { name: "chromium", testIgnore: /cross-browser/ },
     // Screenshots differ per engine, so the other engines run only the structural smoke spec.
     { name: "webkit", testMatch: /cross-browser/, use: devices["Desktop Safari"] },
-    { name: "firefox", testMatch: /cross-browser/, use: devices["Desktop Firefox"] },
+    {
+      name: "firefox",
+      testMatch: /cross-browser/,
+      // A fake microphone, so the recorder spec (cross-browser-h-series) can record without a device.
+      use: {
+        ...devices["Desktop Firefox"],
+        launchOptions: {
+          firefoxUserPrefs: {
+            "media.navigator.streams.fake": true,
+            "media.navigator.permission.disabled": true,
+          },
+        },
+      },
+    },
   ],
   webServer: {
     command:
