@@ -13,6 +13,7 @@ import {
   recordingToFile,
 } from "@/lib/recording";
 import { Button } from "@/components/ui/button";
+import { MicOrb } from "@/components/mic-orb";
 import { Take } from "@/components/take";
 
 interface RecorderProps {
@@ -128,12 +129,8 @@ export function Recorder({ onChange, disabled }: RecorderProps) {
             aria-live="off"
             className="flex items-center font-mono text-xl font-medium tabular-nums"
           >
-            {/* The dot swells with the input level: it shows the microphone is live, not a timer. */}
-            <span
-              aria-hidden
-              className="mr-3 inline-block h-2.5 w-2.5 rounded-full bg-danger"
-              style={{ transform: `scale(${1 + level * 0.8})`, opacity: 0.5 + level * 0.5 }}
-            />
+            {/* The ring swells with the input level: it shows the microphone is live, not a timer. */}
+            <MicOrb level={level} silent={silent} />
             Recording {formatClock(seconds)} / {formatClock(MAX_RECORDING_SECONDS)}
           </p>
           {/* The trace is the meter: the bars are decorative, the role carries the level. */}
