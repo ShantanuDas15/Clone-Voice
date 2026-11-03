@@ -470,6 +470,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
               animateIn
               extraControls
               waveformFirst
+              pulse
             />
             <ExpandableText
               text={`“${result.text}”`}
