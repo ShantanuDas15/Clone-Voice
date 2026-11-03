@@ -920,7 +920,7 @@ A web review of voice-AI interfaces (voice-visualizer pattern guides, open-sourc
 
 **H3 verified:** frontend 766 tests (5 new in `tests/generation-status.test.tsx`; the existing progress test passes unchanged); lint (0 errors), tsc, prettier; Chromium visual 102 pass, no baseline changed. **Not done:** the slow state was not seen in a browser; screen-reader announcement not tried; no e2e (needs a real backend). **Open:** 20 s is a guess; the real generation time distribution (the CPU tier is slow) should set it.
 
-### 12.18 H-series: checked in real browsers (2026-11-03)
+### 12.18 H-series: checked in real browsers (2026-11-03, `cb6d93e`)
 
 The "Not done" lines of §12.17 (H1-H5 never watched in a browser, no Firefox or WebKit) are closed by `frontend/visual/cross-browser-h-series.spec.ts`, which runs in the existing `test:cross-browser` job (WebKit and Firefox) and is also run by hand on Chromium. The API is mocked; audio is a generated 3 s sine WAV; Firefox has a fake microphone through `firefoxUserPrefs` in `playwright.visual.config.ts`.
 
