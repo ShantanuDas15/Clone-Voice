@@ -26,7 +26,7 @@ import {
   hasLikelyUnsupportedChars,
   synthesisTextSchema,
 } from "@/lib/validation/text";
-import { GenerationStatus } from "@/components/generation-status";
+import { GenerateStage, type StageState } from "@/components/generate-stage";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Select, Textarea } from "@/components/ui/field";
@@ -71,11 +71,14 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const [textError, setTextError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<(SynthesisResult & { text: string }) | null>(null);
+  // The voice the running or finished generation used, so changing the choice afterwards cannot mislabel it.
+  const [usedVoice, setUsedVoice] = useState<string>();
   const engineNote = result ? describeEngine(result.engine, result.engineFallbackFrom) : null;
   const controller = useRef<AbortController | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const { ref: formRef, focusFirstInvalid } = useFocusFirstInvalid<HTMLFormElement>();
-  const resultRef = useRef<HTMLElement>(null);
+  const stageRef = useRef<HTMLElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
   const inFlight = useRef(false);
   const autoPicked = useRef(false);
   const [announcement, setAnnouncement] = useState("");
@@ -124,15 +127,16 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
     if (only) setVoiceId((v) => v || only.id);
   }, [profiles.data, user]);
 
-  // A finished take can land below the fold on a phone: bring it into view (no-op when visible).
+  // On a phone the stage sits below the form: bring it into view when a generation starts and when
+  // the take lands (a no-op when it is already visible, as it is beside the form on a wide screen).
   useEffect(() => {
-    if (!result) return;
+    if (!result && !pending) return;
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    resultRef.current?.scrollIntoView?.({
+    stageRef.current?.scrollIntoView?.({
       block: "nearest",
       behavior: reduced ? "auto" : "smooth",
     });
-  }, [result]);
+  }, [result, pending]);
 
   // R9: warn before leaving mid-generation.
   useEffect(() => {
@@ -167,6 +171,10 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
     if (!parsed.success) return;
 
     inFlight.current = true;
+    // "Generate again" lives in the take, which the working state replaces: keep the keyboard on a
+    // control that stays (the Generate button, busy while it runs) instead of dropping it to the page.
+    if (stageRef.current?.contains(document.activeElement)) submitRef.current?.focus();
+    setUsedVoice(profiles.data?.find((p) => p.id === voiceId)?.name);
     const ctl = new AbortController();
     controller.current = ctl;
     try {
@@ -244,6 +252,10 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
       .filter(Boolean)
       .join(" ") || undefined;
 
+  const stageState: StageState = pending ? "working" : result && audioUrl ? "done" : "ready";
+  const chosenVoice = profiles.data?.find((p) => p.id === voiceId)?.name;
+  const stageVoice = pending || result ? (usedVoice ?? chosenVoice) : chosenVoice;
+
   return (
     <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
       <form
@@ -270,14 +282,25 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
             aria-invalid={textError || over > 0 ? true : undefined}
             aria-describedby={`tts-count tts-hint${over > 0 ? " tts-over" : ""}${overWords ? " tts-words" : ""}`}
           />
-          <p
-            id="tts-count"
-            className={`mt-1 text-right font-mono text-xs tabular-nums ${over > 0 || overWords ? "font-semibold text-danger" : "text-muted-foreground"}`}
-          >
-            {text.length} / {TEXT_MAX}
-            {over > 0 && ` (${over} too many)`}
-            {maxWords != null && ` · ${words} / about ${maxWords} words`}
-          </p>
+          <div className="mt-2 flex items-center gap-3">
+            {/* A glance at how much of the limit is used; the count beside it is what is announced. */}
+            <progress
+              aria-hidden
+              data-testid="length-meter"
+              data-over={over > 0}
+              max={TEXT_MAX}
+              value={Math.min(text.length, TEXT_MAX)}
+              className="length-meter"
+            />
+            <p
+              id="tts-count"
+              className={`shrink-0 text-right font-mono text-xs tabular-nums ${over > 0 || overWords ? "font-semibold text-danger" : "text-muted-foreground"}`}
+            >
+              {text.length} / {TEXT_MAX}
+              {over > 0 && ` (${over} too many)`}
+              {maxWords != null && ` · ${words} / about ${maxWords} words`}
+            </p>
+          </div>
           {overWords && over <= 0 && (
             <Alert tone="neutral" id="tts-words" className="mt-1">
               This server speaks about {maxWords} words at a time, so this may be refused. Shorten
@@ -386,7 +409,6 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
           {announcement}
         </span>
 
-        {pending && <GenerationStatus elapsed={elapsed} />}
         {formError && <Alert tone="danger">{formError}</Alert>}
         {degraded && (
           <p id="tts-paused" role="status" className="text-sm">
@@ -402,6 +424,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
         {/* Stays in view as the text grows. On a phone it sits above the fixed tab bar (h-14). */}
         <div className="sticky bottom-14 z-10 flex flex-wrap gap-2 border-t border-border bg-background py-3 sm:bottom-0">
           <Button
+            ref={submitRef}
             type="submit"
             className="whitespace-nowrap"
             disabled={degraded || cooldown.remaining > 0 || blocker !== null}
@@ -431,101 +454,83 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
         </div>
       </form>
 
-      {!result && (
-        // Fills the empty column beside the form on wide screens; below `lg` the form is the whole page.
-        <section
-          aria-labelledby="result-empty-title"
-          className="hidden max-w-xl space-y-3 rounded border border-border p-4 lg:block"
-        >
-          <h2 id="result-empty-title" className="font-medium">
-            Your audio appears here
-          </h2>
-          <div aria-hidden className="h-0.5 w-full border-t border-dashed border-line" />
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>Choose a voice.</li>
-            <li>Type or paste your text.</li>
-            <li>Press Generate speech, then play or download.</li>
-          </ol>
-        </section>
-      )}
-
-      {result && audioUrl && (
-        <section
-          ref={resultRef}
-          aria-labelledby="result-title"
-          className="max-w-xl space-y-2 rounded border border-border p-4"
-        >
-          <h2 id="result-title" className="font-medium">
-            Your audio{" "}
-            <span className="text-sm font-normal text-muted-foreground">(AI-generated voice)</span>
-          </h2>
-          <Take
-            src={audioUrl}
-            blob={result.blob}
-            filename={result.filename}
-            label="Generated speech"
-            animateIn
-            extraControls
-          />
-          <ExpandableText
-            text={`“${result.text}”`}
-            limit={QUOTE_PREVIEW_CHARS}
-            className="text-sm text-muted-foreground"
-          />
-          {engineNote && (
-            <p
-              role={result.engineFallbackFrom ? "status" : undefined}
-              className={result.engineFallbackFrom ? "text-sm" : "text-xs text-muted-foreground"}
-            >
-              {engineNote}.
-            </p>
-          )}
-          {result.styleApplied === false && (
-            <p role="status" className="text-sm">
-              The chosen delivery could not be applied with this voice engine, so the audio uses its
-              default delivery.
-            </p>
-          )}
-          {result.emotions.length > 0 && (
+      <GenerateStage
+        state={stageState}
+        voiceName={stageVoice}
+        elapsed={elapsed}
+        stageRef={stageRef}
+      >
+        {result && audioUrl ? (
+          <>
+            <Take
+              src={audioUrl}
+              blob={result.blob}
+              filename={result.filename}
+              label="Generated speech"
+              animateIn
+              extraControls
+              waveformFirst
+            />
+            <ExpandableText
+              text={`“${result.text}”`}
+              limit={QUOTE_PREVIEW_CHARS}
+              className="text-sm text-muted-foreground"
+            />
+            {engineNote && (
+              <p
+                role={result.engineFallbackFrom ? "status" : undefined}
+                className={result.engineFallbackFrom ? "text-sm" : "text-xs text-muted-foreground"}
+              >
+                {engineNote}.
+              </p>
+            )}
+            {result.styleApplied === false && (
+              <p role="status" className="text-sm">
+                The chosen delivery could not be applied with this voice engine, so the audio uses
+                its default delivery.
+              </p>
+            )}
+            {result.emotions.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Delivery by sentence: {result.emotions.join(", ")}.
+              </p>
+            )}
+            {result.tagsDropped.length > 0 && (
+              <p role="status" className="text-sm">
+                This engine can&apos;t make these sounds, so they were left out:{" "}
+                {result.tagsDropped.join(", ")}.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  textRef.current?.focus();
+                  textRef.current?.select();
+                }}
+              >
+                Edit text
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
+                aria-describedby={whyDisabled}
+                onClick={() => {
+                  setText(result.text);
+                  void run(result.text);
+                }}
+              >
+                Generate again
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Delivery by sentence: {result.emotions.join(", ")}.
+              If you leave this page, find past audio in History.
             </p>
-          )}
-          {result.tagsDropped.length > 0 && (
-            <p role="status" className="text-sm">
-              This engine can&apos;t make these sounds, so they were left out:{" "}
-              {result.tagsDropped.join(", ")}.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                textRef.current?.focus();
-                textRef.current?.select();
-              }}
-            >
-              Edit text
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
-              aria-describedby={whyDisabled}
-              onClick={() => {
-                setText(result.text);
-                void run(result.text);
-              }}
-            >
-              Generate again
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            If you leave this page, find past audio in History.
-          </p>
-        </section>
-      )}
+          </>
+        ) : null}
+      </GenerateStage>
     </div>
   );
 }

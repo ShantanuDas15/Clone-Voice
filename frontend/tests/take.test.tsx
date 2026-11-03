@@ -88,6 +88,17 @@ describe("Take", () => {
     fireEvent.loadedMetadata(el);
   }
 
+  it("puts the waveform above the controls only when asked (the Generate stage)", () => {
+    const { container, rerender } = render(<Take src="blob:x" filename="a.wav" label="Speech" />);
+    const slider = () => screen.getByRole("slider", { name: /^Seek/ });
+    const box = () => slider().parentElement as HTMLElement;
+    expect(container.firstElementChild).toHaveClass("space-y-2");
+    expect(box()).not.toHaveClass("order-first");
+    rerender(<Take src="blob:x" filename="a.wav" label="Speech" waveformFirst />);
+    expect(container.firstElementChild).toHaveClass("flex", "flex-col");
+    expect(box()).toHaveClass("order-first");
+  });
+
   it("shows a play button, a disabled slider and 0:00 / 0:00 until the length is known", () => {
     render(<Take src="blob:x" filename="a.wav" label="Generated speech" />);
     expect(screen.getByRole("button", { name: "Play Generated speech" })).toBeInTheDocument();
