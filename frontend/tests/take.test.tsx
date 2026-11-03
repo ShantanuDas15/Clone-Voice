@@ -210,6 +210,63 @@ describe("Take", () => {
     expect(screen.queryByRole("group", { name: "Playback speed" })).toBeNull();
   });
 
+  describe("playhead and hover position", () => {
+    // jsdom has no PointerEvent, so pointerType and clientX would be dropped.
+    beforeEach(() => {
+      class FakePointerEvent extends MouseEvent {
+        pointerType: string;
+        constructor(type: string, init: MouseEventInit & { pointerType?: string } = {}) {
+          super(type, init);
+          this.pointerType = init.pointerType ?? "";
+        }
+      }
+      vi.stubGlobal("PointerEvent", FakePointerEvent);
+    });
+
+    function setup() {
+      const { container } = render(<Take src="blob:x" filename="a.wav" label="Speech" />);
+      const el = audioEl(container);
+      setDuration(el, 10);
+      const slider = screen.getByRole("slider", { name: "Seek Speech" });
+      const box = slider.parentElement as HTMLElement;
+      box.getBoundingClientRect = () => ({ left: 100, width: 200 }) as DOMRect;
+      return { el, box };
+    }
+
+    it("shows no playhead until the length is known", () => {
+      render(<Take src="blob:x" filename="a.wav" label="Speech" />);
+      expect(screen.queryByTestId("take-playhead")).not.toBeInTheDocument();
+    });
+
+    it("draws a playhead at the played fraction", () => {
+      const { el } = setup();
+      el.currentTime = 2.5;
+      fireEvent.timeUpdate(el);
+      expect(screen.getByTestId("take-playhead").style.left).toBe("25%");
+    });
+
+    it("shows the time under the mouse and hides it on leave", () => {
+      const { box } = setup();
+      fireEvent.pointerMove(box, { pointerType: "mouse", clientX: 150 });
+      expect(screen.getByTestId("take-hover-time")).toHaveTextContent("0:02");
+      expect(screen.getByTestId("take-hover-line").style.left).toBe("25%");
+      fireEvent.pointerLeave(box);
+      expect(screen.queryByTestId("take-hover-time")).not.toBeInTheDocument();
+    });
+
+    it("ignores touch and pen, which have no hover", () => {
+      const { box } = setup();
+      fireEvent.pointerMove(box, { pointerType: "touch", clientX: 150 });
+      expect(screen.queryByTestId("take-hover-time")).not.toBeInTheDocument();
+    });
+
+    it("keeps the hover readout hidden from assistive technology", () => {
+      const { box } = setup();
+      fireEvent.pointerMove(box, { pointerType: "mouse", clientX: 200 });
+      expect(screen.getByTestId("take-hover-time")).toHaveAttribute("aria-hidden", "true");
+    });
+  });
+
   describe("with extra controls", () => {
     it("skips 15 s back and forward, clamped to the clip, and is disabled until the length is known", async () => {
       const { container } = render(
