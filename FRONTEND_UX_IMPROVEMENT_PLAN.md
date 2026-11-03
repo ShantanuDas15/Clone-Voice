@@ -891,3 +891,19 @@ The open item from §12.15. After recording, the preview read `0:00 / 0:00` and 
 
 **Verified:** frontend 751 tests (4 new; two of them fail without the fix); lint (0 errors), tsc, prettier; Chromium visual: 102 pass, no baseline changed. In the built app with the fake microphone: the preview reads `0:00 / 0:06` (6.96 s), the seek bar is enabled, playback advances, and ArrowRight seeks 2 s. **Not done:** only Chromium was measured; Firefox and Safari record differently and were not tried; a real microphone was not used.
 
+
+### 12.17 H-series: voice-state motion shortlist (2026-11-03)
+
+A web review of voice-AI interfaces (voice-visualizer pattern guides, open-source voice kits, motion-library sizes, the experimental Next.js View Transitions) was weighed against §4.10 (allowed motion), the Lighthouse budget (JS, LCP, CLS 0.02, TBT) and the 102 visual baselines. **Decision: no broad "immersive" restyle.** Rejected: entrance and scroll animation, parallax, hover lift, looping decoration (all banned by §4.10); Motion/GSAP (+15-30 kB gzipped, manual reduced-motion wiring); View Transitions (experimental, no Firefox); a dark-neon restyle (invalidates baselines and the contrast work). Adopted: small, state-driven changes that use only transform/opacity or canvas, and collapse under reduced motion.
+
+| # | Change | Reuses | Status |
+|---|---|---|---|
+| H1 | **Recorder ring**: a mic orb whose ring swells with the live input level; dims and reads "off" when silent; static scale under reduced motion | `useInputLevel` | **Done** (this entry) |
+| H2 | **Seekable `Take`**: click/drag to seek on the waveform, time readout, hover position | `components/take.tsx` | Planned |
+| H3 | **Generation status line**: Preparing → Synthesizing → Ready, one distinct visual per state, in the live region | existing progress bar, live region, draw-in | Planned |
+| H4 | **Waveform previews on History rows**: static, drawn once, peaks precomputed | `Take` waveform | Planned (check whether the API can supply peaks) |
+| H5 | Optional list enter/exit smoothing (AutoAnimate, <3 kB) | none | **Needs owner approval**: §4.10 does not list list reordering |
+
+**H1 detail.** `components/mic-orb.tsx` replaces the small swelling dot in the recording line of `components/recorder.tsx`. It is `aria-hidden`; the `role="meter"` (same `aria-valuenow`) still carries the level. Ring scale is `1 + 0.5 × level`, opacity `0.25 + 0.75 × level`, with a 120 ms transition (`duration-fast`); `motion-reduce:!transform-none` removes scaling and leaves opacity only. When `silent` (nothing heard for 3 s) the ring rests at scale 1 and the disc turns grey, so the UI does not look live while the mic is dead. No new dependency, no layout change.
+
+**Verified:** frontend 756 tests (5 new in `tests/mic-orb.test.tsx`); lint (0 errors; two pre-existing warnings), tsc, prettier; Chromium visual 102 pass, no baseline changed (the recording state has none). **Not done:** `e2e/recording.spec.ts` needs a real backend and none was running; the orb was not rendered in a browser with a fake microphone; no real microphone, Firefox or WebKit.
