@@ -899,7 +899,7 @@ A web review of voice-AI interfaces (voice-visualizer pattern guides, open-sourc
 | # | Change | Reuses | Status |
 |---|---|---|---|
 | H1 | **Recorder ring**: a mic orb whose ring swells with the live input level; dims and reads "off" when silent; static scale under reduced motion | `useInputLevel` | **Done** (`b3e9339`) |
-| H2 | **Seekable `Take`**: a visible playhead and a mouse-hover time readout on the waveform (click/drag/keys already seek) | `components/take.tsx` | **Done** (see below) |
+| H2 | **Seekable `Take`**: a visible playhead and a mouse-hover time readout on the waveform (click/drag/keys already seek) | `components/take.tsx` | **Done** (`52f0dcc`) |
 | H3 | **Generation status line**: Preparing → Synthesizing → Ready, one distinct visual per state, in the live region | existing progress bar, live region, draw-in | Planned |
 | H4 | **Waveform previews on History rows**: static, drawn once, peaks precomputed | `Take` waveform | Planned (check whether the API can supply peaks) |
 | H5 | Optional list enter/exit smoothing (AutoAnimate, <3 kB) | none | **Needs owner approval**: §4.10 does not list list reordering |
