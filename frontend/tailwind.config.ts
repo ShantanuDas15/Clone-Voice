@@ -41,11 +41,24 @@ const config: Config = {
           from: { opacity: "0", transform: "scaleY(0.15)" },
           to: { opacity: "1", transform: "scaleY(1)" },
         },
+        // The home page only (§4.10, §12.19): the sample card rises once, its side bars draw once
+        // (transform only, so each bar keeps its own opacity), and the background ribbons drift.
+        rise: {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        "bar-in": { from: { transform: "scaleY(0)" }, to: { transform: "none" } },
+        drift: { from: { transform: "translateX(0)" }, to: { transform: "translateX(-50%)" } },
       },
       animation: {
         indeterminate: "indeterminate 1.4s ease-in-out infinite",
         "fade-in": "fade-in 200ms ease-out both",
         "draw-in": "draw-in 350ms ease-out both",
+        rise: "rise 200ms cubic-bezier(0.2, 0.7, 0.2, 1) both",
+        "bar-in": "bar-in 380ms cubic-bezier(0.2, 0.7, 0.2, 1) both",
+        "drift-slow": "drift 26s linear infinite",
+        "drift-mid": "drift 38s linear infinite reverse",
+        "drift-long": "drift 52s linear infinite",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],

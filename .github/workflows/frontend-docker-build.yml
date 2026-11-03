@@ -44,6 +44,12 @@ jobs:
           echo "$headers" | grep -i '^strict-transport-security:'
           echo "$headers" | grep -i '^x-content-type-options: nosniff'
           echo "$headers" | grep -i '^content-security-policy'
+      - name: Serves the home page's sample clip as audio
+        run: |
+          headers=$(curl -fsSI http://localhost:8123/samples/home-sample.wav)
+          echo "$headers"
+          echo "$headers" | head -1 | grep -q ' 200'
+          echo "$headers" | grep -i '^content-type: audio/'
       - name: Logs
         if: always()
         run: docker logs web || true

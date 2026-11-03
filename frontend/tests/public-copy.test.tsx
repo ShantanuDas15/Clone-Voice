@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,9 +36,41 @@ describe("landing page", () => {
   it("has one h1, a primary and a secondary action, and the three plain statements", () => {
     render(<HomePage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "Create account" })).toHaveAttribute("href", "/signup");
+    expect(screen.getAllByRole("link", { name: "Create account" })[0]).toHaveAttribute(
+      "href",
+      "/signup",
+    );
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    // The three plain statements, each under a short title; the steps are a separate, ordered list.
+    const statements = screen.getAllByRole("list")[0];
+    expect(within(statements as HTMLElement).getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByText("Consent first")).toBeInTheDocument();
+    expect(screen.getByText("Always labelled")).toBeInTheDocument();
+  });
+
+  it("walks the real three steps in order", () => {
+    const { container } = render(<HomePage />);
+    const ordered = container.querySelector("ol") as HTMLElement;
+    const titles = within(ordered)
+      .getAllByRole("listitem")
+      .map((li) => li.querySelector("h3")?.textContent);
+    expect(titles).toEqual(["Add a sample", "Type your text", "Play or download"]);
+  });
+
+  it("offers the sample and ends with the same sign-up action, under the same label", () => {
+    render(<HomePage />);
+    expect(screen.getByRole("group", { name: "Hear a sample" })).toBeInTheDocument();
+    // One action, one label (UX-13): the hero's link and the closing link both say "Create account".
+    const links = screen.getAllByRole("link", { name: "Create account" });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link).toHaveAttribute("href", "/signup");
+    expect(screen.queryByRole("link", { name: "Get started" })).not.toBeInTheDocument();
+  });
+
+  it("ends a signed-in visit with a way to add a voice", () => {
+    status = "authenticated";
+    render(<HomePage />);
+    expect(screen.getByRole("link", { name: "Add a voice" })).toHaveAttribute("href", "/voices");
   });
 
   it("publishes no retention figure (it is a server setting, UX plan §11.3)", () => {

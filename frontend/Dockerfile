@@ -39,6 +39,8 @@ ENV NODE_ENV=production \
 COPY --from=build /app/package.json /app/package-lock.json /app/next.config.mjs ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
+# Static files `next start` serves from /public (the home page's sample clip).
+COPY --from=build /app/public ./public
 
 # The image's built-in unprivileged user (uid 1000).
 USER node
