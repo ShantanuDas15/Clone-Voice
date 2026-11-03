@@ -57,6 +57,8 @@ export function Take({
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
+  // Where the mouse is over the waveform, 0..1; null when it is not (and always on touch).
+  const [hover, setHover] = useState<number | null>(null);
   // True while we are seeking past the end of a clip of unknown length to make the browser measure it.
   const measuring = useRef(false);
   // Measure a clip at most once, so a browser that cannot do it is not asked again and again.
@@ -240,9 +242,44 @@ export function Take({
           </div>
         </div>
       )}
-      <div className="relative h-12 rounded focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary">
+      <div
+        className="relative h-12 rounded focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary"
+        onPointerMove={(e) => {
+          if (e.pointerType !== "mouse" || duration === 0) return;
+          const box = e.currentTarget.getBoundingClientRect();
+          if (box.width === 0) return;
+          setHover(Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)));
+        }}
+        onPointerLeave={() => setHover(null)}
+      >
         {peaks && <Waveform peaks={peaks} progress={progress} animateIn={animateIn} />}
         {!peaks && <div aria-hidden className="absolute inset-x-0 top-1/2 h-0.5 bg-border" />}
+        {duration > 0 && (
+          <span
+            aria-hidden
+            data-testid="take-playhead"
+            className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 rounded bg-foreground"
+            style={{ left: `${progress * 100}%` }}
+          />
+        )}
+        {hover !== null && duration > 0 && (
+          <>
+            <span
+              aria-hidden
+              data-testid="take-hover-line"
+              className="pointer-events-none absolute inset-y-0 w-px -translate-x-1/2 bg-muted-foreground"
+              style={{ left: `${hover * 100}%` }}
+            />
+            <span
+              aria-hidden
+              data-testid="take-hover-time"
+              className="pointer-events-none absolute top-0 -translate-x-1/2 rounded border border-border bg-background px-1 font-mono text-xs tabular-nums"
+              style={{ left: `${Math.min(92, Math.max(8, hover * 100))}%` }}
+            >
+              {formatClock(hover * duration)}
+            </span>
+          </>
+        )}
         <input
           type="range"
           min={0}
