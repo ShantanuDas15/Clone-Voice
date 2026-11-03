@@ -1,0 +1,157 @@
+name: deploy
+
+# Deploys to Railway after CI has passed on `main`: merge a pull request, wait for the required checks,
+# and the services whose files changed go live, then the live site is smoke-tested.
+#
+# Why this is a workflow and not Railway's own GitHub autodeploy: when Railway builds from GitHub, the
+# repo-root `railway.toml` (the API's: its Dockerfile, health check and migration step) applies to every
+# service without a config path of its own, and Railway no longer lets that path be set through its API.
+# A trial build of `web` that way ran the backend and failed (it was disconnected again). `railway up`
+# from here uploads the checked-out commit to one named service, and has worked for every deploy so far.
+# Revisit when the services move to Infrastructure as Code (`.railway/railway.ts`); Railway stops
+# reading Config-as-Code files on 2026-12-01. See RAILWAY_DEPLOYMENT.md, "Automatic deploys".
+#
+# Two switches keep it safe:
+#   * a push deploys only while the repository variable AUTO_DEPLOY is "true" (the emergency stop:
+#     set it to anything else and merges stop deploying);
+#   * it needs the repository secret RAILWAY_TOKEN, a Railway *project* token for `production`.
+# Run by hand (Actions > deploy > Run workflow) to deploy one service or to roll back to a commit.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Which service to deploy"
+        type: choice
+        options: [both, web, api]
+        default: both
+      ref:
+        description: "Commit to deploy (blank means the head of main). To roll back, give the last good commit."
+        required: false
+        default: ""
+      skip_ci_gate:
+        description: "Deploy without waiting for the required checks (a rollback to a commit that predates a check)"
+        type: boolean
+        default: false
+
+# Read-only: it reads check results and the repository, and changes nothing in GitHub.
+permissions:
+  contents: read
+  checks: read
+
+# One deploy at a time, in the order the merges happened; a newer push waits, it never cancels one
+# that is mid-deploy.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  RAILWAY_CLI_VERSION: 5.71.0
+  # Identifiers, not secrets.
+  RAILWAY_ENVIRONMENT_NAME: production
+  # The checks that must have passed on the commit (the same four `main` requires to merge).
+  REQUIRED_CHECKS: check perf visual backend-tests
+
+jobs:
+  plan:
+    # A push deploys only when AUTO_DEPLOY is "true"; a manual run always may.
+    if: github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+      api: ${{ steps.pick.outputs.api }}
+      web: ${{ steps.pick.outputs.web }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Pick the commit and the services to deploy
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          api=false; web=false
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            sha=$(git rev-parse "${INPUT_REF:-HEAD}")
+            case "$INPUT_SERVICE" in
+              api) api=true ;;
+              web) web=true ;;
+              *) api=true; web=true ;;
+            esac
+          else
+            sha=$GITHUB_SHA
+            git diff --name-only "$BEFORE" "$sha" 2>/dev/null | sed 's/^/changed: /' || true
+            # Which services own the changed files (the rules are in the script, and tested).
+            eval "$(scripts/ci/changed-services.sh "$BEFORE" "$sha")"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "Deploying $sha: api=$api web=$web" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Wait for the required checks to pass on that commit
+        if: steps.pick.outputs.api == 'true' || steps.pick.outputs.web == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SKIP: ${{ inputs.skip_ci_gate }}
+          SHA: ${{ steps.pick.outputs.sha }}
+        run: |
+          if [ "${SKIP:-false}" = "true" ]; then
+            echo "::warning::CI gate skipped by request: deploying $SHA without waiting for its checks"
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          scripts/ci/wait-for-checks.sh "$SHA" 2700 $REQUIRED_CHECKS
+
+  deploy-api:
+    needs: plan
+    if: needs.plan.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - run: npm install --global "@railway/cli@${RAILWAY_CLI_VERSION}"
+      - name: Deploy the API
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SHA: ${{ needs.plan.outputs.sha }}
+        run: scripts/ci/deploy-service.sh api "$SHA"
+      - name: Smoke-test the live API
+        run: scripts/ci/smoke.sh api
+
+  deploy-web:
+    needs: [plan, deploy-api]
+    # After the API when both changed (a new migration and field are live before the app that uses them);
+    # still runs when the API was not part of this deploy, and not when the API deploy failed.
+    if: >-
+      always() && needs.plan.outputs.web == 'true' &&
+      (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - run: npm install --global "@railway/cli@${RAILWAY_CLI_VERSION}"
+      - name: Deploy the web app
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SHA: ${{ needs.plan.outputs.sha }}
+        run: scripts/ci/deploy-service.sh web "$SHA"
+      - name: Smoke-test the live web app
+        run: scripts/ci/smoke.sh web
