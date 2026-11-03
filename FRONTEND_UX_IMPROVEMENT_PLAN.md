@@ -936,7 +936,7 @@ The "Not done" lines of §12.17 (H1-H5 never watched in a browser, no Firefox or
 **Verified:** the full cross-browser job locally, 41 passed and 1 skipped (the WebKit recorder), on a production build; tsc, eslint, prettier. **Not done:** the animation itself is not judged (the spec checks that rows go and nothing throws, not how the easing looks); a real microphone and real server audio were not used; Safari on a device was not tried. No product code changed, and no bug was found.
 
 
-### 12.19 Home page redesign (2026-11-03)
+### 12.19 Home page redesign (2026-11-03, `d748ebb`)
 
 Replaces the plain home page (a grey box with a headline, three step cards, a promises list) with a hero that lets a visitor hear the product before signing up. The design was reviewed as a mockup first, then built into the app's own tokens, components and guardrails. The §4.10 motion exception above was approved for this page only.
 
