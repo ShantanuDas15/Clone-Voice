@@ -14,6 +14,7 @@ import { GoogleButton } from "@/components/google-button";
 import { googleErrorMessage } from "@/lib/auth/google-errors";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { sanitizeNext } from "@/lib/auth/next-path";
+import { pulseVoice } from "@/lib/voice-energy";
 import { ApiError } from "@/lib/errors";
 import { type LoginValues, loginSchema } from "@/lib/validation/auth";
 import { Alert } from "@/components/ui/alert";
@@ -64,7 +65,13 @@ export function LoginForm() {
   });
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-4">
+    <form
+      onSubmit={onSubmit}
+      onInput={() => pulseVoice(0.5)}
+      onFocus={() => pulseVoice(0.4)}
+      noValidate
+      className="space-y-4"
+    >
       {sessionEnded && <Alert>Your session ended. Sign in to continue.</Alert>}
       {callbackError && <Alert tone="danger">{callbackError}</Alert>}
       <GoogleButton />
