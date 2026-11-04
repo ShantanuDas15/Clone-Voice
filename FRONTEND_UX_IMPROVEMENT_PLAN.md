@@ -993,3 +993,10 @@ Builds design **A. Pulse** from the Phase 2 mockup, chosen by the owner. While a
 
 **Not done:** not tried on a real phone, or on Safari for iPhone (the build never routes audio through Web Audio, so the earlier worry should not apply, but it is untested); the test audio is a synthetic tone with a rising and falling level, not a real voice (the mockup used the real home-page clip); no screen-reader pass (the pulse is `aria-hidden`); not deployed; the home page's sample card does not pulse yet (its waveform is a separate component with its own baselines).
 
+**Follow-up: the Home sample card pulses too.** The card on the home page now uses the same pulse
+(`usePlaybackPulse`) while its clip plays. Its loudness curve is read when Play is first pressed (the
+WAV is fetched again, from the browser cache, and decoded; if that fails the card plays without the
+pulse), so nothing extra loads on arrival. The card's wave moved to the 48-high box the pulse is
+written for (96 px tall, up from 72) and its bars rest at 28 like the take's. Like the take, it moves
+only while playing, never under reduced motion, and stops when paused or ended, so the Home page's
+rule (nothing moves by itself for more than five seconds) is unchanged.

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -56,7 +56,7 @@ describe("HomeSampleCard", () => {
 
   it("draws its waveform in, bar by bar from the left, and only where motion is allowed", () => {
     render(<HomeSampleCard sample={sample} />);
-    const bars = [...screen.getByTestId("sample-wave").querySelectorAll("rect")];
+    const bars = [...screen.getByTestId("sample-wave").querySelectorAll(":scope > rect")];
     expect(bars).toHaveLength(sample.peaks.length);
     for (const bar of bars) {
       const cls = bar.getAttribute("class")!;
@@ -130,5 +130,82 @@ describe("HomeSampleCard", () => {
     claimPlayback(other);
     expect(pause).toHaveBeenCalled();
     expect(audio(container)).toBeTruthy();
+  });
+
+  describe("the playback pulse", () => {
+    let queue: Array<[number, FrameRequestCallback]>;
+    let now: number;
+    beforeEach(() => {
+      queue = [];
+      now = 0;
+      let id = 1;
+      vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+        queue.push([id, cb]);
+        return id++;
+      });
+      vi.stubGlobal("cancelAnimationFrame", (n: number) => {
+        queue = queue.filter(([i]) => i !== n);
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve({ blob: () => Promise.resolve(new Blob([new Uint8Array(8)])) }),
+        ),
+      );
+      const samples = new Float32Array(2000).fill(1);
+      vi.stubGlobal(
+        "AudioContext",
+        class {
+          decodeAudioData() {
+            return Promise.resolve({ sampleRate: 1000, getChannelData: () => samples });
+          }
+          close() {
+            return Promise.resolve();
+          }
+        },
+      );
+      window.AudioContext = globalThis.AudioContext;
+    });
+    const lit = () =>
+      [...screen.getByTestId("sample-pulse").children].filter(
+        (b) => Number(b.getAttribute("opacity")) > 0,
+      );
+
+    it("is hidden until the clip plays, then lights the bars at the playhead, and hides on pause", async () => {
+      const { container } = render(<HomeSampleCard sample={sample} />);
+      expect(lit()).toHaveLength(0);
+      expect(screen.getByTestId("sample-pulse").querySelectorAll("[style]")).toHaveLength(0);
+      const el = audio(container);
+      Object.defineProperty(el, "duration", { configurable: true, value: 2.9 });
+      fireEvent.loadedMetadata(el);
+      await userEvent.click(screen.getByRole("button", { name: "Play sample" }));
+      fireEvent.play(el);
+      expect(fetch).toHaveBeenCalledWith(sample.src);
+      // The loudness is read once the clip has been analysed; then the loop runs.
+      await waitFor(() => {
+        act(() => {
+          now += 40;
+          const due = queue;
+          queue = [];
+          due.forEach(([, cb]) => cb(now));
+        });
+        expect(lit().length).toBeGreaterThan(0);
+      });
+      fireEvent.pause(el);
+      expect(lit()).toHaveLength(0);
+    });
+
+    it("plays on without the pulse when the clip cannot be analysed", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.reject(new Error("offline"))),
+      );
+      const { container } = render(<HomeSampleCard sample={sample} />);
+      await userEvent.click(screen.getByRole("button", { name: "Play sample" }));
+      fireEvent.play(audio(container));
+      expect(screen.getByRole("button", { name: "Pause sample" })).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(lit()).toHaveLength(0);
+    });
   });
 });
