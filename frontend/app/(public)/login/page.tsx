@@ -8,7 +8,15 @@ export const metadata: Metadata = { title: "Sign in" };
 
 export default function LoginPage() {
   return (
-    <AuthCard title="Sign in" lead="Welcome back. Sign in to your voices and history.">
+    <AuthCard
+      title="Sign in"
+      lead="Welcome back. Sign in to your voices and history."
+      panel={{
+        headline: "Welcome back.",
+        accent: "Your voices are waiting.",
+        lead: "Pick up where you left off: your voices, your history, and anything you were about to say.",
+      }}
+    >
       <Suspense>
         <LoginForm />
       </Suspense>

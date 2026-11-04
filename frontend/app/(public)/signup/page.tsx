@@ -10,6 +10,11 @@ export default function SignupPage() {
     <AuthCard
       title="Create your account"
       lead="Clone a voice you have the right to use in a few minutes."
+      panel={{
+        headline: "Clone a voice.",
+        accent: "Say anything.",
+        lead: "Add a short sample of a voice you have the right to use, then turn any text into speech in that voice.",
+      }}
     >
       <SignupForm />
     </AuthCard>
