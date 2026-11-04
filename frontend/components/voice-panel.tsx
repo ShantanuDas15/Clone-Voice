@@ -1,5 +1,4 @@
-import { drawDelay } from "@/lib/home-backdrop";
-import { panelBars } from "@/lib/auth-panel";
+import { VoiceState, Wave } from "@/components/voice-wave";
 
 /** Words for the panel beside a sign-in or sign-up form. */
 export interface PanelCopy {
@@ -8,42 +7,6 @@ export interface PanelCopy {
   /** The second part, in the accent colour. */
   accent: string;
   lead: string;
-}
-
-/**
- * One row of voice bars, drawn once, left to right, and then still. Presentation attributes and
- * classes only: the site's Content-Security-Policy forbids inline styles. `motion-safe` keeps the
- * draw-in off under `prefers-reduced-motion`, which shows the finished row at once. Decorative.
- */
-function Wave({ count, className }: { count: number; className: string }) {
-  const bars = panelBars(count);
-  return (
-    <svg
-      aria-hidden
-      focusable="false"
-      data-testid="voice-wave"
-      viewBox={`0 0 ${count * 8} 100`}
-      preserveAspectRatio="none"
-      className={className}
-    >
-      {bars.map((bar, i) => {
-        const h = bar.height * 100;
-        return (
-          <rect
-            key={i}
-            x={i * 8 + 1}
-            y={50 - h / 2}
-            width={6}
-            height={h}
-            rx={3}
-            className={`origin-center [transform-box:fill-box] motion-safe:animate-bar-in ${drawDelay(i, 4)} ${
-              bar.accent ? "fill-primary" : "fill-line/60"
-            }`}
-          />
-        );
-      })}
-    </svg>
-  );
 }
 
 /** The thin version of the wave that sits above the card on screens too narrow for the panel. */
@@ -67,17 +30,29 @@ export function VoicePanel({ copy }: { copy: PanelCopy }) {
     <aside
       aria-hidden
       data-testid="voice-panel"
-      className="hidden min-w-0 flex-col justify-between gap-8 py-2 lg:flex"
+      className="relative hidden min-w-0 flex-col justify-between gap-8 py-2 lg:flex"
     >
-      <div>
-        <p className="font-mono text-sm text-muted-foreground">Voice cloning, with consent</p>
-        <p className="mt-2 text-balance text-4xl font-semibold leading-[1.1] tracking-tight">
+      <Glow />
+      <div className="relative">
+        <p className="flex items-center gap-2.5 font-mono text-sm text-muted-foreground">
+          <span className="size-2 rounded-full bg-primary" />
+          Voice cloning, with consent
+        </p>
+        <p className="mt-3 text-balance text-5xl font-bold leading-[1.05] tracking-tight">
           {copy.headline} <span className="text-primary">{copy.accent}</span>
         </p>
-        <p className="mt-4 max-w-md text-muted-foreground">{copy.lead}</p>
+        <p className="mt-4 max-w-md text-lg text-muted-foreground">{copy.lead}</p>
       </div>
-      <Wave count={56} className="h-56 w-full" />
-      <dl className="space-y-3 border-t border-border pt-5 text-sm">
+      <div className="relative">
+        <Wave count={56} className="h-56 w-full" />
+        <p
+          data-testid="voice-state"
+          className="mt-3 border-t border-border pt-2 font-mono text-xs text-muted-foreground"
+        >
+          voiceprint · <VoiceState />
+        </p>
+      </div>
+      <dl className="relative space-y-3 text-sm">
         {PROMISES.map(([term, detail]) => (
           <div key={term} className="grid grid-cols-[9.5rem_1fr] gap-3">
             <dt className="font-medium">{term}</dt>
@@ -86,5 +61,22 @@ export function VoicePanel({ copy }: { copy: PanelCopy }) {
         ))}
       </dl>
     </aside>
+  );
+}
+
+/**
+ * A still teal glow behind the wave: three stacked, very faint discs. The flat style (UX plan §4)
+ * keeps surfaces flat, so the soft edge comes from the stacking. Never animates.
+ */
+function Glow() {
+  return (
+    <div
+      data-testid="voice-glow"
+      className="pointer-events-none absolute -left-24 top-1/4 -z-10 size-[34rem] max-w-none"
+    >
+      <span className="absolute inset-0 rounded-full bg-primary/[0.03]" />
+      <span className="absolute inset-12 rounded-full bg-primary/[0.04]" />
+      <span className="absolute inset-24 rounded-full bg-primary/[0.05]" />
+    </div>
   );
 }

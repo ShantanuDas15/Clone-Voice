@@ -20,9 +20,9 @@ export function AuthCard({
 }) {
   const card = (
     <section
-      className={`mx-auto mt-2 w-full max-w-md rounded-lg border border-border bg-surface p-6 sm:mt-8 sm:p-8 ${
-        panel ? "lg:mx-0 lg:mt-0 lg:self-center lg:justify-self-end" : ""
-      }`}
+      className={`mx-auto mt-2 w-full max-w-md rounded-lg border bg-surface p-6 sm:mt-8 sm:p-8 ${
+        panel ? "border-primary/40" : "border-border"
+      } ${panel ? "lg:mx-0 lg:mt-0 lg:self-center lg:justify-self-end" : ""}`}
     >
       {panel && <VoiceStrip />}
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

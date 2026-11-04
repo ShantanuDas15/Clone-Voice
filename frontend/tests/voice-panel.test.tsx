@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { AuthCard } from "@/components/auth-card";
 import { panelBars } from "@/lib/auth-panel";
+import { addEnergy, decayEnergy, pulseVoice, swollenHeight } from "@/lib/voice-energy";
 
 const copy = { headline: "Welcome back.", accent: "Your voices are waiting.", lead: "Pick up." };
 
@@ -74,5 +75,65 @@ describe("AuthCard with a voice panel", () => {
     );
     expect(screen.queryByTestId("voice-panel")).toBeNull();
     expect(screen.queryByTestId("voice-wave")).toBeNull();
+  });
+});
+
+describe("voice energy", () => {
+  it("adds, caps and decays to rest", () => {
+    expect(addEnergy(0.8, 0.5)).toBe(1);
+    expect(addEnergy(0, 0.5)).toBe(0.5);
+    let e = 1;
+    let frames = 0;
+    while (e > 0) {
+      e = decayEnergy(e);
+      frames += 1;
+    }
+    expect(frames).toBeLessThan(120); // about 2 s at 60 fps: settles well inside WCAG 2.2.2's 5 s
+  });
+
+  it("swells a bar only while there is energy, and never past the box", () => {
+    expect(swollenHeight(0.4, 0, 3, 1000)).toBeCloseTo(0.4);
+    expect(swollenHeight(0.4, 1, 3, 1000)).toBeGreaterThanOrEqual(0.4);
+    expect(swollenHeight(0.9, 1, 0, 0)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("the wave reacting to the form beside it", () => {
+  it("swells bars on a pulse, then settles back to rest, with no inline style", () => {
+    vi.useFakeTimers();
+    const raf = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((cb) => setTimeout(() => cb(performance.now()), 16) as unknown as number);
+    const { container } = render(
+      <AuthCard title="Sign in" panel={copy}>
+        <p>form</p>
+      </AuthCard>,
+    );
+    const rect = container.querySelector("[data-testid='voice-wave'] rect")!;
+    const rest = rect.getAttribute("height");
+    act(() => pulseVoice(1));
+    act(() => vi.advanceTimersByTime(48));
+    expect(rect.getAttribute("height")).not.toBe(rest);
+    act(() => vi.advanceTimersByTime(4000));
+    expect(rect.getAttribute("height")).toBe(rest);
+    expect(container.querySelector("[style]")).toBeNull();
+    raf.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("labels the state: listening after a pulse, idle again after a moment", () => {
+    vi.useFakeTimers();
+    render(
+      <AuthCard title="Sign in" panel={copy}>
+        <p>form</p>
+      </AuthCard>,
+    );
+    const state = screen.getByTestId("voice-state");
+    expect(state).toHaveTextContent("voiceprint · idle");
+    act(() => pulseVoice(0.5));
+    expect(state).toHaveTextContent("listening");
+    act(() => vi.advanceTimersByTime(1500));
+    expect(state).toHaveTextContent("idle");
+    vi.useRealTimers();
   });
 });
