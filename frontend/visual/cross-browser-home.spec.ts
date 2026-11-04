@@ -141,3 +141,33 @@ test("under reduced motion nothing on the home page animates", async ({ page }) 
   );
   expect(running).toEqual([]);
 });
+
+test("the sample card pulses with the clip while it plays, and is still when it is not", async ({
+  page,
+}) => {
+  test.setTimeout(45_000);
+  // The visual config pins reduced motion; the pulse needs the visitor to allow motion.
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${ORIGIN}/`);
+  const lit = page.locator('[data-testid="sample-pulse"] rect:not([opacity="0"])');
+  await expect(lit).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Play sample" }).click();
+  await expect(page.getByRole("button", { name: "Pause sample" })).toBeVisible({ timeout: 10_000 });
+  // Some bars around the playhead light up, and their heights change as the clip's loudness does.
+  await expect.poll(() => lit.count(), { timeout: 5_000 }).toBeGreaterThan(0);
+  const heights = new Set<string>();
+  for (let i = 0; i < 6; i++) {
+    const all = await page
+      .locator('[data-testid="sample-pulse"] rect')
+      .evaluateAll((rs) => rs.map((r) => r.getAttribute("height")).join(","));
+    heights.add(all);
+    await page.waitForTimeout(120);
+  }
+  expect(heights.size).toBeGreaterThan(1);
+
+  // After the clip ends, every pulse bar is hidden again.
+  await expect(page.getByRole("button", { name: "Play sample" })).toBeVisible({ timeout: 15_000 });
+  await expect(lit).toHaveCount(0);
+});
