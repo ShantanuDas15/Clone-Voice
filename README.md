@@ -5,6 +5,18 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-green.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)
 
+[![Live demo](https://img.shields.io/badge/live%20demo-voice.shantanudas.dev-0B6E69.svg)](https://voice.shantanudas.dev)
+
+## 🌐 Live demo
+
+**[voice.shantanudas.dev](https://voice.shantanudas.dev)** is the deployed application (Railway: Next.js web app, FastAPI API, PostgreSQL and Redis).
+
+- Open the home page and press **Play sample** to hear speech the app generated from a short recording, with the speaker's consent.
+- The sign-in and sign-up screens are open to look at.
+- **Note:** creating a voice and generating speech need a verified email address, and the deployment has no email provider configured yet, so a new account cannot complete verification there. See [`RAILWAY_READINESS_REPORT.md`](RAILWAY_READINESS_REPORT.md) (finding F-07).
+
+Every merge to `main` is tested in CI and then deployed automatically ([`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md), "Automatic deploys").
+
 > **CloneVoice** is an AI-powered full-stack web application that allows users to clone a person's voice from a short audio sample and synthesize new speech mimicking the original speaker's tone, pitch, and style.
 
 ## ✨ Features
