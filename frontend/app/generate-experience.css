@@ -1,0 +1,332 @@
+/*
+ * The Generate screen's look (owner approved the full mock, 2026-11-04; UX plan §4.10 and §12.26):
+ * a drifting aurora, glass cards with a glowing edge, voice cards and delivery chips, glowing focus,
+ * a gradient Generate button, and a stage whose voiceprint reacts to what you do.
+ *
+ * Like auth-experience.css and home-experience.css this is a scoped exception to the flat-style and
+ * no-looping-motion rules: every selector starts with `gx-` (or sits under `.gx-`), it is imported
+ * only by the Generate page, colours come from the theme tokens, and tests/generate-experience.test.ts
+ * bounds it. The endless movement (aurora, voiceprint ripple) stops under the visitor's "Pause
+ * motion" control (WCAG 2.2.2) and under prefers-reduced-motion. The indeterminate progress bar is
+ * the app's existing in-flight indicator and is not part of this exception.
+ */
+
+.gx-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+}
+.gx-aurora i {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(100px);
+  will-change: transform;
+}
+.gx-aurora .gx-a {
+  left: -12%;
+  top: 6%;
+  width: min(52vw, 720px);
+  height: min(52vw, 720px);
+  background: hsl(var(--primary) / 0.2);
+  animation: gx-drift-a 26s ease-in-out infinite alternate;
+}
+.gx-aurora .gx-b {
+  right: -8%;
+  top: 40%;
+  width: min(38vw, 520px);
+  height: min(38vw, 520px);
+  background: hsl(238 85% 68% / 0.14);
+  animation: gx-drift-b 32s ease-in-out infinite alternate;
+}
+@keyframes gx-drift-a {
+  to {
+    transform: translate3d(7vw, 8vh, 0) scale(1.1);
+  }
+}
+@keyframes gx-drift-b {
+  to {
+    transform: translate3d(-6vw, -6vh, 0) scale(0.92);
+  }
+}
+
+.gx-card {
+  position: relative;
+  min-width: 0;
+  padding: clamp(1.1rem, 2.4vw, 1.75rem);
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px;
+  background: hsl(var(--surface) / 0.66);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 30px 70px -36px hsl(0 0% 0% / 0.4),
+    inset 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+.gx-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: 20px;
+  background: linear-gradient(
+    140deg,
+    hsl(var(--primary)),
+    transparent 36%,
+    transparent 72%,
+    hsl(238 85% 68% / 0.5)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Step labels: a small number, the label, and room for a count on the right. */
+.gx-lab {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.gx-n {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: hsl(var(--primary));
+}
+.gx-count-s {
+  margin-left: auto;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Voice cards: a native radio group, drawn as cards. */
+.gx-voices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: 0.6rem;
+  max-height: 17rem;
+  overflow-y: auto;
+  padding: 2px;
+}
+.gx-vc {
+  position: relative;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.8rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--surface) / 0.6);
+  cursor: pointer;
+  transition:
+    border-color 200ms,
+    background 200ms;
+}
+.gx-vc:hover {
+  border-color: hsl(var(--line));
+}
+.gx-vc:has(input:checked) {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.2);
+}
+.gx-vc:has(input:focus-visible) {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+.gx-vc:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.gx-vname {
+  padding-right: 1.5rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.gx-vnote {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+.gx-tick {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1px solid hsl(var(--line));
+  border-radius: 9999px;
+}
+.gx-vc:has(input:checked) .gx-tick {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  box-shadow: inset 0 0 0 3px hsl(var(--primary-foreground));
+}
+.gx-glyph {
+  display: block;
+  width: 100%;
+  height: 1.6rem;
+}
+.gx-glyph rect {
+  fill: hsl(var(--primary));
+}
+
+/* Delivery chips: also a native radio group. */
+.gx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.gx-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    border-color 200ms,
+    background 200ms;
+}
+.gx-chip:hover {
+  border-color: hsl(var(--line));
+}
+.gx-chip:has(input:checked) {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.2);
+  font-weight: 600;
+}
+.gx-chip:has(input:focus-visible) {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+.gx-chip:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* The text box and the Generate button. */
+.gx-form textarea {
+  min-height: 9.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: hsl(var(--surface) / 0.7);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  transition:
+    border-color 200ms,
+    box-shadow 200ms;
+}
+.gx-form textarea:focus {
+  border-color: hsl(var(--primary));
+  box-shadow:
+    0 0 0 4px hsl(var(--primary) / 0.25),
+    0 0 24px -6px hsl(var(--primary));
+}
+.gx-actions {
+  background: hsl(var(--surface) / 0.85);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+/* From lg up the form and the stage are both on screen, so the bar rests under the form; below that
+   it stays sticky above the tab bar while the text grows (the Tailwind classes on the element). */
+@media (min-width: 1024px) {
+  .gx-form .gx-actions {
+    position: static;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+.gx-actions button[type="submit"] {
+  min-height: 3.1rem;
+  padding-inline: 1.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+  background-image: linear-gradient(
+    120deg,
+    hsl(var(--primary)),
+    color-mix(in srgb, hsl(var(--primary)) 68%, hsl(238 85% 72%))
+  );
+  box-shadow: 0 12px 30px -12px hsl(var(--primary));
+  transition:
+    transform 150ms,
+    box-shadow 200ms;
+}
+.gx-actions button[type="submit"]:hover:not([aria-busy="true"]) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px -12px hsl(var(--primary));
+}
+
+/* The stage. */
+.gx-tag[data-state="working"],
+.gx-tag[data-state="done"] {
+  color: hsl(var(--primary));
+}
+.gx-clock {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: clamp(2.5rem, 6vw, 3.75rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+/* The finished take keeps its controls; it just wears the stage's look. */
+.gx-stage [data-take-play] {
+  min-width: 4.75rem;
+  border: 0;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+  box-shadow: 0 0 0 5px hsl(var(--primary) / 0.22);
+}
+.gx-stage [data-take-wave] {
+  height: 5.25rem;
+}
+
+.gx-motion {
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The visitor's "Pause motion" control: every endless movement holds still. */
+[data-motion="paused"] .gx-aurora i {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gx-aurora i {
+    animation: none;
+  }
+  .gx-vc,
+  .gx-chip,
+  .gx-form textarea,
+  .gx-actions button[type="submit"] {
+    transition: none;
+  }
+  .gx-actions button[type="submit"]:hover {
+    transform: none;
+  }
+  .gx-motion {
+    display: none;
+  }
+}

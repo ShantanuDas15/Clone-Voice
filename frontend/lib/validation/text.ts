@@ -15,6 +15,11 @@ export function countWords(text: string): number {
   return text.match(/[A-Za-z0-9']+/g)?.length ?? 0;
 }
 
+/** Sentences in `text`: runs of words ended by . ! ? or the end; 0 for blank text. A display count only. */
+export function countSentences(text: string): number {
+  return (text.match(/[^.!?]*[A-Za-z0-9][^.!?]*[.!?]*/g) ?? []).length;
+}
+
 /**
  * Light pre-warning only (R6): emoji and pictographs are never in the SV2TTS symbol set. Everything
  * else is left to the server's 422 message, whose rules depend on `unidecode` behaviour.

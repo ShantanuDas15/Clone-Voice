@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { createVoice, signUpVerified } from "./helpers";
+import { chooseVoice, createVoice, signUpVerified } from "./helpers";
 
 test("generate → play → download → history → replay from history (real weights)", async ({
   page,
@@ -10,9 +10,7 @@ test("generate → play → download → history → replay from history (real w
   await createVoice(page, "Synth voice");
 
   await page.goto("/generate");
-  const select = page.getByLabel("Voice");
-  await expect(select).toBeEnabled();
-  await select.selectOption({ label: "Synth voice" });
+  await chooseVoice(page, "Synth voice");
   await page.getByLabel("Text").fill("Hello there.");
   let synthRequests = 0;
   page.on("request", (r) => {
@@ -65,7 +63,7 @@ test("a text with unsupported characters is refused by the server and shown on t
   await signUpVerified(page, "badtext");
   await createVoice(page, "Text voice");
   await page.goto("/generate");
-  await page.getByLabel("Voice").selectOption({ label: "Text voice" });
+  await chooseVoice(page, "Text voice");
   await page.getByLabel("Text").fill("Use <b>bold</b> here");
   await page.getByRole("button", { name: "Generate speech" }).click();
   await expect(page.getByText(/unsupported|characters/i).first()).toBeVisible({ timeout: 30_000 });
@@ -78,7 +76,7 @@ test("delete a generation from History: it is gone after a reload, not just hidd
   await signUpVerified(page, "gendel");
   await createVoice(page, "Delete voice");
   await page.goto("/generate");
-  await page.getByLabel("Voice").selectOption({ label: "Delete voice" });
+  await chooseVoice(page, "Delete voice");
   await page.getByLabel("Text").fill("Remove this one.");
   await page.getByRole("button", { name: "Generate speech" }).click();
   await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached({
@@ -110,7 +108,7 @@ test("filter History by voice: two voices, each row and count follows the choice
     { voice: "Filter two", text: "Spoken by the second." },
   ]) {
     await page.goto("/generate");
-    await page.getByLabel("Voice").selectOption({ label: voice });
+    await chooseVoice(page, voice);
     await page.getByLabel("Text").fill(text);
     await page.getByRole("button", { name: "Generate speech" }).click();
     await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached({
@@ -139,7 +137,7 @@ test("search History by the text typed: matches, no match, clear, literal wildca
   await createVoice(page, "Find voice");
   for (const text of ["Happy birthday to you.", "The weather is mild."]) {
     await page.goto("/generate");
-    await page.getByLabel("Voice").selectOption({ label: "Find voice" });
+    await chooseVoice(page, "Find voice");
     await page.getByLabel("Text").fill(text);
     await page.getByRole("button", { name: "Generate speech" }).click();
     await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached({

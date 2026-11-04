@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { SAMPLE_WAV, createVoice, signUpVerified } from "./helpers";
+import { SAMPLE_WAV, chooseVoice, createVoice, signUpVerified } from "./helpers";
 
 test("degraded health: banner shows and generate/upload are paused, then recover", async ({
   page,
@@ -65,7 +65,7 @@ test("a dropped connection during synthesis is not treated as failure and is nev
   await signUpVerified(page, "dropsynth");
   await createVoice(page, "Drop voice");
   await page.goto("/generate");
-  await page.getByLabel("Voice").selectOption({ label: "Drop voice" });
+  await chooseVoice(page, "Drop voice");
   await page.getByLabel("Text").fill("Hello there.");
 
   let attempts = 0;

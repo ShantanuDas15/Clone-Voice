@@ -13,6 +13,7 @@ import { clearDraft, saveDraft } from "@/lib/draft";
 import { __resetSessionForTests } from "@/lib/auth/session";
 import { hasLikelyUnsupportedChars, synthesisTextSchema } from "@/lib/validation/text";
 import { fixtures } from "@/mocks/handlers";
+import { chooseDelivery, pickVoice, voiceRadio, voicesLoaded } from "./voice-pick";
 import { server } from "@/mocks/server";
 
 vi.mock("next/navigation", () => ({
@@ -49,9 +50,7 @@ beforeEach(() => {
 
 async function generate(text = "Hello there.") {
   const user = userEvent.setup();
-  const select = await screen.findByLabelText("Voice");
-  await waitFor(() => expect(select).not.toBeDisabled());
-  await user.selectOptions(select, fixtures.profile.id);
+  await pickVoice(user, fixtures.profile.id);
   if (text) await user.type(screen.getByLabelText("Text"), text);
   await user.click(screen.getByRole("button", { name: "Generate speech" }));
   return user;
@@ -120,7 +119,7 @@ describe("TextToSpeechForm", () => {
     await user.type(screen.getByLabelText("Text"), "Second.");
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith(first));
-    expect(screen.getByLabelText("Voice")).toHaveValue(fixtures.profile.id);
+    expect(await voiceRadio(fixtures.profile.id)).toBeChecked();
   });
 
   it("offers Edit text and Generate again on a result", async () => {
@@ -192,14 +191,21 @@ describe("TextToSpeechForm", () => {
   it("makes no request without a voice or with blank text", async () => {
     let calls = 0;
     server.use(mswHttp.post(`${API}/synthesize`, () => ((calls += 1), wavResponse())));
+    // Two ready voices, so nothing is preselected (a radio cannot be cleared once chosen).
+    server.use(
+      mswHttp.get(`${API}/voice/profiles`, () =>
+        HttpResponse.json([
+          fixtures.profile,
+          { ...fixtures.profile, id: "44444444-4444-4444-8444-444444444444", name: "Other" },
+        ]),
+      ),
+    );
     wrap(<TextToSpeechForm />);
     const user = userEvent.setup();
-    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
-    await waitFor(() => expect(select).not.toBeDisabled());
-    await user.selectOptions(select, ""); // the only voice is preselected; unselect it
+    await voicesLoaded();
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     expect(await screen.findByText("Choose a voice first.")).toBeInTheDocument();
-    await user.selectOptions(select, fixtures.profile.id);
+    await pickVoice(user, fixtures.profile.id);
     await user.type(screen.getByLabelText("Text"), "   ");
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     expect(await screen.findByText("Enter some text to speak")).toBeInTheDocument();
@@ -487,11 +493,9 @@ describe("delivery controls", () => {
     });
     wrap(<TextToSpeechForm />);
     const user = userEvent.setup();
-    const select = await screen.findByLabelText("Voice");
-    await waitFor(() => expect(select).not.toBeDisabled());
-    await user.selectOptions(select, fixtures.profile.id);
+    await pickVoice(user, fixtures.profile.id);
     await user.type(screen.getByLabelText("Text"), "Hello there.");
-    await user.selectOptions(await screen.findByLabelText("Delivery"), "happy");
+    await chooseDelivery(user, "happy");
     const slider = await screen.findByLabelText(/Strength/);
     expect(slider).toBeEnabled();
     fireEvent.change(slider, { target: { value: "0.8" } });
@@ -512,11 +516,9 @@ describe("delivery controls", () => {
     post({ "X-Voice-Style": "ignored" });
     wrap(<TextToSpeechForm />);
     const user = userEvent.setup();
-    const select = await screen.findByLabelText("Voice");
-    await waitFor(() => expect(select).not.toBeDisabled());
-    await user.selectOptions(select, fixtures.profile.id);
+    await pickVoice(user, fixtures.profile.id);
     await user.type(screen.getByLabelText("Text"), "Hello there.");
-    await user.selectOptions(await screen.findByLabelText("Delivery"), "sad");
+    await chooseDelivery(user, "sad");
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     expect(await screen.findByText(/could not be applied/)).toBeInTheDocument();
   });
@@ -526,9 +528,7 @@ describe("delivery controls", () => {
       post(headers);
       wrap(<TextToSpeechForm />);
       const user = userEvent.setup();
-      const select = await screen.findByLabelText("Voice");
-      await waitFor(() => expect(select).not.toBeDisabled());
-      await user.selectOptions(select, fixtures.profile.id);
+      await pickVoice(user, fixtures.profile.id);
       await user.type(screen.getByLabelText("Text"), "Hello there.");
       await user.click(screen.getByRole("button", { name: "Generate speech" }));
       await screen.findByRole("link", { name: "Download WAV" });
@@ -575,7 +575,7 @@ describe("delivery controls", () => {
     wrap(<TextToSpeechForm />);
     await generate();
     await screen.findByRole("link", { name: "Download WAV" });
-    expect(screen.queryByLabelText("Delivery")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Delivery" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Strength/)).not.toBeInTheDocument();
     expect(seen.body).toEqual({ voice_profile_id: fixtures.profile.id, text: "Hello there." });
   });
@@ -590,7 +590,7 @@ describe("delivery controls", () => {
     wrap(<TextToSpeechForm />);
     await generate();
     expect(await screen.findByRole("link", { name: "Download WAV" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Delivery")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Delivery" })).not.toBeInTheDocument();
   });
 });
 
@@ -616,7 +616,7 @@ describe("generate screen details", () => {
     expect(screen.getByText("520 / 500 (20 too many)")).toBeInTheDocument();
     expect(await screen.findByText(/over the 500-character limit/i)).toBeInTheDocument();
     expect(box).toHaveAttribute("aria-invalid", "true");
-    await waitFor(() => expect(screen.getByLabelText("Voice")).not.toBeDisabled());
+    await voicesLoaded();
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     expect(await screen.findByText("Text must be at most 500 characters")).toBeInTheDocument();
     expect(calls).toBe(0);
@@ -687,8 +687,7 @@ describe("generate screen details", () => {
 
   it("preselects the only ready voice", async () => {
     wrap(<TextToSpeechForm />);
-    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe(fixtures.profile.id));
+    await waitFor(async () => expect(await voiceRadio(fixtures.profile.id)).toBeChecked());
   });
 
   it("leaves the choice to the user with two ready voices", async () => {
@@ -701,9 +700,8 @@ describe("generate screen details", () => {
       ),
     );
     wrap(<TextToSpeechForm />);
-    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
-    await waitFor(() => expect(select).not.toBeDisabled());
-    expect(select.value).toBe("");
+    await voicesLoaded();
+    expect(document.querySelectorAll('input[name="tts-voice"]:checked')).toHaveLength(0);
   });
 
   it("puts the player first and cuts a long quote with Show more", async () => {
@@ -733,7 +731,7 @@ describe("generate screen details", () => {
     wrap(<TextToSpeechForm />);
     const slider = await screen.findByLabelText(/Strength/);
     expect(screen.getByText("(choose a delivery to adjust)")).toBeInTheDocument();
-    await userEvent.setup().selectOptions(screen.getByLabelText("Delivery"), "happy");
+    await chooseDelivery(userEvent.setup(), "happy");
     expect(slider).not.toBeDisabled();
     expect(screen.getByText("50%")).toBeInTheDocument();
     expect(slider).toHaveClass("range");
@@ -753,7 +751,7 @@ describe("generate screen details", () => {
     );
     wrap(<TextToSpeechForm />);
     await screen.findByLabelText("Text");
-    await waitFor(() => expect(screen.getByLabelText("Voice")).not.toBeDisabled());
+    await voicesLoaded();
     expect(screen.queryByText("Tips for expressive speech")).not.toBeInTheDocument();
   });
 });

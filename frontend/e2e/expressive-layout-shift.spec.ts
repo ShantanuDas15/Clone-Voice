@@ -29,7 +29,7 @@ for (const width of CLS_WIDTHS) {
     await page.goto("/generate");
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
     // Proves the backend is configured as intended: the controls are only there if it says so.
-    await expect(page.getByLabel("Delivery", { exact: true })).toBeVisible();
+    await expect(page.getByRole("radiogroup", { name: "Delivery" })).toBeVisible();
     await page.waitForLoadState("networkidle");
     expect(await cls(page), await clsWhat(page)).toBeLessThan(0.1);
   });

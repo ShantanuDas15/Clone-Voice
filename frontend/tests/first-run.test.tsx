@@ -14,6 +14,7 @@ import { clearDraft } from "@/lib/draft";
 import { firstRun } from "@/lib/first-run";
 import { __resetSessionForTests } from "@/lib/auth/session";
 import { fixtures } from "@/mocks/handlers";
+import { voiceRadio, voicesLoaded } from "./voice-pick";
 import { server } from "@/mocks/server";
 
 vi.mock("next/navigation", () => ({
@@ -139,8 +140,7 @@ describe("Generate readiness", () => {
   it("verified with a ready voice: enabled and no reason shown", async () => {
     setup({ verified: true, profiles: [fixtures.profile] });
     wrap(<TextToSpeechForm />);
-    const select = await screen.findByLabelText("Voice");
-    await waitFor(() => expect(select).not.toBeDisabled());
+    await voicesLoaded();
     expect(screen.getByRole("button", { name: "Generate speech" })).toBeEnabled();
     expect(screen.queryByText(/first\.$/)).toBeNull();
   });
@@ -148,8 +148,7 @@ describe("Generate readiness", () => {
   it("preselects the voice named in the link", async () => {
     setup({ verified: true, profiles: [fixtures.profile] });
     wrap(<TextToSpeechForm initialVoiceId={fixtures.profile.id} />);
-    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe(fixtures.profile.id));
+    await waitFor(async () => expect(await voiceRadio(fixtures.profile.id)).toBeChecked());
   });
 
   it("ignores a preselected voice that no longer exists", async () => {
@@ -162,10 +161,9 @@ describe("Generate readiness", () => {
       ],
     });
     wrap(<TextToSpeechForm initialVoiceId="99999999-9999-4999-8999-999999999999" />);
-    const select = (await screen.findByLabelText("Voice")) as HTMLSelectElement;
-    await waitFor(() => expect(select).not.toBeDisabled());
-    await waitFor(() => expect(select.value).toBe(""));
-    await userEvent.setup().selectOptions(select, fixtures.profile.id);
-    expect(select.value).toBe(fixtures.profile.id);
+    const radio = await voiceRadio(fixtures.profile.id);
+    expect(radio).not.toBeChecked(); // the missing voice is not left selected
+    await userEvent.setup().click(radio);
+    expect(radio).toBeChecked();
   });
 });

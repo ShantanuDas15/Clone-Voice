@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import "../../generate-experience.css";
+
 import { FirstRunChecklist } from "@/components/first-run-checklist";
 import { PageHeader } from "@/components/ui/page-header";
 import { TextToSpeechForm } from "@/components/text-to-speech-form";

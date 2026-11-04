@@ -11,6 +11,7 @@ import { TextToSpeechForm } from "@/components/text-to-speech-form";
 import { __resetSessionForTests } from "@/lib/auth/session";
 import { clearDraft } from "@/lib/draft";
 import { fixtures } from "@/mocks/handlers";
+import { chooseDelivery, pickVoice, voiceRadio, voicesLoaded } from "./voice-pick";
 import { server } from "@/mocks/server";
 
 vi.mock("next/navigation", () => ({
@@ -23,13 +24,13 @@ const wav = () =>
   new HttpResponse(new Uint8Array([82, 73, 70, 70]), { headers: { "Content-Type": "audio/wav" } });
 
 describe("GenerateStage (UX plan §12.21)", () => {
-  it("ready: a resting line, the three steps, and the region named for what it will hold", () => {
+  it("ready: the live voiceprint, the three steps, and the region named for what it will hold", () => {
     render(<GenerateStage state="ready" elapsed={0} />);
     const region = screen.getByRole("region", { name: "Your audio appears here" });
     expect(region).toHaveAttribute("data-state", "ready");
     expect(region).toHaveTextContent("Choose a voice.");
     expect(region).toHaveTextContent("Press Generate speech, then play or download.");
-    expect(screen.getByTestId("stage-baseline").querySelectorAll("rect")).toHaveLength(64);
+    expect(screen.getByTestId("stage-voiceprint").querySelector("canvas")).not.toBeNull();
     expect(screen.getByTestId("stage-tag")).toHaveTextContent("Ready");
     expect(screen.queryByText(/^Voice:/)).not.toBeInTheDocument();
   });
@@ -48,19 +49,20 @@ describe("GenerateStage (UX plan §12.21)", () => {
     expect(screen.getByRole("region").className.split(/\s+/)).not.toContain("hidden");
   });
 
-  it("working: the real status and clock, over the same resting line, with the voice named", () => {
+  it("working: the real status and a big clock, over the same voiceprint, with the voice named", () => {
     render(<GenerateStage state="working" voiceName="My voice" elapsed={12} />);
     expect(screen.getByRole("region", { name: "Your audio" })).toHaveAttribute(
       "data-state",
       "working",
     );
     expect(screen.getByRole("status")).toHaveTextContent("Generating… 12 s");
-    expect(screen.getByTestId("stage-baseline")).toBeInTheDocument();
+    expect(screen.getByTestId("stage-voiceprint")).toBeInTheDocument();
+    expect(screen.getByTestId("stage-clock")).toHaveTextContent("0:12");
     expect(screen.getByText("My voice")).toBeInTheDocument();
     expect(screen.getByTestId("stage-tag")).toHaveTextContent("Generating");
   });
 
-  it("done: the take replaces the line and the heading says the voice is AI-generated", () => {
+  it("done: the take replaces the voiceprint and the heading says the voice is AI-generated", () => {
     render(
       <GenerateStage state="done" voiceName="My voice" elapsed={0}>
         <p>the take</p>
@@ -68,15 +70,16 @@ describe("GenerateStage (UX plan §12.21)", () => {
     );
     expect(screen.getByRole("region", { name: /Your audio.*AI-generated voice/ })).toBeVisible();
     expect(screen.getByText("the take")).toBeInTheDocument();
-    expect(screen.queryByTestId("stage-baseline")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stage-voiceprint")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByTestId("stage-tag")).toHaveTextContent("Done");
   });
 
-  it("leaves nothing for assistive technology to read twice: the tag and the line are hidden", () => {
+  it("leaves nothing for assistive technology to read twice: the tag, voiceprint and clock are hidden", () => {
     render(<GenerateStage state="working" elapsed={1} />);
     expect(screen.getByTestId("stage-tag")).toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByTestId("stage-baseline")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("stage-voiceprint")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("stage-clock")).toHaveAttribute("aria-hidden", "true");
   });
 
   it.each(["ready", "working", "done"] as const)(
@@ -112,9 +115,7 @@ beforeEach(() => {
 
 async function pickVoiceAndType(text = "Hello there.") {
   const user = userEvent.setup();
-  const select = await screen.findByLabelText("Voice");
-  await waitFor(() => expect(select).not.toBeDisabled());
-  await user.selectOptions(select, fixtures.profile.id);
+  await pickVoice(user, fixtures.profile.id);
   await user.type(screen.getByLabelText("Text"), text);
   return user;
 }
@@ -129,7 +130,7 @@ describe("the stage inside the Generate form", () => {
     );
     wrap(<TextToSpeechForm />);
     const stage = () => document.querySelector("section[data-state]") as HTMLElement;
-    await screen.findByLabelText("Voice");
+    await voicesLoaded();
     expect(stage()).toHaveAttribute("data-state", "ready");
 
     const user = await pickVoiceAndType();
@@ -159,10 +160,7 @@ describe("the stage inside the Generate form", () => {
     await user.click(screen.getByRole("button", { name: "Generate speech" }));
     const stage = () => document.querySelector("section[data-state]") as HTMLElement;
     await waitFor(() => expect(stage()).toHaveAttribute("data-state", "done"));
-    await user.selectOptions(
-      screen.getByLabelText("Voice"),
-      "44444444-4444-4444-8444-444444444444",
-    );
+    await user.click(await voiceRadio("44444444-4444-4444-8444-444444444444"));
     expect(within(stage()).getByText("My voice")).toBeInTheDocument();
     expect(within(stage()).queryByText("Other")).not.toBeInTheDocument();
   });
@@ -222,5 +220,49 @@ describe("the stage inside the Generate form", () => {
       expect(document.querySelector("section[data-state]")).toHaveAttribute("data-state", "done"),
     );
     expect(container.querySelectorAll("section[data-state] [style]")).toHaveLength(0);
+  });
+});
+
+describe("the voice cards and delivery chips (UX plan §12.26)", () => {
+  it("draws voices as a native radio group, one card per ready voice, named by the voice", async () => {
+    wrap(<TextToSpeechForm />);
+    const group = await screen.findByRole("radiogroup", { name: "Voice" });
+    const radio = within(group).getByRole("radio", { name: fixtures.profile.name });
+    expect(radio).toHaveAttribute("type", "radio");
+    expect(radio).toBeChecked(); // the only ready voice is chosen for the user
+    expect(document.querySelectorAll(".gx-glyph")).toHaveLength(1);
+  });
+
+  it("draws delivery as chips, and keeps Strength off until a named emotion is chosen", async () => {
+    wrap(<TextToSpeechForm />);
+    const user = userEvent.setup();
+    const group = await screen.findByRole("radiogroup", { name: "Delivery" });
+    expect(within(group).getAllByRole("radio")).toHaveLength(7);
+    expect(within(group).getByRole("radio", { name: "Auto (from the text)" })).toBeChecked();
+    expect(screen.getByLabelText(/Strength/)).toBeDisabled();
+    await chooseDelivery(user, "sad");
+    expect(within(group).getByRole("radio", { name: "Sad" })).toBeChecked();
+    expect(screen.getByLabelText(/Strength/)).toBeEnabled();
+  });
+
+  it("counts the sentences as you type, for the eye only", async () => {
+    wrap(<TextToSpeechForm />);
+    const user = userEvent.setup();
+    const count = await screen.findByTestId("sentence-count");
+    expect(count).toHaveTextContent("0 sentences");
+    expect(count).toHaveAttribute("aria-hidden", "true");
+    await user.type(screen.getByLabelText("Text"), "Hello there. How are you");
+    expect(count).toHaveTextContent("2 sentences");
+  });
+
+  it("offers Pause motion, which holds the page's endless movement still", async () => {
+    wrap(<TextToSpeechForm />);
+    const user = userEvent.setup();
+    const root = document.querySelector(".gx-root") as HTMLElement;
+    expect(root).toHaveAttribute("data-motion", "on");
+    await user.click(await screen.findByRole("button", { name: "Pause motion" }));
+    expect(root).toHaveAttribute("data-motion", "paused");
+    await user.click(screen.getByRole("button", { name: "Resume motion" }));
+    expect(root).toHaveAttribute("data-motion", "on");
   });
 });
