@@ -5,6 +5,8 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-green.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)
 
+> **CloneVoice** is an AI-powered full-stack web application that allows users to clone a person's voice from a short audio sample and synthesize new speech mimicking the original speaker's tone, pitch, and style.
+
 [![Live demo](https://img.shields.io/badge/live%20demo-voice.shantanudas.dev-0B6E69.svg)](https://voice.shantanudas.dev)
 
 ## 🌐 Live demo
@@ -26,8 +28,6 @@ The images below are the real interface running against sample data (a placehold
 | ![Home page with a playable sample](docs/screenshots/home.png) | ![Sign-in screen with the voice panel](docs/screenshots/login.png) |
 | **Generate speech** | **Create a voice** |
 | ![Generate screen with a finished take](docs/screenshots/generate.png) | ![Voices screen after a voice is created](docs/screenshots/voices.png) |
-
-> **CloneVoice** is an AI-powered full-stack web application that allows users to clone a person's voice from a short audio sample and synthesize new speech mimicking the original speaker's tone, pitch, and style.
 
 ## ✨ Features
 
