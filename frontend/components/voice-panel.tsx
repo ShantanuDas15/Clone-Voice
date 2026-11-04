@@ -1,4 +1,5 @@
-import { VoiceState, Wave } from "@/components/voice-wave";
+import { VoiceCanvas } from "@/components/voice-canvas";
+import { TypedLine, VoiceState, Wave } from "@/components/voice-wave";
 
 /** Words for the panel beside a sign-in or sign-up form. */
 export interface PanelCopy {
@@ -6,6 +7,8 @@ export interface PanelCopy {
   headline: string;
   /** The second part, in the accent colour. */
   accent: string;
+  /** Other second lines to type out in turn after `accent` (sign-in only). */
+  phrases?: readonly string[];
   lead: string;
 }
 
@@ -30,53 +33,38 @@ export function VoicePanel({ copy }: { copy: PanelCopy }) {
     <aside
       aria-hidden
       data-testid="voice-panel"
-      className="relative hidden min-w-0 flex-col justify-between gap-8 py-2 lg:flex"
+      className="hidden min-w-0 flex-col justify-between gap-8 py-2 lg:flex"
     >
-      <Glow />
-      <div className="relative">
+      <div>
         <p className="flex items-center gap-2.5 font-mono text-sm text-muted-foreground">
-          <span className="size-2 rounded-full bg-primary" />
+          <span className="vx-dot" />
           Voice cloning, with consent
         </p>
-        <p className="mt-3 text-balance text-5xl font-bold leading-[1.05] tracking-tight">
-          {copy.headline} <span className="text-primary">{copy.accent}</span>
+        <p className="mt-4 text-balance text-6xl font-bold leading-[1.04] tracking-tight">
+          {copy.headline} <TypedLine phrases={[copy.accent, ...(copy.phrases ?? [])]} />
         </p>
-        <p className="mt-4 max-w-md text-lg text-muted-foreground">{copy.lead}</p>
+        <p className="mt-4 max-w-[46ch] text-lg text-muted-foreground">{copy.lead}</p>
       </div>
-      <div className="relative">
-        <Wave count={56} className="h-56 w-full" />
+      <div>
+        <VoiceCanvas className="h-52 w-full" />
         <p
           data-testid="voice-state"
-          className="mt-3 border-t border-border pt-2 font-mono text-xs text-muted-foreground"
+          className="mt-3 flex flex-wrap justify-between gap-x-3 border-t border-border pt-2.5 font-mono text-xs text-muted-foreground"
         >
-          voiceprint · <VoiceState />
+          <span>
+            voiceprint · <VoiceState />
+          </span>
+          <span>private to your account</span>
         </p>
       </div>
-      <dl className="relative space-y-3 text-sm">
+      <dl className="grid grid-cols-3 gap-5 text-sm">
         {PROMISES.map(([term, detail]) => (
-          <div key={term} className="grid grid-cols-[9.5rem_1fr] gap-3">
-            <dt className="font-medium">{term}</dt>
+          <div key={term}>
+            <dt className="font-semibold">{term}</dt>
             <dd className="text-muted-foreground">{detail}</dd>
           </div>
         ))}
       </dl>
     </aside>
-  );
-}
-
-/**
- * A still teal glow behind the wave: three stacked, very faint discs. The flat style (UX plan §4)
- * keeps surfaces flat, so the soft edge comes from the stacking. Never animates.
- */
-function Glow() {
-  return (
-    <div
-      data-testid="voice-glow"
-      className="pointer-events-none absolute -left-24 top-1/4 -z-10 size-[34rem] max-w-none"
-    >
-      <span className="absolute inset-0 rounded-full bg-primary/[0.03]" />
-      <span className="absolute inset-12 rounded-full bg-primary/[0.04]" />
-      <span className="absolute inset-24 rounded-full bg-primary/[0.05]" />
-    </div>
   );
 }

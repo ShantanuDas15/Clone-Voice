@@ -14,7 +14,7 @@ import { GoogleButton } from "@/components/google-button";
 import { googleErrorMessage } from "@/lib/auth/google-errors";
 import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { sanitizeNext } from "@/lib/auth/next-path";
-import { pulseVoice } from "@/lib/voice-energy";
+import { pulseVoice, surgeVoice } from "@/lib/voice-energy";
 import { ApiError } from "@/lib/errors";
 import { type LoginValues, loginSchema } from "@/lib/validation/auth";
 import { Alert } from "@/components/ui/alert";
@@ -47,6 +47,11 @@ export function LoginForm() {
     setRejected(false);
     try {
       await login({ email: values.email.trim(), password: values.password });
+      // The one surge of the voice panel, given a moment to be seen where motion is welcome.
+      if (window.matchMedia?.("(prefers-reduced-motion: no-preference)").matches) {
+        surgeVoice();
+        await new Promise((resolve) => setTimeout(resolve, 450));
+      }
       router.replace(next);
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;

@@ -77,18 +77,21 @@ export function Wave({ count, className }: { count: number; className: string })
   );
 }
 
-/** Caption under the wave: "idle", or "listening" for a moment after the user types. */
+/** Caption under the wave: "idle", "listening" for a moment after typing, "verified" after sign-in. */
 export function VoiceState() {
   const label = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const stop = subscribeVoice(() => {
-      if (label.current) label.current.textContent = "listening";
+    const stop = subscribeVoice((_amount, surge) => {
+      if (label.current) label.current.textContent = surge ? "verified" : "listening";
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (label.current) label.current.textContent = "idle";
-      }, 1200);
+      timer = setTimeout(
+        () => {
+          if (label.current) label.current.textContent = "idle";
+        },
+        surge ? 1800 : 1200,
+      );
     });
     return () => {
       stop();
@@ -99,6 +102,51 @@ export function VoiceState() {
   return (
     <span className="text-primary" ref={label}>
       idle
+    </span>
+  );
+}
+
+/**
+ * The headline's second line, typed out and swapped between phrases (owner-approved mock). The first
+ * phrase is there in full from the start, so the page is complete at rest and under
+ * `prefers-reduced-motion`, which never starts the typing. With one phrase it never moves at all.
+ */
+export function TypedLine({ phrases }: { phrases: readonly string[] }) {
+  const line = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const el = line.current;
+    if (!el || phrases.length < 2) return;
+    if (!window.matchMedia?.("(prefers-reduced-motion: no-preference)").matches) return;
+    let index = 0;
+    let chars = (phrases[0] as string).length;
+    let deleting = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const phrase = phrases[index] as string;
+      let wait = deleting ? 28 : 55;
+      if (!deleting && chars >= phrase.length) {
+        deleting = true;
+        wait = 2600;
+      } else if (deleting) {
+        chars = Math.max(0, chars - 2);
+        if (chars === 0) {
+          deleting = false;
+          index = (index + 1) % phrases.length;
+        }
+      } else {
+        chars += 1;
+      }
+      el.textContent = (phrases[index] as string).slice(0, chars) || "\u200b";
+      timer = setTimeout(tick, wait);
+    };
+    timer = setTimeout(tick, 2600);
+    return () => clearTimeout(timer);
+  }, [phrases]);
+
+  return (
+    <span ref={line} className="vx-say block min-h-[1.1em] text-primary">
+      {phrases[0]}
     </span>
   );
 }

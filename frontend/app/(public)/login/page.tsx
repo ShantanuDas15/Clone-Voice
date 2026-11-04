@@ -14,6 +14,7 @@ export default function LoginPage() {
       panel={{
         headline: "Welcome back.",
         accent: "Your voices are waiting.",
+        phrases: ["Say it in a voice you own.", "Your voice, with your consent."],
         lead: "Pick up where you left off: your voices, your history, and anything you were about to say.",
       }}
     >

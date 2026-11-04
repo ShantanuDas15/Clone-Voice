@@ -47,29 +47,49 @@ for (const route of ["login", "signup"]) {
   });
 }
 
-test("the draw-in finishes and leaves nothing moving", async ({ page }) => {
+test("after the draw-in only the approved ambient motion runs (aurora drift, headline caret)", async ({
+  page,
+}) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${ORIGIN}/login`);
   await expect(page.getByTestId("voice-panel")).toBeVisible();
-  await page.waitForTimeout(2500); // 56 bars: the last starts at about 340 ms and runs 380 ms
-  const running = await page.evaluate(
-    () =>
-      document
-        .getAnimations()
-        .filter((a) => a.playState === "running" && (a as CSSAnimation).animationName)
-        .map((a) => (a as CSSAnimation).animationName).length,
+  await page.waitForTimeout(2500); // the strip's draw-in is over (it is hidden here anyway)
+  const running = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((a) => a.playState === "running" && (a as CSSAnimation).animationName)
+      .map((a) => (a as CSSAnimation).animationName),
   );
-  expect(running).toBe(0);
+  expect(running.length).toBeGreaterThan(0);
+  expect(running.every((n) => /^vx-(drift-a|drift-b|blink)$/.test(n))).toBe(true);
 });
 
-test("under reduced motion the finished wave is there at once and nothing animates", async ({
+test("the canvas voiceprint paints, and typing in the form changes it", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${ORIGIN}/login`);
+  const canvas = page.getByTestId("voice-wave").first();
+  await expect(canvas).toBeVisible();
+  const ink = () =>
+    canvas.evaluate((c: HTMLCanvasElement) => {
+      const px = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < px.length; i += 4) if (px[i]! > 0) n += 1;
+      return n;
+    });
+  expect(await ink()).toBeGreaterThan(500);
+  await page.getByLabel("Email").fill("someone@example.com");
+  await expect(page.getByTestId("voice-state")).toContainText("listening");
+});
+
+test("under reduced motion the voiceprint is painted once and nothing animates", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${ORIGIN}/login`);
-  await expect(page.getByTestId("voice-wave").first().locator("rect")).toHaveCount(56);
+  await expect(page.getByTestId("voice-wave").first()).toBeVisible();
   const animated = await page.evaluate(
     () => document.getAnimations().filter((a) => (a as CSSAnimation).animationName).length,
   );
