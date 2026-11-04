@@ -33,7 +33,7 @@ describe("landing page", () => {
     expect(screen.queryByRole("link", { name: "Go to Generate" })).not.toBeInTheDocument();
   });
 
-  it("has one h1, a primary and a secondary action, and the three plain statements", () => {
+  it("has one h1, a primary and a secondary action, and the three promises", () => {
     render(<HomePage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getAllByRole("link", { name: "Create account" })[0]).toHaveAttribute(
@@ -41,11 +41,12 @@ describe("landing page", () => {
       "/signup",
     );
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-    // The three plain statements, each under a short title; the steps are a separate, ordered list.
-    const statements = screen.getAllByRole("list")[0];
-    expect(within(statements as HTMLElement).getAllByRole("listitem")).toHaveLength(3);
+    // The promises are acted out: consent as a gate, deletion as a demo, the label in plain words.
     expect(screen.getByText("Consent first")).toBeInTheDocument();
-    expect(screen.getByText("Always labelled")).toBeInTheDocument();
+    expect(screen.getByText("Deleting is complete")).toBeInTheDocument();
+    expect(screen.getByText(/labelled as AI-generated in the app/)).toBeInTheDocument();
+    expect(screen.getByTestId("consent-gate")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-demo")).toBeInTheDocument();
   });
 
   it("walks the real three steps in order", () => {

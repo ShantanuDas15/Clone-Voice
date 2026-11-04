@@ -24,7 +24,7 @@ export function NavLink({
     <Link
       href={href}
       aria-current={current ? "page" : undefined}
-      className={`underline-offset-4 hover:underline ${current ? "font-semibold underline" : ""} ${className}`.trim()}
+      className={`underline-offset-4 hover:underline ${current ? "font-semibold underline decoration-primary decoration-2" : ""} ${className}`.trim()}
     >
       {children}
     </Link>

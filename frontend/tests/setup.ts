@@ -15,3 +15,13 @@ afterAll(() => server.close());
 let objectUrlCounter = 0;
 URL.createObjectURL = vi.fn(() => `blob:mock-${++objectUrlCounter}`);
 URL.revokeObjectURL = vi.fn();
+
+// jsdom has no canvas; the decorative voiceprints (voice-canvas, home-voiceprint) then paint nothing.
+// Without this stub jsdom logs a "not implemented" error on every render that mounts one.
+HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
+// ...and no ResizeObserver, which those canvases use to keep their size.
+globalThis.ResizeObserver ??= class {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+} as never;

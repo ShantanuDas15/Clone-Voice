@@ -3,21 +3,22 @@ import { expect, test } from "@playwright/test";
 import { ORIGIN, mockSignedOut } from "./mock-api";
 
 /**
- * The home page in the real engines (UX plan §12.19): the sample plays for real, the background
- * reacts and pauses, nothing scrolls sideways at any width, and reduced motion stops all movement.
+ * The home page in the real engines (UX plan §12.25): the sample plays for real and the stage reacts,
+ * the pointer swells the bars, the two promises can be tried, nothing scrolls sideways at any width,
+ * the visitor can pause the endless motion, and reduced motion stops all of it.
  */
 test.beforeEach(async ({ page }) => {
   await mockSignedOut(page);
 });
 
-test("the sample plays the real clip, the wave reacts, and it resets when it ends", async ({
+test("the sample plays the real clip, the stage reacts, and it resets when it ends", async ({
   page,
 }) => {
   test.setTimeout(45_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${ORIGIN}/`);
-  const wave = page.getByTestId("home-wave");
-  await expect(wave).toHaveAttribute("data-live", "false");
+  const stage = page.getByTestId("home-voiceprint");
+  await expect(stage).toHaveAttribute("data-live", "false");
   // Nothing is fetched until Play is pressed.
   const requested: string[] = [];
   page.on("request", (r) => requested.push(r.url()));
@@ -26,14 +27,12 @@ test("the sample plays the real clip, the wave reacts, and it resets when it end
 
   await page.getByRole("button", { name: "Play sample" }).click();
   await expect(page.getByRole("button", { name: "Pause sample" })).toBeVisible({ timeout: 10_000 });
-  await expect(wave).toHaveAttribute("data-live", "true");
-  // The clock moves off 0:00 and the bars take the accent colour as the playhead advances.
+  await expect(stage).toHaveAttribute("data-live", "true");
   await expect(page.getByTestId("sample-time")).not.toHaveText(/^0:00 \//, { timeout: 5_000 });
-  await expect(page.getByTestId("sample-wave").locator("rect.fill-primary").first()).toBeAttached();
 
-  // The clip is 2.9 s: it ends on its own, the button goes back to Play and the wave settles.
+  // The clip is 2.9 s: it ends on its own, the button goes back to Play and the stage settles.
   await expect(page.getByRole("button", { name: "Play sample" })).toBeVisible({ timeout: 15_000 });
-  await expect(wave).toHaveAttribute("data-live", "false");
+  await expect(stage).toHaveAttribute("data-live", "false");
   await expect(page.getByTestId("sample-time")).toHaveText(/^0:00 \//);
   expect(requested.filter((u) => u.endsWith("home-sample.wav")).length).toBeGreaterThan(0);
 });
@@ -50,74 +49,70 @@ for (const width of [375, 768, 1100, 1280, 1920, 2560]) {
   });
 }
 
-test("the side bars appear only where the page leaves room for them", async ({ page }) => {
-  await page.goto(`${ORIGIN}/`);
-  const bar = page.getByTestId("home-bars").first();
-  await page.setViewportSize({ width: 1100, height: 800 });
-  await expect(bar).toBeHidden();
-  await page.setViewportSize({ width: 1440, height: 800 });
-  await expect(bar).toBeVisible();
-});
-
-const ribbonState = (page: import("@playwright/test").Page) =>
-  page.evaluate(() => {
-    const svg = document.querySelector('[data-testid="home-wave"] svg') as SVGElement;
-    const s = getComputedStyle(svg);
-    return { name: s.animationName, play: s.animationPlayState };
-  });
-
-test("the ribbons drift at first, rest after three seconds, and stop while off screen", async ({
-  page,
-}) => {
-  test.setTimeout(30_000);
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.setViewportSize({ width: 1280, height: 600 });
-  await page.goto(`${ORIGIN}/`);
-  const wave = page.getByTestId("home-wave");
-  await expect.poll(async () => (await ribbonState(page)).name).toBe("drift");
-  // WCAG 2.2.2: nothing may move on its own for more than five seconds, so they come to rest.
-  await expect(wave).toHaveAttribute("data-paused", "true", { timeout: 8_000 });
-  expect((await ribbonState(page)).play).toBe("paused");
-});
-
-test("the ribbons move again while the visitor's sample plays, and rest when it ends", async ({
-  page,
-}) => {
-  test.setTimeout(45_000);
+test("the voiceprint paints, and the bars swell where the pointer is", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${ORIGIN}/`);
-  const wave = page.getByTestId("home-wave");
-  await expect(wave).toHaveAttribute("data-paused", "true", { timeout: 8_000 });
-  await page.getByRole("button", { name: "Play sample" }).click();
-  await expect(page.getByRole("button", { name: "Pause sample" })).toBeVisible({ timeout: 10_000 });
-  await expect(wave).toHaveAttribute("data-paused", "false");
-  expect((await ribbonState(page)).play).toBe("running");
-  await expect(page.getByRole("button", { name: "Play sample" })).toBeVisible({ timeout: 15_000 });
-  await expect(wave).toHaveAttribute("data-paused", "true");
-  expect((await ribbonState(page)).play).toBe("paused");
+  const stage = page.getByTestId("home-voiceprint");
+  await expect(stage).toBeVisible();
+  const ink = () =>
+    stage.evaluate((c: HTMLCanvasElement) => {
+      const px = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < px.length; i += 4) n += px[i]!;
+      return n;
+    });
+  expect(await ink()).toBeGreaterThan(5_000);
+  // Hold the endless ripple still so only the pointer can change what is drawn.
+  await page.getByRole("button", { name: "Pause motion" }).click();
+  await page.waitForTimeout(150);
+  const before = await ink();
+  const box = (await stage.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(250);
+  expect(await ink()).not.toBe(before);
 });
 
-test("the ribbons stop while scrolled out of view, even during the opening drift", async ({
+test("the consent gate stays locked until the box is ticked", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${ORIGIN}/`);
+  const gate = page.getByTestId("consent-gate");
+  await gate.scrollIntoViewIfNeeded();
+  const create = gate.getByRole("button", { name: "Create voice" });
+  await expect(create).toHaveAttribute("aria-disabled", "true");
+  await gate.getByLabel("I have the right to use this voice.").check();
+  await expect(create).toHaveAttribute("aria-disabled", "false");
+  await create.click();
+  await expect(gate.getByRole("status")).toContainText("Voice created (example)");
+});
+
+test("deleting the example voice erases it and everything made with it, and can start over", async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${ORIGIN}/`);
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await expect(page.getByTestId("home-wave")).toHaveAttribute("data-paused", "true");
-  expect((await ribbonState(page)).play).toBe("paused");
+  const demo = page.getByTestId("erase-demo");
+  await demo.scrollIntoViewIfNeeded();
+  await demo.getByRole("button", { name: "Delete voice" }).click();
+  await expect(demo.getByRole("status")).toContainText("Voice and 3 takes erased", {
+    timeout: 5_000,
+  });
+  await demo.getByRole("button", { name: "Start over" }).click();
+  await expect(demo.getByRole("button", { name: "Delete voice" })).toBeEnabled();
 });
 
-test("six seconds after load, nothing on the page is still moving by itself", async ({ page }) => {
-  test.setTimeout(30_000);
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.setViewportSize({ width: 1440, height: 800 });
+test("the how-it-works picture follows the step in view", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${ORIGIN}/`);
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(6_000);
-  // WCAG 2.2.2 (Pause, Stop, Hide): no endless animation may be running without a control for it.
-  const endless = await page.evaluate(() =>
+  const steps = page.locator(".hx-step");
+  await steps.nth(1).scrollIntoViewIfNeeded();
+  await expect(steps.nth(1)).toHaveClass(/hx-on/);
+  await steps.nth(2).scrollIntoViewIfNeeded();
+  await expect(steps.nth(2)).toHaveClass(/hx-on/);
+});
+
+const endless = (page: import("@playwright/test").Page) =>
+  page.evaluate(() =>
     document
       .getAnimations()
       .filter(
@@ -125,10 +120,24 @@ test("six seconds after load, nothing on the page is still moving by itself", as
       )
       .map((a) => (a as CSSAnimation).animationName),
   );
-  expect(endless).toEqual([]);
+
+test("Pause motion holds every endless animation still, and Resume starts them again (WCAG 2.2.2)", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.goto(`${ORIGIN}/`);
+  await page.waitForLoadState("networkidle");
+  expect((await endless(page)).length).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Pause motion" }).click();
+  await expect.poll(() => endless(page)).toEqual([]);
+  await page.getByRole("button", { name: "Resume motion" }).click();
+  await expect.poll(async () => (await endless(page)).length).toBeGreaterThan(0);
 });
 
-test("under reduced motion nothing on the home page animates", async ({ page }) => {
+test("under reduced motion nothing on the home page animates and there is nothing to pause", async ({
+  page,
+}) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 1440, height: 800 });
   await page.goto(`${ORIGIN}/`);
@@ -140,34 +149,5 @@ test("under reduced motion nothing on the home page animates", async ({ page }) 
       .map((a) => (a as CSSAnimation).animationName),
   );
   expect(running).toEqual([]);
-});
-
-test("the sample card pulses with the clip while it plays, and is still when it is not", async ({
-  page,
-}) => {
-  test.setTimeout(45_000);
-  // The visual config pins reduced motion; the pulse needs the visitor to allow motion.
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto(`${ORIGIN}/`);
-  const lit = page.locator('[data-testid="sample-pulse"] rect:not([opacity="0"])');
-  await expect(lit).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Play sample" }).click();
-  await expect(page.getByRole("button", { name: "Pause sample" })).toBeVisible({ timeout: 10_000 });
-  // Some bars around the playhead light up, and their heights change as the clip's loudness does.
-  await expect.poll(() => lit.count(), { timeout: 5_000 }).toBeGreaterThan(0);
-  const heights = new Set<string>();
-  for (let i = 0; i < 6; i++) {
-    const all = await page
-      .locator('[data-testid="sample-pulse"] rect')
-      .evaluateAll((rs) => rs.map((r) => r.getAttribute("height")).join(","));
-    heights.add(all);
-    await page.waitForTimeout(120);
-  }
-  expect(heights.size).toBeGreaterThan(1);
-
-  // After the clip ends, every pulse bar is hidden again.
-  await expect(page.getByRole("button", { name: "Play sample" })).toBeVisible({ timeout: 15_000 });
-  await expect(lit).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pause motion" })).toBeHidden();
 });
