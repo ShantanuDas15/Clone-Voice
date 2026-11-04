@@ -12,7 +12,7 @@ import {
 } from "@/lib/voice-energy";
 
 /** The theme token `name` ("--primary") as an `hsl()` colour, optionally with an alpha. */
-function token(name: string, alpha?: number): string {
+export function token(name: string, alpha?: number): string {
   const triplet = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return alpha === undefined ? `hsl(${triplet})` : `hsl(${triplet} / ${alpha})`;
 }

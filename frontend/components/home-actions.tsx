@@ -25,7 +25,7 @@ export function HomeActions({
     return <div aria-hidden className={`${spacing} min-h-11`} />;
   }
 
-  const row = `${spacing} flex flex-wrap gap-3 ${align === "center" ? "justify-center" : "justify-start"}`;
+  const row = `hx-cta ${spacing} flex flex-wrap gap-3 ${align === "center" ? "justify-center" : "justify-start"}`;
 
   if (closing) {
     return (
