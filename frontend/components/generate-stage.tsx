@@ -1,43 +1,38 @@
 import { type ReactNode, type Ref, useId } from "react";
 
 import { GenerationStatus } from "@/components/generation-status";
+import { VoiceCanvas } from "@/components/voice-canvas";
+import { VoiceState } from "@/components/voice-wave";
+import { formatClock } from "@/lib/recording";
 
 export type StageState = "ready" | "working" | "done";
-
-/** Bars in the resting line; the same count the finished take draws (`BARS` in take.tsx). */
-const BASELINE_BARS = 64;
 
 const TAG: Record<StageState, string> = { ready: "Ready", working: "Generating", done: "Done" };
 
 /**
- * The resting line of the stage: one flat row of 64 small marks where the voice will appear. Drawn
- * with presentation attributes only (the site's Content-Security-Policy forbids inline styles) and
- * the same 48 px box as the take's waveform, so the panel does not move when the take replaces it.
+ * The voiceprint at the top of the stage (owner-approved mock, UX plan §12.26): it ripples gently,
+ * swells while the user types or picks a voice, and keeps swelling while a generation runs. It
+ * holds the same place through ready and working, so the panel does not move between them.
  */
-function Baseline() {
+function Voiceprint({ paused, speaker }: { paused: boolean; speaker?: string }) {
   return (
-    <svg
-      aria-hidden
-      focusable="false"
-      data-testid="stage-baseline"
-      viewBox={`0 0 ${BASELINE_BARS * 4} 32`}
-      preserveAspectRatio="none"
-      className="h-12 w-full"
-    >
-      <g className="fill-line/60">
-        {Array.from({ length: BASELINE_BARS }, (_, i) => (
-          <rect key={i} x={i * 4 + 0.5} y={15} width={3} height={2} rx={1} />
-        ))}
-      </g>
-    </svg>
+    <div data-testid="stage-voiceprint" aria-hidden>
+      <VoiceCanvas className="h-44 w-full" paused={paused} />
+      <p className="mt-3 flex flex-wrap justify-between gap-x-3 border-t border-border pt-2 font-mono text-xs text-muted-foreground">
+        <span>
+          voiceprint · <VoiceState />
+        </span>
+        {speaker ? <span>speaks as {speaker}</span> : null}
+      </p>
+    </div>
   );
 }
 
 /**
- * The right-hand panel of the Generate screen: one frame, three states (UX plan §12.21). Ready shows
- * the steps over a resting line; working shows the real status and clock (the server reports no
- * stages, so none are invented); done holds the take. The frame, the heading and the line stay put,
- * so the panel does not jump between states, and only its lower part changes, fading in.
+ * The right-hand panel of the Generate screen: one glass frame, three states (UX plan §12.21,
+ * §12.26). Ready shows the live voiceprint over the three steps; working keeps the voiceprint, adds
+ * a large clock and the real status (the server reports no stages, so none are invented); done
+ * holds the take. The frame and the heading stay put, so the panel does not jump between states.
  *
  * Below `lg` the ready state is hidden (the form is the whole page there); working and done show.
  * The heading's text names the region, so a screen reader hears which state it is in.
@@ -47,6 +42,7 @@ export function GenerateStage({
   voiceName,
   elapsed,
   stageRef,
+  paused = false,
   children,
 }: {
   state: StageState;
@@ -55,6 +51,8 @@ export function GenerateStage({
   /** Seconds the running generation has taken; used only while `state` is "working". */
   elapsed: number;
   stageRef?: Ref<HTMLElement>;
+  /** Holds the voiceprint's endless ripple still (the page's Pause motion control). */
+  paused?: boolean;
   /** The finished take and its controls; used only while `state` is "done". */
   children?: ReactNode;
 }) {
@@ -64,12 +62,12 @@ export function GenerateStage({
       ref={stageRef}
       aria-labelledby={titleId}
       data-state={state}
-      className={`max-w-xl flex-col gap-4 rounded-lg border border-border bg-surface p-5 lg:sticky lg:top-4 lg:flex lg:min-h-[22rem] ${
+      className={`gx-card gx-stage flex-col gap-4 lg:sticky lg:top-4 lg:flex lg:min-h-[34rem] ${
         state === "ready" ? "hidden" : "flex"
       }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 id={titleId} className="font-medium">
+        <h2 id={titleId} className="text-lg font-semibold">
           {state === "ready" ? (
             "Your audio appears here"
           ) : state === "working" ? (
@@ -87,7 +85,8 @@ export function GenerateStage({
         <span
           aria-hidden
           data-testid="stage-tag"
-          className="rounded-full bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground"
+          data-state={state}
+          className="gx-tag rounded-full bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground"
         >
           {TAG[state]}
         </span>
@@ -104,7 +103,7 @@ export function GenerateStage({
         </div>
       ) : (
         <div key={state} className="space-y-4 motion-safe:animate-fade-in">
-          <Baseline />
+          <Voiceprint paused={paused} speaker={voiceName?.split(",")[0]} />
           {state === "ready" ? (
             <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
               <li>Choose a voice.</li>
@@ -112,7 +111,12 @@ export function GenerateStage({
               <li>Press Generate speech, then play or download.</li>
             </ol>
           ) : (
-            <GenerationStatus elapsed={elapsed} />
+            <>
+              <p aria-hidden className="gx-clock" data-testid="stage-clock">
+                {formatClock(elapsed)}
+              </p>
+              <GenerationStatus elapsed={elapsed} />
+            </>
           )}
         </div>
       )}

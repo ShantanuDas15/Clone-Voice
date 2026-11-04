@@ -233,6 +233,7 @@ export function Take({
         )}
         <Button
           ref={playButton}
+          data-take-play
           variant="secondary"
           size="sm"
           onClick={toggle}
@@ -275,6 +276,7 @@ export function Take({
         </div>
       )}
       <div
+        data-take-wave
         className={`relative h-12 rounded focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary ${
           waveformFirst ? "order-first" : ""
         }`}

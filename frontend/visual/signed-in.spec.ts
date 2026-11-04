@@ -21,7 +21,7 @@ for (const theme of THEMES) {
           await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
           // The delivery controls appear once the capabilities call answers; wait so the shot is stable.
           if (route === "generate")
-            await expect(page.getByLabel("Delivery", { exact: true })).toBeVisible();
+            await expect(page.getByRole("radiogroup", { name: "Delivery" })).toBeVisible();
           await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true });
         });
       }

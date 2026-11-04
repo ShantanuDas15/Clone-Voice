@@ -76,13 +76,13 @@ test("the stage holds its place from ready to working, then shows the take", asy
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${ORIGIN}/generate`);
   await expect(stage(page)).toHaveAttribute("data-state", "ready");
-  await expect(page.getByTestId("stage-baseline")).toBeVisible();
+  await expect(page.getByTestId("stage-voiceprint")).toBeVisible();
   const ready = await stage(page).boundingBox();
 
   await generate(page);
   await expect(stage(page)).toHaveAttribute("data-state", "working");
   await expect(stage(page).getByRole("status")).toContainText(/generating/i);
-  await expect(page.getByTestId("stage-baseline")).toBeVisible();
+  await expect(page.getByTestId("stage-voiceprint")).toBeVisible();
   const working = await stage(page).boundingBox();
   // The frame does not move or resize between ready and working.
   expect(Math.abs((working?.y ?? 0) - (ready?.y ?? 0))).toBeLessThanOrEqual(1);
@@ -91,7 +91,7 @@ test("the stage holds its place from ready to working, then shows the take", asy
   await expect(stage(page)).toHaveAttribute("data-state", "done", { timeout: 10_000 });
   await expect(stage(page).getByRole("button", { name: "Play Generated speech" })).toBeVisible();
   await expect(stage(page).getByText("My voice")).toBeVisible();
-  await expect(page.getByTestId("stage-baseline")).toHaveCount(0);
+  await expect(page.getByTestId("stage-voiceprint")).toHaveCount(0);
   const done = await stage(page).boundingBox();
   expect(Math.abs((done?.y ?? 0) - (ready?.y ?? 0))).toBeLessThanOrEqual(1);
   expect(problems).toEqual([]);
@@ -143,4 +143,40 @@ test("the length meter follows the text", async ({ page }) => {
   await page.getByLabel("Text").fill("x".repeat(520));
   await expect(meter).toHaveJSProperty("value", 500);
   await expect(meter).toHaveAttribute("data-over", "true");
+});
+
+test("the voiceprint listens while you type, and Pause motion holds the endless animation still", async ({
+  page,
+}) => {
+  await mock(page, 0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${ORIGIN}/generate`);
+  const stageVoice = page.getByTestId("stage-voiceprint");
+  await expect(stageVoice).toBeVisible();
+  await page.getByLabel("Text").pressSequentially("Hello there");
+  await expect(stageVoice).toContainText("listening");
+
+  const endless = () =>
+    page.evaluate(() =>
+      document
+        .getAnimations()
+        .filter(
+          (a) => a.playState === "running" && a.effect?.getComputedTiming().iterations === Infinity,
+        )
+        .map((a) => (a as CSSAnimation).animationName),
+    );
+  expect((await endless()).length).toBeGreaterThan(0); // the aurora drifts
+  await page.getByRole("button", { name: "Pause motion" }).click();
+  await expect.poll(endless).toEqual([]);
+  await page.getByRole("button", { name: "Resume motion" }).click();
+  await expect.poll(async () => (await endless()).length).toBeGreaterThan(0);
+});
+
+test("choosing a voice card selects its radio", async ({ page }) => {
+  await mock(page, 0);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${ORIGIN}/generate`);
+  await page.locator("label.gx-vc").first().click();
+  await expect(page.locator('input[name="tts-voice"]').first()).toBeChecked();
 });

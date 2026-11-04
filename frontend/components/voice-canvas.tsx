@@ -23,8 +23,19 @@ export function token(name: string, alpha?: number): string {
  * surge when sign-in works. Drawn on a canvas, so nothing here is an inline style. Under
  * `prefers-reduced-motion` it paints one still frame and never starts a loop. Decorative.
  */
-export function VoiceCanvas({ className }: { className: string }) {
+export function VoiceCanvas({
+  className,
+  paused = false,
+}: {
+  className: string;
+  /** Holds the endless ripple still (a "Pause motion" control); typing still swells the bars. */
+  paused?: boolean;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const hold = useRef(paused);
+  useEffect(() => {
+    hold.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -39,6 +50,7 @@ export function VoiceCanvas({ className }: { className: string }) {
     let width = 0;
     let height = 0;
     let frame = 0;
+    let frozenAt = 1.2;
 
     const size = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -52,7 +64,9 @@ export function VoiceCanvas({ className }: { className: string }) {
 
     const draw = (now: number) => {
       if (!width || !height) return; // hidden (the panel is for wide screens)
-      const seconds = reduce ? 1.2 : (now - started) / 1000;
+      const still = reduce || hold.current;
+      const seconds = still ? frozenAt : (now - started) / 1000;
+      if (!still) frozenAt = seconds;
       const accent = token("--primary");
       const idle = token("--line", 0.55);
       const step = width / PRINT_BARS;

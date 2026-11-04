@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { createVoice, signUpVerified } from "./helpers";
+import { chooseVoice, createVoice, signUpVerified } from "./helpers";
 
 const RUNS = 50;
 const GENERATION_ID = "0b6f6c1e-7f0a-4c8e-9a52-3d1f2e4a5b6c";
@@ -73,8 +73,7 @@ test(`${RUNS} generations leave at most one live audio blob URL and one player`,
   });
 
   await page.goto("/generate");
-  await expect(page.getByLabel("Voice")).toBeEnabled();
-  await page.getByLabel("Voice").selectOption({ label: "Soak voice" });
+  await chooseVoice(page, "Soak voice");
   await page.getByLabel("Text").fill("Soak test.");
 
   const state = () =>

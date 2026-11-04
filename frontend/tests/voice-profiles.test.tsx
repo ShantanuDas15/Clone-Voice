@@ -204,9 +204,9 @@ describe("VoiceProfileSelect", () => {
       ),
     );
     wrap(<VoiceProfileSelect value="" onChange={() => {}} />);
-    const select = await screen.findByLabelText("Voice");
-    await waitFor(() => expect(within(select).queryByText("Ready one")).not.toBeNull());
-    expect(within(select).queryByText("Failed one")).toBeNull();
+    const group = await screen.findByRole("radiogroup", { name: "Voice" });
+    expect(within(group).getByRole("radio", { name: "Ready one" })).toBeInTheDocument();
+    expect(within(group).queryByRole("radio", { name: "Failed one" })).toBeNull();
   });
 });
 

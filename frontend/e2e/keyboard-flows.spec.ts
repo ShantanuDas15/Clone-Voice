@@ -121,12 +121,16 @@ test("create a voice by file, generate, replay from history, delete it, then del
 
   // Generate: pick the voice with the keyboard, type the text, submit.
   await page.goto("/generate");
-  const select = page.getByLabel("Voice");
-  await expect(select).toBeEnabled();
-  await tabTo(page, select);
-  await expectFocusRing(page);
-  await page.keyboard.type("Keyboard"); // type-ahead selects the matching option
-  await expect(select).toHaveValue(/.+/);
+  // Voices are a radio group of cards; the only voice is already chosen, so Tab lands on it and the
+  // focus ring is drawn on its card (the radio itself is visually hidden).
+  const voice = page.getByRole("radio", { name: "Keyboard voice", exact: true });
+  await expect(voice).toBeEnabled();
+  await tabTo(page, voice);
+  await expect(page.locator("label.gx-vc").filter({ hasText: "Keyboard voice" })).toHaveCSS(
+    "outline-style",
+    "solid",
+  );
+  await expect(voice).toBeChecked();
   await reach(page, page.getByLabel("Text"), "Hello from the keyboard.");
   await pressOn(page, page.getByRole("button", { name: "Generate speech" }));
   await expect(page.locator('audio[aria-label="Generated speech"]')).toBeAttached({

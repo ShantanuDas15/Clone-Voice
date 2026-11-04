@@ -92,3 +92,11 @@ export async function signOut(page: Page): Promise<void> {
     page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Sign in" }),
   ).toBeVisible();
 }
+
+/** Choose a voice on the Generate screen (voices are a radio group drawn as cards). */
+export async function chooseVoice(page: Page, name: string): Promise<void> {
+  const card = page.locator("label.gx-vc").filter({ hasText: name });
+  await expect(card).toBeVisible();
+  await card.click();
+  await expect(page.getByRole("radio", { name, exact: true })).toBeChecked();
+}

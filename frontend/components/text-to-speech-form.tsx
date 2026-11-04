@@ -22,6 +22,7 @@ import { describeEngine } from "@/lib/engine-names";
 import { firstRun } from "@/lib/first-run";
 import {
   TEXT_MAX,
+  countSentences,
   countWords,
   hasLikelyUnsupportedChars,
   synthesisTextSchema,
@@ -29,8 +30,9 @@ import {
 import { GenerateStage, type StageState } from "@/components/generate-stage";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { Select, Textarea } from "@/components/ui/field";
+import { Textarea } from "@/components/ui/field";
 import { EMOTIONS, DEFAULT_INTENSITY, intensityApplies } from "@/lib/emotion";
+import { pulseVoice } from "@/lib/voice-energy";
 
 const BUSY_COOLDOWN_S = 15; // no Retry-After on "service busy" (G-05)
 const RATE_COOLDOWN_S = 60; // 5/min per IP
@@ -82,6 +84,7 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const inFlight = useRef(false);
   const autoPicked = useRef(false);
   const [announcement, setAnnouncement] = useState("");
+  const [paused, setPaused] = useState(false);
   const cooldown = useCooldown();
   const degraded = useDegraded();
   const capabilities = useCapabilities();
@@ -96,6 +99,13 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const pending = mutation.isPending;
   const elapsed = useElapsedSeconds(pending);
   const audioUrl = useObjectUrl(result?.blob ?? null);
+
+  // The stage's voiceprint keeps swelling while a generation runs (it settles by itself afterwards).
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(() => pulseVoice(0.35), 350);
+    return () => clearInterval(timer);
+  }, [pending]);
 
   // Restore this user's draft once the session is known (it is empty for anyone else), and only
   // then start saving, so the empty initial state never overwrites it.
@@ -257,281 +267,324 @@ export function TextToSpeechForm({ initialVoiceId }: { initialVoiceId?: string }
   const stageVoice = pending || result ? (usedVoice ?? chosenVoice) : chosenVoice;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
-      <form
-        ref={formRef}
-        onSubmit={onSubmit}
-        noValidate
-        className="max-w-xl space-y-4"
-        aria-label="Generate speech"
-      >
-        <VoiceProfileSelect value={voiceId} onChange={setVoiceId} disabled={pending} />
-
-        <div>
-          <label htmlFor="tts-text" className="block text-sm font-medium">
-            Text
-          </label>
-          <Textarea
-            id="tts-text"
-            ref={textRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={5}
-            readOnly={pending} // stays selectable and copyable while generating
-            className="read-only:bg-muted"
-            aria-invalid={textError || over > 0 ? true : undefined}
-            aria-describedby={`tts-count tts-hint${over > 0 ? " tts-over" : ""}${overWords ? " tts-words" : ""}`}
+    <div className="gx-root" data-motion={paused ? "paused" : "on"}>
+      <div aria-hidden className="gx-aurora">
+        <i className="gx-a" />
+        <i className="gx-b" />
+      </div>
+      <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
+        <form
+          ref={formRef}
+          onSubmit={onSubmit}
+          onInput={() => pulseVoice(0.5)}
+          noValidate
+          className="gx-card gx-glow gx-form space-y-6"
+          aria-label="Generate speech"
+        >
+          <VoiceProfileSelect
+            value={voiceId}
+            onChange={(id) => {
+              setVoiceId(id);
+              pulseVoice(0.5);
+            }}
+            disabled={pending}
           />
-          <div className="mt-2 flex items-center gap-3">
-            {/* A glance at how much of the limit is used; the count beside it is what is announced. */}
-            <progress
-              aria-hidden
-              data-testid="length-meter"
-              data-over={over > 0}
-              max={TEXT_MAX}
-              value={Math.min(text.length, TEXT_MAX)}
-              className="length-meter"
-            />
-            <p
-              id="tts-count"
-              className={`shrink-0 text-right font-mono text-xs tabular-nums ${over > 0 || overWords ? "font-semibold text-danger" : "text-muted-foreground"}`}
-            >
-              {text.length} / {TEXT_MAX}
-              {over > 0 && ` (${over} too many)`}
-              {maxWords != null && ` · ${words} / about ${maxWords} words`}
-            </p>
-          </div>
-          {overWords && over <= 0 && (
-            <Alert tone="neutral" id="tts-words" className="mt-1">
-              This server speaks about {maxWords} words at a time, so this may be refused. Shorten
-              it or split it into parts.
-            </Alert>
-          )}
-          {over > 0 && (
-            <Alert tone="danger" id="tts-over" className="mt-1">
-              That&apos;s over the {TEXT_MAX}-character limit. Shorten the text to generate it.
-            </Alert>
-          )}
-          <p id="tts-hint" className="text-xs text-muted-foreground">
-            Plain text works best: letters, numbers and basic punctuation.
-          </p>
-          {warnChars && (
-            <p role="status" className="mt-1 text-sm">
-              Emoji and symbols can&apos;t be spoken and will be rejected.
-            </p>
-          )}
-          {textError && (
-            <Alert tone="danger" className="mt-1">
-              {textError}
-            </Alert>
-          )}
-        </div>
 
-        {showDelivery && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="tts-emotion" className="block text-sm font-medium">
-                Delivery
-              </label>
-              <Select
-                id="tts-emotion"
-                value={emotion}
-                onChange={(e) => setEmotion(e.target.value)}
-                disabled={pending}
-                aria-describedby="tts-emotion-hint"
-              >
-                {EMOTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
+          <div>
+            <div className="gx-lab">
+              <span aria-hidden className="gx-n">
+                2
+              </span>
+              <label htmlFor="tts-text">Text</label>
+              <span aria-hidden className="gx-count-s" data-testid="sentence-count">
+                {countSentences(text)} {countSentences(text) === 1 ? "sentence" : "sentences"}
+              </span>
             </div>
-            <div>
-              <label htmlFor="tts-intensity" className="block text-sm font-medium">
-                Strength{" "}
-                {intensityApplies(emotion) ? (
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {Math.round(intensity * 100)}%
-                  </span>
-                ) : (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    (choose a delivery to adjust)
-                  </span>
-                )}
-              </label>
-              <input
-                id="tts-intensity"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={intensity}
-                onChange={(e) => setIntensity(Number(e.target.value))}
-                disabled={pending || !intensityApplies(emotion)}
-                aria-describedby="tts-emotion-hint"
-                className="range mt-1 block min-h-11 w-full disabled:opacity-60"
+            <Textarea
+              id="tts-text"
+              ref={textRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={5}
+              readOnly={pending} // stays selectable and copyable while generating
+              className="read-only:bg-muted"
+              aria-invalid={textError || over > 0 ? true : undefined}
+              aria-describedby={`tts-count tts-hint${over > 0 ? " tts-over" : ""}${overWords ? " tts-words" : ""}`}
+            />
+            <div className="mt-2 flex items-center gap-3">
+              {/* A glance at how much of the limit is used; the count beside it is what is announced. */}
+              <progress
+                aria-hidden
+                data-testid="length-meter"
+                data-over={over > 0}
+                max={TEXT_MAX}
+                value={Math.min(text.length, TEXT_MAX)}
+                className="length-meter"
               />
-            </div>
-            <p id="tts-emotion-hint" className="text-xs text-muted-foreground sm:col-span-2">
-              Auto picks the delivery from your text. Choose one to apply it to every sentence; the
-              strength applies only to a named emotion.
-            </p>
-          </div>
-        )}
-
-        {showDelivery && (
-          <details className="text-sm">
-            <summary className="min-h-11 cursor-pointer py-2 underline underline-offset-2">
-              Tips for expressive speech
-            </summary>
-            <div className="space-y-2 pb-2 text-muted-foreground">
-              <p>
-                Set the delivery for part of the text by wrapping it in a tag, for example{" "}
-                <code className="font-mono">[happy]Great news![/happy]</code>. The tags are{" "}
-                <code className="font-mono">neutral</code>, <code className="font-mono">happy</code>
-                , <code className="font-mono">sad</code>, <code className="font-mono">angry</code>,{" "}
-                <code className="font-mono">fearful</code> and{" "}
-                <code className="font-mono">surprised</code>.
-              </p>
-              <p>
-                Some voice engines can also make a sound where you write{" "}
-                <code className="font-mono">[laugh]</code>,{" "}
-                <code className="font-mono">[chuckle]</code> or{" "}
-                <code className="font-mono">[cough]</code>. Where one can&apos;t, the sound is left
-                out and you are told.
-              </p>
-            </div>
-          </details>
-        )}
-
-        <span role="status" aria-live="polite" className="sr-only">
-          {announcement}
-        </span>
-
-        {formError && <Alert tone="danger">{formError}</Alert>}
-        {degraded && (
-          <p id="tts-paused" role="status" className="text-sm">
-            Generating is paused while the service recovers. This page will update on its own.
-          </p>
-        )}
-        {cooldown.remaining > 0 && (
-          <p id="tts-cooldown" role="status" className="text-sm">
-            You can try again in {cooldown.remaining} s.
-          </p>
-        )}
-
-        {/* Stays in view as the text grows. On a phone it sits above the fixed tab bar (h-14). */}
-        <div className="sticky bottom-14 z-10 flex flex-wrap gap-2 border-t border-border bg-background py-3 sm:bottom-0">
-          <Button
-            ref={submitRef}
-            type="submit"
-            className="whitespace-nowrap"
-            disabled={degraded || cooldown.remaining > 0 || blocker !== null}
-            aria-describedby={whyDisabled}
-            loading={pending}
-          >
-            {pending ? "Generating…" : "Generate speech"}
-          </Button>
-          {blocker && (
-            <p id="tts-blocked" className="self-center text-sm text-muted-foreground">
-              {blocker}
-              {stepsBelow && (
-                <>
-                  {" "}
-                  <a href="#first-run-title" className="underline">
-                    See the steps below.
-                  </a>
-                </>
-              )}
-            </p>
-          )}
-          {pending && (
-            <Button variant="secondary" onClick={() => controller.current?.abort()}>
-              Cancel
-            </Button>
-          )}
-        </div>
-      </form>
-
-      <GenerateStage
-        state={stageState}
-        voiceName={stageVoice}
-        elapsed={elapsed}
-        stageRef={stageRef}
-      >
-        {result && audioUrl ? (
-          <>
-            <Take
-              src={audioUrl}
-              blob={result.blob}
-              filename={result.filename}
-              label="Generated speech"
-              animateIn
-              extraControls
-              waveformFirst
-              pulse
-            />
-            <ExpandableText
-              text={`“${result.text}”`}
-              limit={QUOTE_PREVIEW_CHARS}
-              className="text-sm text-muted-foreground"
-            />
-            {engineNote && (
               <p
-                role={result.engineFallbackFrom ? "status" : undefined}
-                className={result.engineFallbackFrom ? "text-sm" : "text-xs text-muted-foreground"}
+                id="tts-count"
+                className={`shrink-0 text-right font-mono text-xs tabular-nums ${over > 0 || overWords ? "font-semibold text-danger" : "text-muted-foreground"}`}
               >
-                {engineNote}.
+                {text.length} / {TEXT_MAX}
+                {over > 0 && ` (${over} too many)`}
+                {maxWords != null && ` · ${words} / about ${maxWords} words`}
               </p>
-            )}
-            {result.styleApplied === false && (
-              <p role="status" className="text-sm">
-                The chosen delivery could not be applied with this voice engine, so the audio uses
-                its default delivery.
-              </p>
-            )}
-            {result.emotions.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Delivery by sentence: {result.emotions.join(", ")}.
-              </p>
-            )}
-            {result.tagsDropped.length > 0 && (
-              <p role="status" className="text-sm">
-                This engine can&apos;t make these sounds, so they were left out:{" "}
-                {result.tagsDropped.join(", ")}.
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  textRef.current?.focus();
-                  textRef.current?.select();
-                }}
-              >
-                Edit text
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
-                aria-describedby={whyDisabled}
-                onClick={() => {
-                  setText(result.text);
-                  void run(result.text);
-                }}
-              >
-                Generate again
-              </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              If you leave this page, find past audio in History.
+            {overWords && over <= 0 && (
+              <Alert tone="neutral" id="tts-words" className="mt-1">
+                This server speaks about {maxWords} words at a time, so this may be refused. Shorten
+                it or split it into parts.
+              </Alert>
+            )}
+            {over > 0 && (
+              <Alert tone="danger" id="tts-over" className="mt-1">
+                That&apos;s over the {TEXT_MAX}-character limit. Shorten the text to generate it.
+              </Alert>
+            )}
+            <p id="tts-hint" className="text-xs text-muted-foreground">
+              Plain text works best: letters, numbers and basic punctuation.
             </p>
-          </>
-        ) : null}
-      </GenerateStage>
+            {warnChars && (
+              <p role="status" className="mt-1 text-sm">
+                Emoji and symbols can&apos;t be spoken and will be rejected.
+              </p>
+            )}
+            {textError && (
+              <Alert tone="danger" className="mt-1">
+                {textError}
+              </Alert>
+            )}
+          </div>
+
+          {showDelivery && (
+            <div>
+              <div className="gx-lab">
+                <span aria-hidden className="gx-n">
+                  3
+                </span>
+                <span id="tts-delivery-label">Delivery</span>
+              </div>
+              <div role="radiogroup" aria-labelledby="tts-delivery-label" className="gx-chips">
+                {EMOTIONS.map((o) => (
+                  <label key={o.value} className="gx-chip">
+                    <input
+                      type="radio"
+                      name="tts-emotion"
+                      className="sr-only"
+                      aria-label={o.label}
+                      aria-describedby="tts-emotion-hint"
+                      value={o.value}
+                      checked={emotion === o.value}
+                      disabled={pending}
+                      onChange={() => {
+                        setEmotion(o.value);
+                        pulseVoice(0.4);
+                      }}
+                    />
+                    <span aria-hidden>{o.chip}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-3">
+                <label htmlFor="tts-intensity" className="block text-sm font-medium">
+                  Strength{" "}
+                  {intensityApplies(emotion) ? (
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {Math.round(intensity * 100)}%
+                    </span>
+                  ) : (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      (choose a delivery to adjust)
+                    </span>
+                  )}
+                </label>
+                <input
+                  id="tts-intensity"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={intensity}
+                  onChange={(e) => setIntensity(Number(e.target.value))}
+                  disabled={pending || !intensityApplies(emotion)}
+                  aria-describedby="tts-emotion-hint"
+                  className="range mt-1 block min-h-11 w-full disabled:opacity-60"
+                />
+              </div>
+              <p id="tts-emotion-hint" className="mt-1 text-xs text-muted-foreground">
+                Auto picks the delivery from your text. Choose one to apply it to every sentence;
+                the strength applies only to a named emotion.
+              </p>
+            </div>
+          )}
+
+          {showDelivery && (
+            <details className="text-sm">
+              <summary className="min-h-11 cursor-pointer py-2 underline underline-offset-2">
+                Tips for expressive speech
+              </summary>
+              <div className="space-y-2 pb-2 text-muted-foreground">
+                <p>
+                  Set the delivery for part of the text by wrapping it in a tag, for example{" "}
+                  <code className="font-mono">[happy]Great news![/happy]</code>. The tags are{" "}
+                  <code className="font-mono">neutral</code>,{" "}
+                  <code className="font-mono">happy</code>, <code className="font-mono">sad</code>,{" "}
+                  <code className="font-mono">angry</code>,{" "}
+                  <code className="font-mono">fearful</code> and{" "}
+                  <code className="font-mono">surprised</code>.
+                </p>
+                <p>
+                  Some voice engines can also make a sound where you write{" "}
+                  <code className="font-mono">[laugh]</code>,{" "}
+                  <code className="font-mono">[chuckle]</code> or{" "}
+                  <code className="font-mono">[cough]</code>. Where one can&apos;t, the sound is
+                  left out and you are told.
+                </p>
+              </div>
+            </details>
+          )}
+
+          <span role="status" aria-live="polite" className="sr-only">
+            {announcement}
+          </span>
+
+          {formError && <Alert tone="danger">{formError}</Alert>}
+          {degraded && (
+            <p id="tts-paused" role="status" className="text-sm">
+              Generating is paused while the service recovers. This page will update on its own.
+            </p>
+          )}
+          {cooldown.remaining > 0 && (
+            <p id="tts-cooldown" role="status" className="text-sm">
+              You can try again in {cooldown.remaining} s.
+            </p>
+          )}
+
+          {/* Stays in view as the text grows. On a phone it sits above the fixed tab bar (h-14). */}
+          <div className="gx-actions sticky bottom-14 z-10 flex flex-wrap gap-2 border-t border-border py-3 sm:bottom-0">
+            <Button
+              ref={submitRef}
+              type="submit"
+              className="whitespace-nowrap"
+              disabled={degraded || cooldown.remaining > 0 || blocker !== null}
+              aria-describedby={whyDisabled}
+              loading={pending}
+            >
+              {pending ? "Generating…" : "Generate speech"}
+            </Button>
+            {blocker && (
+              <p id="tts-blocked" className="self-center text-sm text-muted-foreground">
+                {blocker}
+                {stepsBelow && (
+                  <>
+                    {" "}
+                    <a href="#first-run-title" className="underline">
+                      See the steps below.
+                    </a>
+                  </>
+                )}
+              </p>
+            )}
+            {pending && (
+              <Button variant="secondary" onClick={() => controller.current?.abort()}>
+                Cancel
+              </Button>
+            )}
+          </div>
+        </form>
+
+        <GenerateStage
+          state={stageState}
+          voiceName={stageVoice}
+          elapsed={elapsed}
+          stageRef={stageRef}
+          paused={paused}
+        >
+          {result && audioUrl ? (
+            <>
+              <Take
+                src={audioUrl}
+                blob={result.blob}
+                filename={result.filename}
+                label="Generated speech"
+                animateIn
+                extraControls
+                waveformFirst
+                pulse
+              />
+              <ExpandableText
+                text={`“${result.text}”`}
+                limit={QUOTE_PREVIEW_CHARS}
+                className="text-sm text-muted-foreground"
+              />
+              {engineNote && (
+                <p
+                  role={result.engineFallbackFrom ? "status" : undefined}
+                  className={
+                    result.engineFallbackFrom ? "text-sm" : "text-xs text-muted-foreground"
+                  }
+                >
+                  {engineNote}.
+                </p>
+              )}
+              {result.styleApplied === false && (
+                <p role="status" className="text-sm">
+                  The chosen delivery could not be applied with this voice engine, so the audio uses
+                  its default delivery.
+                </p>
+              )}
+              {result.emotions.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Delivery by sentence: {result.emotions.join(", ")}.
+                </p>
+              )}
+              {result.tagsDropped.length > 0 && (
+                <p role="status" className="text-sm">
+                  This engine can&apos;t make these sounds, so they were left out:{" "}
+                  {result.tagsDropped.join(", ")}.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    textRef.current?.focus();
+                    textRef.current?.select();
+                  }}
+                >
+                  Edit text
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={pending || degraded || cooldown.remaining > 0 || blocker !== null}
+                  aria-describedby={whyDisabled}
+                  onClick={() => {
+                    setText(result.text);
+                    void run(result.text);
+                  }}
+                >
+                  Generate again
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If you leave this page, find past audio in History.
+              </p>
+            </>
+          ) : null}
+        </GenerateStage>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          aria-pressed={paused}
+          onClick={() => setPaused((p) => !p)}
+          className="gx-motion"
+        >
+          {paused ? "Resume motion" : "Pause motion"}
+        </button>
+      </div>
     </div>
   );
 }
