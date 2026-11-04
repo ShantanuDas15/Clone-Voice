@@ -207,6 +207,12 @@ progress.length-meter::-webkit-progress-value {
 progress.length-meter::-moz-progress-bar {
   background: hsl(var(--primary));
 }
+progress.length-meter[data-flag="true"]::-webkit-progress-value {
+  background: hsl(var(--warning-foreground));
+}
+progress.length-meter[data-flag="true"]::-moz-progress-bar {
+  background: hsl(var(--warning-foreground));
+}
 progress.length-meter[data-over="true"]::-webkit-progress-value {
   background: hsl(var(--danger));
 }
