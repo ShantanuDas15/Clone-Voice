@@ -188,6 +188,7 @@ Primitives (new, in `components/ui/`) first; every one must define the states in
 - **Allowed:** feedback to a user action (press, toggle, disclosure, dialog/toast appearance, 120-200 ms); the **live waveform** while recording and the **playhead** while playing (state, not decoration); one deliberate moment: when a generated take finishes, its waveform draws in once (≤400 ms, skipped under reduced motion).
 - **Banned:** entrance animations on page load or scroll, hover lift on cards, looping decorative motion, parallax, auto-playing audio on arrival (history playback after an explicit Play click is fine, `components/history-list.tsx:59`).
 - **Exception, the home page (`/`) only (owner decision, 2026-11-03; §12.19):** the sample card rises once; its sections ease in on scroll (CSS `animation-timeline`, no script); the side bars draw once; and three faint background ribbons drift for the first 3 s after load and while the visitor's own sample plays, and otherwise rest (§12.20). All of it is transform and opacity only, 150-400 ms for one-time motion, off under `prefers-reduced-motion`, never on the heading or the lead paragraph (the LCP element), and the ribbons pause whenever they are off screen and swell while the sample plays. No motion on this page may run on its own for more than five seconds (WCAG 2.2.2). Nothing plays audio on arrival. The ban holds everywhere else.
+- **Exception, the Voices new-voice stage (owner approved the mockup, 2026-11-04; §12.23):** the stage draws the chosen clip's shape and fills it with the real upload progress (bar colour only, no motion of its own), shows the indeterminate bar while the server analyses (the same bar Generate already uses, static under `prefers-reduced-motion`), and draws the finished voice in once with the existing `draw-in` (350 ms). Nothing loops once the voice exists; no new keyframes.
 - **Exception, the Generate result take only (owner chose design "A. Pulse", 2026-11-04; §12.22):** while the take plays, the bars around its playhead rise and light up with how loud the take is at that moment. It exists only while the take is playing (user-started), at about 30 frames a second, only while the tab is visible, stops at once on pause or end, is off under `prefers-reduced-motion`, and changes bar geometry through SVG attributes (no layout beyond the take's own box, no inline style). It does not touch the audio.
 
 ---
@@ -1000,3 +1001,16 @@ pulse), so nothing extra loads on arrival. The card's wave moved to the 48-high 
 written for (96 px tall, up from 72) and its bars rest at 28 like the take's. Like the take, it moves
 only while playing, never under reduced motion, and stops when paused or ended, so the Home page's
 rule (nothing moves by itself for more than five seconds) is unchanged.
+
+### 12.23 Phase 3: the Voices new-voice stage (2026-11-04)
+
+Built from the approved mockup. The Create form keeps the left column; a **new-voice stage** takes the right (the voices list moved below, full width), in the same frame as the Generate stage (`components/voice-stage.tsx`). Four states, one frame:
+
+- **Ready:** a flat 64-mark line and three steps; hidden below `lg` (the form is the page there). Once a clip is chosen the line becomes the clip's own shape, decoded in the browser (`computePeaks`, loaded on demand; if the decode fails the line stays flat).
+- **Uploading:** bars take the accent colour as the real byte progress advances (`onUploadProgress`), with the percentage and a `<progress>`.
+- **Analysing:** a clock and the indeterminate bar; the server reports no steps, so none are invented.
+- **Created:** the shape draws in once (`draw-in`), then the existing result: "Voice “…” created.", the quality report and the "Generate speech with …" button. These moved from the form into the stage; their wording is unchanged.
+
+**Clip feedback:** each clip in the Clips panel also shows how well it agrees with the others as a bar (the API's `agreement`, 0..1), amber for the clip flagged as possibly a different speaker. Single-clip voices show no bar. **Not built:** a mini waveform and the length per stored clip, shown in the mockup; the API returns neither (only position, agreement, mismatch and quality). Adding them needs a backend field first.
+
+Tests: `tests/voice-stage.test.tsx` (six, including no inline style), agreement-bar tests in `tests/voice-profiles.test.tsx`, and `visual/cross-browser-voices.spec.ts` (Firefox and WebKit: flat line, then the clip's shape, busy status, created). The Voices baselines were regenerated on the CI runner.

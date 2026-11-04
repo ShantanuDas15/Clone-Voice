@@ -534,7 +534,7 @@ describe("UploadVoiceForm", () => {
     window.dispatchEvent(idle);
     expect(idle.defaultPrevented).toBe(false);
     await fillAndSubmit();
-    await screen.findByText(/analysing|uploading/i);
+    expect((await screen.findAllByText(/analysing|uploading/i)).length).toBeGreaterThan(0);
     const busy = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(busy);
     expect(busy.defaultPrevented).toBe(true);
@@ -647,6 +647,18 @@ describe("ProfileClips", () => {
     expect(within(list).getByText("Background noise.")).toBeInTheDocument();
     expect(within(list).getByText("May be a different speaker")).toBeInTheDocument();
     expect(within(list).getByText("Matches the others 50%")).toBeInTheDocument();
+    // Each clip also shows how well it agrees, as a bar; the odd one out is flagged.
+    const bars = within(list).getAllByTestId("clip-agreement");
+    expect(bars.map((b) => (b as HTMLProgressElement).value)).toEqual([0.9, 0.5]);
+    expect(bars.map((b) => b.getAttribute("data-flag"))).toEqual(["false", "true"]);
+    expect(bars[1]).toHaveAccessibleName("Clip 2 agreement with the others");
+  });
+
+  it("shows no agreement bar for a voice with a single clip", async () => {
+    withClips([clip(0)]);
+    wrap(<VoiceProfileList />);
+    await screen.findByRole("list", { name: "Clips of My voice" });
+    expect(screen.queryByTestId("clip-agreement")).not.toBeInTheDocument();
   });
 
   it("removes a clip by position, and offers no removal for the only clip", async () => {

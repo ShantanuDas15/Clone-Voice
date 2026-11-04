@@ -96,6 +96,16 @@ export function ProfileClips({ profile }: { profile: VoiceProfile }) {
                       </span>
                     )}
                   </p>
+                  {samples.length > 1 && (
+                    <progress
+                      value={Math.min(1, Math.max(0, s.agreement))}
+                      max={1}
+                      data-flag={s.mismatch}
+                      data-testid="clip-agreement"
+                      aria-label={`Clip ${s.position + 1} agreement with the others`}
+                      className="length-meter block w-40 max-w-full"
+                    />
+                  )}
                   {s.quality && s.quality.hints.length > 0 && (
                     <ul className="list-disc pl-5 text-muted-foreground">
                       {s.quality.hints.map((h) => (

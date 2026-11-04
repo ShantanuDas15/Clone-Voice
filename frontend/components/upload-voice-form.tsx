@@ -3,7 +3,6 @@
 import { getDraft, saveDraft } from "@/lib/draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
@@ -19,9 +18,9 @@ import { rateLimitMessage } from "@/lib/auth/form-errors";
 import { ApiError } from "@/lib/errors";
 import { detectRecordingSupport } from "@/lib/recording";
 import { voiceNameSchema } from "@/lib/validation/audio";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { VoiceQualityReport } from "@/components/voice-quality-report";
+import { VoiceStage, type VoiceStageState } from "@/components/voice-stage";
 
 // The recorder (MediaRecorder, permissions) loads only when someone chooses to record (§5.10).
 const Recorder = dynamic(() => import("@/components/recorder").then((m) => m.Recorder), {
@@ -69,9 +68,10 @@ export function UploadVoiceForm() {
   const [mode, setMode] = useState<SampleMode>("file");
   const [recorderKey, setRecorderKey] = useState(0);
   const [recordingUnavailable, setRecordingUnavailable] = useState<string | null>(null);
+  const [peaks, setPeaks] = useState<number[] | null>(null);
+  const [lockedPeaks, setLockedPeaks] = useState<number[] | null>(null);
   const inFlight = useRef(false);
   const { ref: formRef, focusFirstInvalid } = useFocusFirstInvalid<HTMLFormElement>();
-  const createdRef = useRef<HTMLDivElement>(null);
 
   // Feature-detect after mount (R10): the server render cannot know the browser's capabilities.
   useEffect(() => {
@@ -79,15 +79,20 @@ export function UploadVoiceForm() {
     setRecordingUnavailable(support.supported ? null : support.reason);
   }, []);
 
-  // The result (advice and the next step) can sit below the fold: bring it into view.
+  // The first clip's own shape, decoded in the browser for the stage (a nicety: no decode, no shape).
   useEffect(() => {
-    if (!created) return;
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    createdRef.current?.scrollIntoView?.({
-      block: "nearest",
-      behavior: reduced ? "auto" : "smooth",
+    setPeaks(null);
+    const first = files[0];
+    if (!first) return;
+    let live = true;
+    void import("@/lib/audio-peaks").then(async ({ computePeaks }) => {
+      const result = await computePeaks(first, 64);
+      if (live) setPeaks(result);
     });
-  }, [created]);
+    return () => {
+      live = false;
+    };
+  }, [files]);
 
   const unverified = user !== null && !user.email_verified_at;
   // Restore this user's draft name once the session is known, then keep saving it (see
@@ -162,6 +167,7 @@ export function UploadVoiceForm() {
     }
 
     inFlight.current = true;
+    setLockedPeaks(peaks);
     setProgress(0);
     try {
       const profile = await upload.mutateAsync();
@@ -201,179 +207,182 @@ export function UploadVoiceForm() {
   const online = useOnline();
   const blocker = !online ? "You're offline." : unverified ? "Verify your email first." : null;
 
+  const stageState: VoiceStageState = created
+    ? "created"
+    : pending
+      ? progress !== null && progress < 1
+        ? "uploading"
+        : "analysing"
+      : "ready";
+
   return (
-    <form
-      ref={formRef}
-      onSubmit={onSubmit}
-      noValidate
-      className="space-y-4"
-      aria-label="Create a voice"
-    >
-      <TextField
-        label="Voice name"
-        name="voice-name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={255}
-        disabled={pending}
-        error={nameError}
-      />
-      <fieldset className="space-y-3" disabled={pending}>
-        <legend className="sr-only">Sample source</legend>
-        {recordingUnavailable === null ? (
-          <div
-            role="radiogroup"
-            aria-label="How to add a sample"
-            className="inline-flex overflow-hidden rounded border border-line text-sm"
-          >
-            {SAMPLE_MODES.map((m) => (
-              <button
-                key={m}
-                id={`sample-mode-${m}`}
-                type="button"
-                role="radio"
-                aria-checked={mode === m}
-                tabIndex={mode === m ? 0 : -1}
-                onClick={() => selectMode(m)}
-                onKeyDown={(e) => onModeKeyDown(e, m)}
-                className={`min-h-11 px-4 transition-colors duration-fast ${mode === m ? "bg-primary font-medium text-primary-foreground forced-colors:underline" : "bg-surface hover:bg-muted"}`}
-              >
-                {m === "file" ? "Upload a file" : "Record now"}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">{recordingUnavailable}</p>
-        )}
-        {mode === "record" && recordingUnavailable === null ? (
-          <>
-            <Recorder
-              key={recorderKey}
-              onChange={(f) => setFiles(f ? [f] : [])}
-              disabled={pending}
-            />
-            {fileError && <Alert tone="danger">{fileError}</Alert>}
-          </>
-        ) : (
-          <AudioUploader files={files} onChange={setFiles} disabled={pending} error={fileError} />
-        )}
-        {files.length === 1 && (
-          <p className="text-sm text-muted-foreground">
-            Tip: add 2 or 3 more clips of the same person. Voices made from several clips have fewer
-            garbled or missing words. You can also add them later under Clips.
-          </p>
-        )}
-      </fieldset>
-
-      <div>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
-            disabled={pending}
-            aria-invalid={consentError ? true : undefined}
-            className="mt-1 h-4 w-4"
-          />
-          <span>
-            I confirm I have the right to use this voice sample and will follow the acceptable-use
-            terms
-            {terms.data?.url && (
-              <>
-                {" "}
-                (version {terms.data.version},{" "}
-                <a
-                  href={terms.data.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  read the terms
-                </a>
-                )
-              </>
-            )}
-            .
-          </span>
-        </label>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Your sample is kept until you delete this voice.
-          {terms.data && !terms.data.url && " Terms are being finalised."}
-        </p>
-        {consentError && (
-          <Alert tone="danger" className="mt-1">
-            {consentError}
-          </Alert>
-        )}
-      </div>
-
-      <div>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={adult}
-            onChange={(e) => setAdult(e.target.checked)}
-            disabled={pending}
-            aria-invalid={adultError ? true : undefined}
-            className="mt-1 h-4 w-4"
-          />
-          <span>I confirm the speaker is 18 or older.</span>
-        </label>
-        {adultError && (
-          <Alert tone="danger" className="mt-1">
-            {adultError}
-          </Alert>
-        )}
-      </div>
-
-      {pending && (
-        <div role="status" aria-live="polite" className="text-sm">
-          {progress !== null && progress < 1 ? (
-            <>
-              <progress value={progress} max={1} className="w-full" aria-label="Upload progress" />
-              <span>Uploading… {Math.round(progress * 100)}%</span>
-            </>
-          ) : (
-            <span>Analysing the voice. This can take a minute; please keep this page open.</span>
-          )}
-        </div>
-      )}
-      {formError && <Alert tone="danger">{formError}</Alert>}
-      {created && (
-        <div ref={createdRef} className="space-y-2">
-          <Alert tone="success">Voice “{created.name}” created.</Alert>
-          <VoiceQualityReport profile={created} />
-          <Link
-            href={`/generate?voice=${encodeURIComponent(created.id)}`}
-            className={buttonVariants()}
-          >
-            Generate speech with “{created.name}”
-          </Link>
-        </div>
-      )}
-      {degraded && (
-        <p id="upload-paused" role="status" className="text-sm">
-          Uploading is paused while the service recovers. This page will update on its own.
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="submit"
-          disabled={degraded || blocker !== null}
-          aria-describedby={
-            [blocker && "upload-blocked", degraded && "upload-paused"].filter(Boolean).join(" ") ||
-            undefined
-          }
-          loading={pending}
+    <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
+      <section aria-labelledby="new-voice" className="max-w-xl">
+        <h2 id="new-voice" className="mb-4 text-xl font-semibold">
+          Create a voice
+        </h2>
+        <form
+          ref={formRef}
+          onSubmit={onSubmit}
+          noValidate
+          className="space-y-4"
+          aria-label="Create a voice"
         >
-          {pending ? "Creating voice…" : "Create voice"}
-        </Button>
-        {blocker && (
-          <p id="upload-blocked" className="text-sm text-muted-foreground">
-            {blocker}
-          </p>
-        )}
-      </div>
-    </form>
+          <TextField
+            label="Voice name"
+            name="voice-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={255}
+            disabled={pending}
+            error={nameError}
+          />
+          <fieldset className="space-y-3" disabled={pending}>
+            <legend className="sr-only">Sample source</legend>
+            {recordingUnavailable === null ? (
+              <div
+                role="radiogroup"
+                aria-label="How to add a sample"
+                className="inline-flex overflow-hidden rounded border border-line text-sm"
+              >
+                {SAMPLE_MODES.map((m) => (
+                  <button
+                    key={m}
+                    id={`sample-mode-${m}`}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === m}
+                    tabIndex={mode === m ? 0 : -1}
+                    onClick={() => selectMode(m)}
+                    onKeyDown={(e) => onModeKeyDown(e, m)}
+                    className={`min-h-11 px-4 transition-colors duration-fast ${mode === m ? "bg-primary font-medium text-primary-foreground forced-colors:underline" : "bg-surface hover:bg-muted"}`}
+                  >
+                    {m === "file" ? "Upload a file" : "Record now"}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{recordingUnavailable}</p>
+            )}
+            {mode === "record" && recordingUnavailable === null ? (
+              <>
+                <Recorder
+                  key={recorderKey}
+                  onChange={(f) => setFiles(f ? [f] : [])}
+                  disabled={pending}
+                />
+                {fileError && <Alert tone="danger">{fileError}</Alert>}
+              </>
+            ) : (
+              <AudioUploader
+                files={files}
+                onChange={setFiles}
+                disabled={pending}
+                error={fileError}
+              />
+            )}
+            {files.length === 1 && (
+              <p className="text-sm text-muted-foreground">
+                Tip: add 2 or 3 more clips of the same person. Voices made from several clips have
+                fewer garbled or missing words. You can also add them later under Clips.
+              </p>
+            )}
+          </fieldset>
+
+          <div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                disabled={pending}
+                aria-invalid={consentError ? true : undefined}
+                className="mt-1 h-4 w-4"
+              />
+              <span>
+                I confirm I have the right to use this voice sample and will follow the
+                acceptable-use terms
+                {terms.data?.url && (
+                  <>
+                    {" "}
+                    (version {terms.data.version},{" "}
+                    <a
+                      href={terms.data.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      read the terms
+                    </a>
+                    )
+                  </>
+                )}
+                .
+              </span>
+            </label>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your sample is kept until you delete this voice.
+              {terms.data && !terms.data.url && " Terms are being finalised."}
+            </p>
+            {consentError && (
+              <Alert tone="danger" className="mt-1">
+                {consentError}
+              </Alert>
+            )}
+          </div>
+
+          <div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={adult}
+                onChange={(e) => setAdult(e.target.checked)}
+                disabled={pending}
+                aria-invalid={adultError ? true : undefined}
+                className="mt-1 h-4 w-4"
+              />
+              <span>I confirm the speaker is 18 or older.</span>
+            </label>
+            {adultError && (
+              <Alert tone="danger" className="mt-1">
+                {adultError}
+              </Alert>
+            )}
+          </div>
+
+          {formError && <Alert tone="danger">{formError}</Alert>}
+          {degraded && (
+            <p id="upload-paused" role="status" className="text-sm">
+              Uploading is paused while the service recovers. This page will update on its own.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="submit"
+              disabled={degraded || blocker !== null}
+              aria-describedby={
+                [blocker && "upload-blocked", degraded && "upload-paused"]
+                  .filter(Boolean)
+                  .join(" ") || undefined
+              }
+              loading={pending}
+            >
+              {pending ? "Creating voice…" : "Create voice"}
+            </Button>
+            {blocker && (
+              <p id="upload-blocked" className="text-sm text-muted-foreground">
+                {blocker}
+              </p>
+            )}
+          </div>
+        </form>
+      </section>
+      <VoiceStage
+        state={stageState}
+        progress={progress ?? 0}
+        peaks={pending || created ? lockedPeaks : peaks}
+        created={created}
+      />
+    </div>
   );
 }
