@@ -3,7 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AuthCard } from "@/components/auth-card";
 import { panelBars } from "@/lib/auth-panel";
-import { addEnergy, decayEnergy, pulseVoice, swollenHeight } from "@/lib/voice-energy";
+import {
+  PRINT_BARS,
+  addEnergy,
+  decayEnergy,
+  printAmplitude,
+  printLit,
+  printSeed,
+  pulseVoice,
+  surgeVoice,
+  swollenHeight,
+} from "@/lib/voice-energy";
 
 const copy = { headline: "Welcome back.", accent: "Your voices are waiting.", lead: "Pick up." };
 
@@ -43,27 +53,26 @@ describe("AuthCard with a voice panel", () => {
     expect(panel.className).toContain("lg:flex");
   });
 
-  it("draws the full wave in the panel and a thin one above the card, only below lg", () => {
+  it("draws the voiceprint canvas in the panel and a thin wave above the card, only below lg", () => {
     renderSplit();
     const waves = screen.getAllByTestId("voice-wave");
-    expect(waves.map((w) => w.querySelectorAll("rect").length)).toEqual([56, 44]);
+    expect(waves.map((w) => w.tagName.toLowerCase())).toEqual(["canvas", "svg"]);
+    expect(waves[1]!.querySelectorAll("rect")).toHaveLength(44);
     expect(waves[1]!.getAttribute("class")).toContain("lg:hidden");
-    for (const wave of waves) {
-      expect(wave).toHaveAttribute("aria-hidden", "true");
-      expect(wave.querySelectorAll("rect.fill-primary").length).toBeGreaterThan(0);
-    }
+    for (const wave of waves) expect(wave).toHaveAttribute("aria-hidden", "true");
+    expect(waves[1]!.querySelectorAll("rect.fill-primary").length).toBeGreaterThan(0);
   });
 
   it("draws once, only where motion is allowed, with no inline style", () => {
     const { container } = renderSplit();
-    const bars = [...container.querySelectorAll("[data-testid='voice-wave'] rect")];
+    const bars = [...container.querySelectorAll("svg[data-testid='voice-wave'] rect")];
     for (const bar of bars) {
       const cls = bar.getAttribute("class")!;
       expect(cls).toContain("motion-safe:animate-bar-in");
       expect(cls).toContain("[transform-box:fill-box]");
     }
     expect(container.querySelector("[style]")).toBeNull(); // the site's CSP forbids them
-    // Nothing is endless: no looping animation class anywhere in the panel.
+    // No Tailwind looping animation class anywhere; the approved loops live in auth-experience.css.
     expect(container.innerHTML).not.toMatch(/animate-(drift|indeterminate)/);
   });
 
@@ -78,6 +87,37 @@ describe("AuthCard with a voice panel", () => {
   });
 });
 
+describe("the approved sign-in look", () => {
+  it("types the headline's second line from phrases, starting complete", () => {
+    render(
+      <AuthCard title="Sign in" panel={{ ...copy, phrases: ["Say it in a voice you own."] }}>
+        <p>form</p>
+      </AuthCard>,
+    );
+    expect(screen.getByTestId("voice-panel")).toHaveTextContent(
+      "Welcome back. Your voices are waiting.",
+    );
+  });
+
+  it("puts the aurora and the glass card only on the two-column layout", () => {
+    const { container, unmount } = render(
+      <AuthCard title="Sign in" panel={copy}>
+        <p>form</p>
+      </AuthCard>,
+    );
+    expect(container.querySelector(".vx-aurora")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector("section.vx-card")).not.toBeNull();
+    unmount();
+    const plain = render(
+      <AuthCard title="Reset">
+        <p>form</p>
+      </AuthCard>,
+    );
+    expect(plain.container.querySelector(".vx-aurora")).toBeNull();
+    expect(plain.container.querySelector(".vx-card")).toBeNull();
+  });
+});
+
 describe("voice energy", () => {
   it("adds, caps and decays to rest", () => {
     expect(addEnergy(0.8, 0.5)).toBe(1);
@@ -89,6 +129,40 @@ describe("voice energy", () => {
       frames += 1;
     }
     expect(frames).toBeLessThan(120); // about 2 s at 60 fps: settles well inside WCAG 2.2.2's 5 s
+  });
+
+  it("keeps the voiceprint in range and lights more of it under energy and surge", () => {
+    for (let i = 0; i < PRINT_BARS; i += 1) {
+      const seed = printSeed(i);
+      expect(seed).toBeGreaterThanOrEqual(0);
+      expect(seed).toBeLessThan(1);
+      for (const [e, s] of [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+      ] as const) {
+        const a = printAmplitude(i, 3.3, e, s, seed);
+        expect(a).toBeGreaterThan(0);
+        expect(a).toBeLessThanOrEqual(0.96);
+      }
+    }
+    expect(printLit(0.5, 0, 0, 1)).toBe(1); // a surge lights every bar
+    expect(printLit(0.95, 0, 0, 0)).toBeLessThan(0.35); // far from the hot spot and quiet: unlit
+  });
+
+  it("labels a surge as verified, then goes back to idle", () => {
+    vi.useFakeTimers();
+    render(
+      <AuthCard title="Sign in" panel={copy}>
+        <p>form</p>
+      </AuthCard>,
+    );
+    const state = screen.getByTestId("voice-state");
+    act(() => surgeVoice());
+    expect(state).toHaveTextContent("verified");
+    act(() => vi.advanceTimersByTime(2000));
+    expect(state).toHaveTextContent("idle");
+    vi.useRealTimers();
   });
 
   it("swells a bar only while there is energy, and never past the box", () => {

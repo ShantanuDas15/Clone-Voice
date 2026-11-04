@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import "@/app/auth-experience.css";
+
 import { type PanelCopy, VoicePanel, VoiceStrip } from "@/components/voice-panel";
 
 /**
@@ -20,9 +22,11 @@ export function AuthCard({
 }) {
   const card = (
     <section
-      className={`mx-auto mt-2 w-full max-w-md rounded-lg border bg-surface p-6 sm:mt-8 sm:p-8 ${
-        panel ? "border-primary/40" : "border-border"
-      } ${panel ? "lg:mx-0 lg:mt-0 lg:self-center lg:justify-self-end" : ""}`}
+      className={`mx-auto mt-2 w-full max-w-md p-6 sm:mt-8 sm:p-8 ${
+        panel
+          ? "vx-card lg:mx-0 lg:mt-0 lg:self-center lg:justify-self-end lg:p-9"
+          : "rounded-lg border border-border bg-surface"
+      }`}
     >
       {panel && <VoiceStrip />}
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
@@ -32,7 +36,11 @@ export function AuthCard({
   );
   if (!panel) return card;
   return (
-    <div className="lg:grid lg:min-h-[34rem] lg:grid-cols-[11fr_9fr] lg:gap-14 lg:py-6">
+    <div className="lg:grid lg:min-h-[34rem] lg:grid-cols-[23fr_17fr] lg:gap-20 lg:py-6">
+      <div aria-hidden className="vx-aurora">
+        <i className="vx-a" />
+        <i className="vx-b" />
+      </div>
       <VoicePanel copy={panel} />
       {card}
     </div>
