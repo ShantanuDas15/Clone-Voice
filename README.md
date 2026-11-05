@@ -15,9 +15,9 @@
 
 - Open the home page and press **Play sample** to hear speech the app generated from a short recording, with the speaker's consent.
 - The sign-in and sign-up screens are open to look at.
-- **Note:** creating a voice and generating speech need a verified email address, and the deployment has no email provider configured yet, so a new account cannot complete verification there. See [`RAILWAY_READINESS_REPORT.md`](RAILWAY_READINESS_REPORT.md) (finding F-07).
+- **Note:** creating a voice and generating speech need a verified email address, and the deployment has no email provider configured yet, so a new account cannot complete verification there.
 
-Every merge to `main` is tested in CI and then deployed automatically ([`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md), "Automatic deploys").
+Every merge to `main` is tested in CI and then deployed automatically.
 
 ### Screenshots
 
@@ -210,7 +210,7 @@ many requests are queued behind it:
 
 ## ☁️ Deploying to Railway
 
-`railway.toml` and [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md) hold the runbook:
+`railway.toml` and the Railway deployment runbook (kept private) hold the runbook:
 services, the `/data` volume, the full variable list and the checks to run after the
 first deploy. The image's entrypoint (`backend/serve.py`) reads the platform's
 `$PORT`, prepares a root-owned volume and can download the model weights on first
