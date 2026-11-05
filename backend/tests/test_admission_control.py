@@ -8,11 +8,9 @@ from fastapi.testclient import TestClient
 
 from backend.core.config import Settings, settings
 from backend.services import tts_pipeline as tp
-from backend.tests.test_synthesize import (
-    auth_headers_syn,  # noqa: F401
-    setup_models_for_synthesize,
-    upload_profile,
-)
+from backend.tests.test_synthesize import auth_headers_syn  # noqa: F401
+from backend.tests.test_synthesize import (setup_models_for_synthesize,
+                                           upload_profile)
 
 SHORT = "The meeting starts at nine and ends at ten."
 LONG = " ".join(["The meeting starts at nine and ends at ten."] * 10)  # 90 words

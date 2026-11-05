@@ -142,7 +142,10 @@ def test_scripts_are_executable_and_strict() -> None:
 
 
 def test_the_runbook_documents_the_switches_and_the_deadline() -> None:
-    text = (REPO / "RAILWAY_DEPLOYMENT.md").read_text()
+    runbook = REPO / "private-docs" / "RAILWAY_DEPLOYMENT.md"
+    if not runbook.exists():
+        pytest.skip("runbook is in the gitignored private-docs/ and absent here")
+    text = runbook.read_text()
     section = text[text.index("## Automatic deploys") :]
     for needle in (
         "AUTO_DEPLOY",

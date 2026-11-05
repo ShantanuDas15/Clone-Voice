@@ -1,4 +1,4 @@
-"""railway.toml and RAILWAY_DEPLOYMENT.md stay consistent with the code
+"""railway.toml and the private RAILWAY_DEPLOYMENT.md stay consistent with the code
 (HARDENING_PLAN.md R1). The platform itself can't be run here, so these guard
 the parts that can silently drift."""
 
@@ -13,7 +13,25 @@ from backend.main import app
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG = tomllib.loads((REPO_ROOT / "railway.toml").read_text())
-DOC = (REPO_ROOT / "RAILWAY_DEPLOYMENT.md").read_text()
+PRIVATE_DOCS = REPO_ROOT / "private-docs"
+
+
+def _read_private(name: str) -> str:
+    """Read a runbook kept in the gitignored private-docs/ ('' where absent, e.g. CI)."""
+    path = PRIVATE_DOCS / name
+    return path.read_text() if path.exists() else ""
+
+
+DOC = _read_private("RAILWAY_DEPLOYMENT.md")
+
+
+@pytest.fixture(autouse=True)
+def _skip_when_runbook_is_not_checked_out(request):
+    """The runbooks are private and not in the repo; their drift checks run locally only."""
+    names = getattr(request.function, "__code__", None)
+    used = set(names.co_names) if names else set()
+    if ("DOC" in used and not DOC) or ("RUNBOOK" in used and not RUNBOOK):
+        pytest.skip("runbook is in the gitignored private-docs/ and absent here")
 
 
 def test_builds_the_backend_dockerfile_from_the_repo_root():
@@ -121,7 +139,7 @@ def test_ci_exercises_the_entrypoint_on_real_docker():
 # --- the inference worker service (CHATTERBOX_ROLLOUT_PLAN.md R0.4) ---------------------------
 
 WORKER_CONFIG = tomllib.loads((REPO_ROOT / "tts_worker" / "railway.toml").read_text())
-RUNBOOK = (REPO_ROOT / "CHATTERBOX_RUNBOOK.md").read_text()
+RUNBOOK = _read_private("CHATTERBOX_RUNBOOK.md")
 
 
 def test_worker_builds_its_own_dockerfile_from_the_repo_root():

@@ -6,7 +6,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from backend.models.voice_profile import VoiceProfile
-from backend.tests.test_voice import auth_headers  # noqa: F401  (pytest fixture)
+from backend.tests.test_voice import \
+    auth_headers  # noqa: F401  (pytest fixture)
 from backend.tests.test_voice import create_dummy_wav
 
 FLAG = "backend.core.config.settings.REQUIRE_ADULT_CONFIRMATION"
@@ -160,8 +161,8 @@ def test_the_account_export_lists_when_the_adult_attestation_was_given(
     from datetime import datetime, timezone
 
     from backend.models.user import User
-    from backend.tests.test_account_export import PASSWORD, URL
-    from backend.tests.test_account_export import _json, _open, _signup, _voice
+    from backend.tests.test_account_export import (PASSWORD, URL, _json, _open,
+                                                   _signup, _voice)
 
     headers = _signup(client)
     user = db_session.query(User).one()

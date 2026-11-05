@@ -10,12 +10,8 @@ from fastapi.testclient import TestClient
 
 from backend.models.generation import Generation
 from backend.services.tts_pipeline import load_mock_models
-from backend.services.waveform import (
-    PEAK_SCALE,
-    WAVEFORM_BARS,
-    bucket_peaks,
-    compute_waveform_peaks,
-)
+from backend.services.waveform import (PEAK_SCALE, WAVEFORM_BARS, bucket_peaks,
+                                       compute_waveform_peaks)
 from backend.tests.test_generation_delete import _generate, _sign_in
 from backend.tests.test_synthesize import upload_profile
 
