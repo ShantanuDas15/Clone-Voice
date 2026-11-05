@@ -36,3 +36,6 @@ graphify-out/
 /backend-review.md
 /frontend-plan-prompt.md
 /frontend-ux-improvement-prompt.md
+
+# Private planning/runbook docs (kept locally, not in the public repo)
+/private-docs/

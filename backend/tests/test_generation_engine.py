@@ -15,7 +15,8 @@ from backend.models.generation import Generation
 from backend.services import tts_engine, tts_pipeline
 from backend.services.tts_engine import EngineUnavailableError
 from backend.services.tts_pipeline import InferenceResult
-from backend.tests.test_chatterbox_engine import TOKEN, _Model, _Server, _tone, _wav
+from backend.tests.test_chatterbox_engine import (TOKEN, _Model, _Server,
+                                                  _tone, _wav)
 from backend.tests.test_engine_fallback import PRIMARY, _FlakyEngine
 
 EMB = np.ones(256, np.float32) / 16.0

@@ -13,27 +13,14 @@ from backend.core import metrics
 from backend.core.config import Settings, settings
 from backend.services import tts_engine, tts_pipeline
 from backend.services.chatterbox_engine import ChatterboxEngine, CircuitBreaker
-from backend.services.tts_engine import (
-    EngineBusyError,
-    EngineCapabilities,
-    EngineRejectedReferenceError,
-    EngineUnavailableError,
-    SynthesisResult,
-    TTSEngine,
-    VoiceConditioning,
-    WrongEngineError,
-    get_engine,
-    get_fallback_engine,
-)
-from backend.tests.test_chatterbox_engine import (
-    EMB,
-    SR,
-    TOKEN,
-    _Model,
-    _Server,
-    _tone,
-    _wav,
-)
+from backend.services.tts_engine import (EngineBusyError, EngineCapabilities,
+                                         EngineRejectedReferenceError,
+                                         EngineUnavailableError,
+                                         SynthesisResult, TTSEngine,
+                                         VoiceConditioning, WrongEngineError,
+                                         get_engine, get_fallback_engine)
+from backend.tests.test_chatterbox_engine import (EMB, SR, TOKEN, _Model,
+                                                  _Server, _tone, _wav)
 
 PRIMARY = "chatterbox_nano"
 

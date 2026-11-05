@@ -11,17 +11,10 @@ import pytest
 from backend.core import metrics
 from backend.core.config import Settings, settings
 from backend.services import tts_engine, tts_pipeline
-from backend.services.candidate_selection import (
-    UNSCORABLE,
-    pick_best,
-    speaker_similarity,
-)
-from backend.services.tts_engine import (
-    EngineCapabilities,
-    SynthesisResult,
-    TTSEngine,
-    VoiceConditioning,
-)
+from backend.services.candidate_selection import (UNSCORABLE, pick_best,
+                                                  speaker_similarity)
+from backend.services.tts_engine import (EngineCapabilities, SynthesisResult,
+                                         TTSEngine, VoiceConditioning)
 
 SR = 16000
 TEXT = "Hello there my friend today."  # 5 words: expected about 1.7 s

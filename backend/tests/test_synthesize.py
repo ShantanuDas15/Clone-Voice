@@ -12,11 +12,9 @@ import torch
 from fastapi.testclient import TestClient
 
 from backend.core.config import settings
-from backend.services.tts_pipeline import (
-    InferenceQueueFullError,
-    InferenceTimeoutError,
-    load_mock_models,
-)
+from backend.services.tts_pipeline import (InferenceQueueFullError,
+                                           InferenceTimeoutError,
+                                           load_mock_models)
 
 
 @pytest.fixture(scope="module", autouse=True)
