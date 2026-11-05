@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider, __resetBootstrapForTests } from "@/components/auth-provider";
 import { Recorder } from "@/components/recorder";
-import { TRACE_BARS } from "@/hooks/use-input-level";
 import { RECORDING_PROMPTS } from "@/lib/recording-prompts";
 import { UploadVoiceForm } from "@/components/upload-voice-form";
 import { __resetSessionForTests } from "@/lib/auth/session";
@@ -163,12 +162,13 @@ describe("Recorder", () => {
     }
   });
 
-  it("shows the live trace as the microphone meter and says in words how the take is going", async () => {
+  it("shows the segments as the microphone meter, keeps the line to read, and says in words how the take is going", async () => {
     vi.useFakeTimers();
     await begin();
-    expect(screen.queryByTestId("reading-prompt")).not.toBeInTheDocument();
+    // The line to read stays on screen while recording: it is what the person is reading.
+    expect(screen.getByTestId("reading-prompt")).toBeInTheDocument();
     const meter = screen.getByRole("meter", { name: "Microphone level" });
-    expect(meter.children).toHaveLength(TRACE_BARS);
+    expect(meter.children).toHaveLength(12);
     expect(screen.getByText(/Keep going: at least 5 seconds are needed/)).toBeInTheDocument();
 
     await act(async () => void vi.advanceTimersByTime(6000));

@@ -43,7 +43,7 @@ function Shape({
       data-testid="voice-shape"
       viewBox={`0 0 ${BARS * 4} 48`}
       preserveAspectRatio="none"
-      className={`h-24 w-full ${state === "created" ? "motion-safe:animate-draw-in" : ""}`.trim()}
+      className={`bx-shape h-24 w-full ${state === "created" ? "motion-safe:animate-draw-in" : ""}`.trim()}
     >
       {Array.from({ length: BARS }, (_, i) => {
         const p = peaks?.[Math.floor((i / BARS) * peaks.length)];
@@ -120,19 +120,13 @@ export function VoiceStage({
       ref={section}
       aria-labelledby={titleId}
       data-state={state}
-      className={`max-w-xl flex-col gap-4 rounded-lg border border-border bg-surface p-5 lg:sticky lg:top-4 lg:flex lg:min-h-[22rem] ${
-        state === "ready" ? "hidden" : "flex"
-      }`}
+      className={`bx-card bx-stage flex-col gap-4 lg:flex ${state === "ready" ? "hidden" : "flex"}`}
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id={titleId} className="font-medium">
           Your new voice
         </h2>
-        <span
-          aria-hidden
-          data-testid="voice-stage-tag"
-          className="rounded-full bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground"
-        >
+        <span aria-hidden data-testid="voice-stage-tag" className="bx-tag">
           {TAG[state]}
         </span>
       </div>

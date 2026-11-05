@@ -190,8 +190,7 @@ test("H1 recorder shows the orb while recording (needs a fake microphone)", asyn
   test.skip((await record.count()) === 0, "recording not offered in this browser");
   await record.click();
   await page.getByRole("button", { name: "Start recording" }).click();
-  await expect(page.getByTestId("mic-orb")).toBeVisible();
-  await expect(page.getByTestId("mic-orb-ring")).toBeAttached();
+  await expect(page.locator(".bx-rec-pulse")).toBeAttached(); // the live button's pulse
   await expect(page.getByRole("meter")).toBeAttached();
   const stop = page.getByRole("button", { name: "Stop recording" });
   await expect(stop).toBeEnabled({ timeout: 15_000 });

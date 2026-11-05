@@ -3,44 +3,12 @@
 import Link from "next/link";
 
 import { useProfiles } from "@/hooks/use-voice-profiles";
-import { miniBars } from "@/lib/home-demo";
+import { VoiceGlyph } from "@/components/voice-glyph";
 
 interface Props {
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
-}
-
-/** A stable small number from an id, so a voice always gets the same glyph. */
-function seedOf(id: string): number {
-  let n = 0;
-  for (const ch of id) n = (n * 31 + ch.charCodeAt(0)) % 997;
-  return (n % 17) + 1;
-}
-
-/** A voice's identity mark: small bars shaped from its id (not its audio). Decorative. */
-function Glyph({ id }: { id: string }) {
-  const bars = miniBars(22, seedOf(id));
-  return (
-    <svg
-      aria-hidden
-      focusable="false"
-      viewBox="0 0 120 26"
-      preserveAspectRatio="none"
-      className="gx-glyph"
-    >
-      {bars.map((v, i) => (
-        <rect
-          key={i}
-          x={i * (120 / 22) + 1}
-          y={13 - (v * 26) / 2}
-          width={3}
-          height={v * 26}
-          rx={1.5}
-        />
-      ))}
-    </svg>
-  );
 }
 
 /**
@@ -80,7 +48,7 @@ export function VoiceProfileSelect({ value, onChange, disabled }: Props) {
                 <span aria-hidden className="gx-vname">
                   {p.name}
                 </span>
-                <Glyph id={p.id} />
+                <VoiceGlyph id={p.id} className="gx-glyph" />
                 {clips > 0 ? (
                   <span aria-hidden className="gx-vnote">
                     {clips} {clips === 1 ? "clip" : "clips"}

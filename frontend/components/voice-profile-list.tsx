@@ -14,6 +14,7 @@ import { QUALITY_LABEL, overallQuality } from "@/lib/voice-quality";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { VoiceGlyph } from "@/components/voice-glyph";
 import { ProfileClips } from "@/components/profile-clips";
 
 function StatusChip({ status }: { status: string }) {
@@ -72,6 +73,17 @@ function DeleteDialog({
   );
 }
 
+/** "3 voices" beside the shelf heading; nothing until the list has loaded and is not empty. */
+export function VoiceCount() {
+  const { data } = useProfiles();
+  if (!data || data.length === 0) return null;
+  return (
+    <span data-testid="voice-count" className="bx-count">
+      {data.length === 1 ? "1 voice" : `${data.length} voices`}
+    </span>
+  );
+}
+
 /** The user's voices with loading, empty, error and failed-row states, and confirmed deletion. */
 export function VoiceProfileList() {
   const listRef = useListMotion();
@@ -111,17 +123,14 @@ export function VoiceProfileList() {
 
   return (
     <>
-      <ul ref={listRef} className="space-y-2">
+      <ul ref={listRef} className="bx-shelf-list">
         {data.map((p) => (
-          <li
-            key={p.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-3"
-          >
-            <div>
+          <li key={p.id} className="bx-vcard">
+            <div className="bx-vtop">
               <p className="font-medium">
                 {p.name} <StatusChip status={p.status} />
               </p>
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <p className="bx-vmeta flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                 <span>Created {formatDateTime(p.created_at)}</span>
                 {p.status === "ready" && <VoiceSummary samples={p.samples ?? []} />}
               </p>
@@ -134,7 +143,8 @@ export function VoiceProfileList() {
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
+            {p.status === "ready" && <VoiceGlyph id={p.id} bars={64} className="bx-glyph" />}
+            <div className="bx-vact flex gap-2">
               {p.status === "ready" && (
                 <Link
                   href={`/generate?voice=${encodeURIComponent(p.id)}`}
