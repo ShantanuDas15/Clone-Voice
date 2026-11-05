@@ -916,12 +916,72 @@ describe("AccountSection: details", () => {
     );
   });
 
-  it("lays the details out as one aligned list, with the danger section as an h2", async () => {
+  it("lays the facts out as a list, with the danger section as an h2", async () => {
     wrap(<AccountSection />);
     await screen.findByLabelText("Display name");
     const labels = screen.getAllByRole("term").map((t) => t.textContent);
-    expect(labels).toEqual(["Email", "Verification", "Sign-in", "Password", "Member since"]);
+    expect(labels).toEqual(["Email", "Member since"]);
     expect(screen.getByRole("heading", { level: 2, name: "Delete account" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Sign-in and security" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows how you sign in: Google when the account came from Google, and the password row", async () => {
+    me({ provider: "google", has_password: true });
+    wrap(<AccountSection />);
+    await screen.findByLabelText("Display name");
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.getByText(/^Set\./)).toBeInTheDocument();
+  });
+
+  it("offers in-page links to every section, and the first is current", async () => {
+    wrap(<AccountSection />);
+    await screen.findByLabelText("Display name");
+    const rail = screen.getByRole("navigation", { name: "Account sections" });
+    const links = within(rail).getAllByRole("link");
+    expect(links.map((l) => l.getAttribute("href"))).toEqual([
+      "#s-profile",
+      "#s-security",
+      "#s-data",
+      "#s-delete",
+    ]);
+    expect(links.map((l) => l.textContent)).toEqual([
+      "Profile",
+      "Sign-in and security",
+      "Your data",
+      "Delete account",
+    ]);
+  });
+
+  it("draws the ring's initials from the name as it is typed", async () => {
+    wrap(<AccountSection />);
+    const input = await screen.findByLabelText("Display name");
+    await userEvent.clear(input);
+    await userEvent.type(input, "ada lovelace");
+    expect(screen.getByTestId("ring-initials")).toHaveTextContent("AL");
+  });
+
+  it("counts what is stored once the lists have loaded, and says what will be erased", async () => {
+    wrap(<AccountSection />);
+    const counts = await screen.findByRole("list", { name: "What is stored for you" });
+    expect(within(counts).getAllByRole("listitem")).toHaveLength(3);
+    const erase = await screen.findByRole("list", { name: "What will be erased" });
+    expect(within(erase).getByText("Account and sign-in")).toBeInTheDocument();
+    expect(within(erase).getByText("1 generated clip")).toBeInTheDocument();
+  });
+
+  it("holds the motion still on request", async () => {
+    wrap(<AccountSection />);
+    await screen.findByLabelText("Display name");
+    const root = document.querySelector(".ax-root")!;
+    expect(root).toHaveAttribute("data-motion", "on");
+    await userEvent.click(screen.getByRole("button", { name: "Pause motion" }));
+    expect(root).toHaveAttribute("data-motion", "paused");
+    expect(screen.getByRole("button", { name: "Resume motion" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("restates what is erased inside the delete dialog", async () => {

@@ -1,0 +1,474 @@
+/*
+ * The Account screen's look (owner approved the full mock, 2026-11-05; UX plan §4.10 and §12.28): a
+ * drifting aurora, glass cards, a sticky section rail, an identity card whose avatar is the person's
+ * own voiceprint ring, sign-in methods as rows, counters and lists for the data export, and a
+ * separate, quiet-red delete card.
+ *
+ * Like the other *-experience.css files this is a scoped exception to the flat-style and
+ * no-looping-motion rules: every selector contains an `ax-` class, it is imported only by the Account
+ * page, colours come from the theme tokens, and tests/account-experience.test.ts bounds it. The endless
+ * movement (aurora, the ring's turn and breathing) stops under the visitor's "Pause motion" control
+ * (WCAG 2.2.2) and under prefers-reduced-motion.
+ */
+
+.ax-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ax-aurora i {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(100px);
+  will-change: transform;
+}
+.ax-aurora .ax-a {
+  left: -12%;
+  top: 2%;
+  width: min(52vw, 720px);
+  height: min(52vw, 720px);
+  background: hsl(var(--primary) / 0.2);
+  animation: ax-drift-a 26s ease-in-out infinite alternate;
+}
+.ax-aurora .ax-b {
+  right: -8%;
+  top: 50%;
+  width: min(38vw, 520px);
+  height: min(38vw, 520px);
+  background: hsl(238 85% 68% / 0.14);
+  animation: ax-drift-b 32s ease-in-out infinite alternate;
+}
+@keyframes ax-drift-a {
+  to {
+    transform: translate3d(7vw, 8vh, 0) scale(1.1);
+  }
+}
+@keyframes ax-drift-b {
+  to {
+    transform: translate3d(-6vw, -6vh, 0) scale(0.92);
+  }
+}
+
+.ax-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 1.75rem;
+  align-items: start;
+}
+.ax-stack {
+  display: grid;
+  gap: 1.1rem;
+  min-width: 0;
+}
+
+/* The section rail. */
+.ax-rail {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 4px;
+}
+.ax-rail a {
+  display: flex;
+  align-items: center;
+  min-height: 2.65rem;
+  padding: 0 0.75rem;
+  border-radius: 10px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition:
+    background 200ms,
+    color 200ms;
+}
+.ax-rail a:hover {
+  color: hsl(var(--foreground));
+}
+.ax-rail a[aria-current="true"] {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+.ax-rail a[data-danger][aria-current="true"] {
+  background: hsl(var(--danger) / 0.14);
+}
+.ax-rail a:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.ax-card {
+  position: relative;
+  min-width: 0;
+  padding: clamp(1.1rem, 2.4vw, 1.6rem);
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px;
+  background: hsl(var(--surface) / 0.66);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 30px 70px -36px hsl(0 0% 0% / 0.4),
+    inset 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+.ax-section {
+  scroll-margin-top: 1rem;
+}
+.ax-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: 20px;
+  background: linear-gradient(
+    140deg,
+    hsl(var(--primary)),
+    transparent 36%,
+    transparent 72%,
+    hsl(238 85% 68% / 0.5)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.ax-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.ax-sub {
+  margin: 0;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Identity. */
+.ax-id {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(1rem, 3vw, 1.75rem);
+  align-items: center;
+}
+.ax-ring {
+  position: relative;
+  width: 8.75rem;
+  height: 8.75rem;
+}
+.ax-ring-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ax-ring-initials {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 2.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.ax-who {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+}
+.ax-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+.ax-name-row > div {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.ax-name-row > button {
+  margin-top: 1.55rem;
+}
+.ax-name-row input {
+  min-height: 2.9rem;
+  border-radius: 12px;
+  background: hsl(var(--surface) / 0.7);
+  transition:
+    border-color 200ms,
+    box-shadow 200ms;
+}
+.ax-name-row input:focus {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.25);
+}
+.ax-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin: 0;
+  font-size: 0.875rem;
+}
+.ax-facts > div {
+  display: flex;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.ax-facts dt {
+  color: hsl(var(--muted-foreground));
+}
+.ax-facts dd {
+  margin: 0;
+  font-weight: 500;
+}
+.ax-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.1rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid hsl(var(--warning-foreground));
+  border-radius: 14px;
+  background: hsl(var(--warning) / 0.7);
+  font-size: 0.875rem;
+}
+.ax-alert p {
+  margin: 0;
+  max-width: 52ch;
+}
+
+/* Sign-in methods. */
+.ax-methods {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ax-method {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--surface) / 0.55);
+}
+.ax-method b {
+  display: block;
+  font-weight: 600;
+}
+.ax-method small {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8125rem;
+}
+.ax-method-icon {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 10px;
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-weight: 600;
+}
+.ax-off .ax-method-icon {
+  border: 1px dashed hsl(var(--line));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Your data. */
+.ax-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+.ax-count {
+  display: grid;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--surface) / 0.55);
+  font-size: 0.8125rem;
+  color: hsl(var(--muted-foreground));
+}
+.ax-count-n {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: clamp(1.6rem, 3.4vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground));
+}
+.ax-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.ax-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.9rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  list-style: none;
+  font-size: 0.875rem;
+}
+.ax-list li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+.ax-list li::before {
+  content: "";
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.2rem;
+  border-radius: 9999px;
+  background: hsl(var(--primary) / 0.2);
+  box-shadow: inset 0 0 0 1px hsl(var(--primary));
+}
+.ax-list-no li::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px hsl(var(--line));
+}
+.ax-list .ax-list-title {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+.ax-list .ax-list-title::before {
+  content: none;
+}
+.ax-foot {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+.ax-foot > p {
+  margin: 0;
+  max-width: 52ch;
+}
+
+/* Delete. */
+.ax-danger {
+  border-color: hsl(var(--danger) / 0.45);
+  background: hsl(var(--danger) / 0.08);
+}
+.ax-danger h2 {
+  color: hsl(var(--danger));
+}
+.ax-danger button[aria-haspopup="dialog"] {
+  border-color: hsl(var(--danger) / 0.6);
+}
+.ax-danger button[aria-haspopup="dialog"]:hover {
+  border-color: hsl(var(--danger));
+  color: hsl(var(--danger));
+}
+.ax-erase {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ax-erase li {
+  padding: 0.2rem 0.75rem;
+  border: 1px solid hsl(var(--danger) / 0.4);
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+}
+
+.ax-motion {
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+html:has(.ax-root) {
+  scroll-behavior: smooth;
+}
+
+@media (max-width: 860px) {
+  .ax-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .ax-rail {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    padding: 0.25rem 0;
+  }
+  .ax-rail a {
+    white-space: nowrap;
+  }
+}
+@media (max-width: 560px) {
+  .ax-id,
+  .ax-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ax-id {
+    justify-items: start;
+  }
+  .ax-counts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ax-method {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .ax-method > :last-child {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+/* The visitor's "Pause motion" control: the aurora holds still (the ring holds itself). */
+[data-motion="paused"] .ax-aurora i {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.ax-root) {
+    scroll-behavior: auto;
+  }
+  .ax-aurora i {
+    animation: none;
+  }
+  .ax-rail a,
+  .ax-name-row input {
+    transition: none;
+  }
+  .ax-motion {
+    display: none;
+  }
+}
