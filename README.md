@@ -233,8 +233,8 @@ The backend tests use SQLite and mock the speech models, so they need no weights
 | Home | Generate speech |
 |---|---|
 | ![Home page with the voiceprint hero and a playable sample](docs/screenshots/home.png) | ![Generate screen with the text box, a result panel and the getting-started steps](docs/screenshots/generate.png) |
-| **Create a voice** | **Account** |
-| ![Voices screen with the upload or record form and the two consent confirmations](docs/screenshots/voices.png) | ![Account screen with profile, sign-in and security, and the data export](docs/screenshots/account.png) |
+| **Create a voice** | **Sign up** |
+| ![Voices screen with the upload or record form and the two consent confirmations](docs/screenshots/voices.png) | ![Sign-up screen with Google sign-in, the email form and the consent-first principles](docs/screenshots/signup.png) |
 
 They are shown in the dark theme; the app follows the system theme and has a toggle.
 
