@@ -1,0 +1,599 @@
+/*
+ * The Voices screen's look (owner approved the full mock, 2026-11-05; UX plan §4.10 and §12.27): a
+ * drifting aurora, glass cards with a glowing edge, a recording booth whose voiceprint fills as you
+ * speak, a seal-style consent, and a shelf of voice cards.
+ *
+ * Like auth-, home- and generate-experience.css this is a scoped exception to the flat-style and
+ * no-looping-motion rules: every selector contains a `bx-` class, it is imported only by the Voices
+ * page, colours come from the theme tokens, and tests/voices-experience.test.ts bounds it. The endless
+ * movement (aurora, the live record button's pulse) stops under the visitor's "Pause motion" control
+ * (WCAG 2.2.2) and under prefers-reduced-motion. Progress bars, the stage's indeterminate bar and the
+ * app's other in-flight indicators are not part of this exception.
+ */
+
+.bx-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bx-aurora i {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(100px);
+  will-change: transform;
+}
+.bx-aurora .bx-a {
+  left: -12%;
+  top: 4%;
+  width: min(52vw, 720px);
+  height: min(52vw, 720px);
+  background: hsl(var(--primary) / 0.2);
+  animation: bx-drift-a 26s ease-in-out infinite alternate;
+}
+.bx-aurora .bx-b {
+  right: -8%;
+  top: 46%;
+  width: min(38vw, 520px);
+  height: min(38vw, 520px);
+  background: hsl(238 85% 68% / 0.14);
+  animation: bx-drift-b 32s ease-in-out infinite alternate;
+}
+@keyframes bx-drift-a {
+  to {
+    transform: translate3d(7vw, 8vh, 0) scale(1.1);
+  }
+}
+@keyframes bx-drift-b {
+  to {
+    transform: translate3d(-6vw, -6vh, 0) scale(0.92);
+  }
+}
+
+.bx-card {
+  position: relative;
+  min-width: 0;
+  padding: clamp(1.1rem, 2.4vw, 1.6rem);
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px;
+  background: hsl(var(--surface) / 0.66);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 30px 70px -36px hsl(0 0% 0% / 0.4),
+    inset 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+.bx-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: 20px;
+  background: linear-gradient(
+    140deg,
+    hsl(var(--primary)),
+    transparent 36%,
+    transparent 72%,
+    hsl(238 85% 68% / 0.5)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* The stage keeps its states; it just wears the glass. */
+.bx-stage .bx-tag {
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  background: hsl(var(--muted));
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+.bx-stage[data-state="uploading"] .bx-tag,
+.bx-stage[data-state="analysing"] .bx-tag,
+.bx-stage[data-state="created"] .bx-tag {
+  color: hsl(var(--primary));
+}
+
+/* Fields. */
+.bx-form input[type="text"] {
+  min-height: 2.9rem;
+  border-radius: 12px;
+  background: hsl(var(--surface) / 0.7);
+  transition:
+    border-color 200ms,
+    box-shadow 200ms;
+}
+.bx-form input[type="text"]:focus {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.25);
+}
+
+/* Record now / Upload a file. */
+.bx-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--surface) / 0.6);
+}
+.bx-seg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 200ms,
+    color 200ms;
+}
+.bx-seg-btn:hover {
+  color: hsl(var(--foreground));
+}
+.bx-seg-btn[aria-checked="true"] {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
+  box-shadow: inset 0 0 0 1px hsl(var(--primary));
+}
+.bx-seg-btn:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* The booth. */
+.bx-booth {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  background: hsl(var(--surface) / 0.55);
+}
+.bx-intro {
+  margin: 0;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+.bx-print {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--background) / 0.6);
+}
+.bx-print-canvas {
+  display: block;
+  width: 100%;
+  height: 7.5rem;
+}
+.bx-print-tag,
+.bx-print-goal {
+  position: absolute;
+  top: 0.5rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+.bx-print-tag {
+  left: 0.65rem;
+}
+.bx-print-goal {
+  right: 0.65rem;
+}
+.bx-ctrl {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+}
+.bx-clock {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.bx-rec {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 6rem;
+  height: 6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+}
+.bx-rec:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.bx-rec:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 3px;
+}
+.bx-rec-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.bx-rec-track {
+  stroke: hsl(var(--border));
+}
+.bx-rec-fill {
+  stroke: hsl(var(--primary));
+  transition: stroke-dashoffset 150ms linear;
+}
+.bx-rec-core {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 9999px;
+  background: hsl(var(--danger));
+  color: hsl(var(--danger-foreground));
+  transition:
+    border-radius 200ms,
+    transform 200ms;
+}
+.bx-rec:hover:not(:disabled) .bx-rec-core {
+  transform: scale(1.05);
+}
+.bx-rec[data-rec="true"] .bx-rec-core {
+  border-radius: 18px;
+  transform: scale(0.8);
+}
+.bx-rec-pulse {
+  position: absolute;
+  inset: 0.5rem;
+  border: 2px solid hsl(var(--danger));
+  border-radius: 9999px;
+  animation: bx-pulse 1.4s ease-out infinite;
+}
+@keyframes bx-pulse {
+  from {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+/* The microphone meter: twelve segments, the middle ones outlined as the band to peak in. */
+.bx-vu {
+  display: flex;
+  align-items: flex-end;
+  justify-self: end;
+  gap: 3px;
+  height: 2.9rem;
+}
+.bx-vu-seg {
+  width: 6px;
+  border-radius: 2px;
+  background: hsl(var(--border));
+  transition: background 80ms;
+}
+.bx-vu-seg[data-zone="band"] {
+  box-shadow: inset 0 0 0 1px hsl(var(--line));
+}
+.bx-vu-seg[data-on="true"] {
+  background: hsl(var(--primary));
+}
+.bx-vu-seg[data-on="true"][data-zone="hot"] {
+  background: hsl(var(--warning-foreground));
+}
+.bx-vu-seg[data-on="true"][data-zone="clip"] {
+  background: hsl(var(--danger));
+}
+.bx-vu-seg:nth-child(1) {
+  height: 30%;
+}
+.bx-vu-seg:nth-child(2) {
+  height: 36%;
+}
+.bx-vu-seg:nth-child(3) {
+  height: 42%;
+}
+.bx-vu-seg:nth-child(4) {
+  height: 48%;
+}
+.bx-vu-seg:nth-child(5) {
+  height: 54%;
+}
+.bx-vu-seg:nth-child(6) {
+  height: 60%;
+}
+.bx-vu-seg:nth-child(7) {
+  height: 66%;
+}
+.bx-vu-seg:nth-child(8) {
+  height: 72%;
+}
+.bx-vu-seg:nth-child(9) {
+  height: 78%;
+}
+.bx-vu-seg:nth-child(10) {
+  height: 84%;
+}
+.bx-vu-seg:nth-child(11) {
+  height: 90%;
+}
+.bx-vu-seg:nth-child(12) {
+  height: 96%;
+}
+
+.bx-length {
+  margin: 0;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+.bx-length-ok {
+  font-weight: 500;
+  color: hsl(var(--success));
+}
+.bx-note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+.bx-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* The line to read. */
+.bx-tele {
+  padding: 1rem;
+  border: 1px dashed hsl(var(--line));
+  border-radius: 12px;
+}
+.bx-tele-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: hsl(var(--muted-foreground));
+}
+.bx-tele-text {
+  margin: 0.35rem 0 0.25rem;
+  font-size: clamp(1.05rem, 2vw, 1.3rem);
+  font-weight: 500;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+.bx-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bx-tips li {
+  padding: 0.2rem 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* The take: the same preview, wearing the booth's look. */
+.bx-booth [data-take-play] {
+  min-width: 4.25rem;
+  border: 0;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+  box-shadow: 0 0 0 5px hsl(var(--primary) / 0.22);
+}
+
+/* The drop zone. */
+.bx-drop {
+  padding: 1.75rem 1rem;
+  border: 1.5px dashed hsl(var(--line));
+  border-radius: 16px;
+  background: hsl(var(--surface) / 0.45);
+  text-align: center;
+  transition:
+    border-color 200ms,
+    background 200ms;
+}
+.bx-drop-over {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.2);
+}
+.bx-drop ul {
+  text-align: left;
+}
+
+/* Consent, as a seal that lights up when ticked. */
+.bx-seal {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--surface) / 0.55);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    border-color 200ms,
+    background 200ms;
+}
+.bx-seal:has(input:checked) {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.2);
+}
+.bx-seal:has(input:focus-visible) {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+.bx-seal-box {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1rem;
+  accent-color: hsl(var(--primary));
+}
+
+/* The Create voice button. */
+.bx-actions button[type="submit"] {
+  min-height: 3.1rem;
+  padding-inline: 1.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+  background-image: linear-gradient(
+    120deg,
+    hsl(var(--primary)),
+    color-mix(in srgb, hsl(var(--primary)) 68%, hsl(238 85% 72%))
+  );
+  box-shadow: 0 12px 30px -12px hsl(var(--primary));
+  transition:
+    transform 150ms,
+    box-shadow 200ms;
+}
+.bx-actions button[type="submit"]:hover:not([aria-busy="true"]):not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px -12px hsl(var(--primary));
+}
+.bx-actions button[type="submit"]:disabled {
+  background-image: none;
+  box-shadow: none;
+}
+
+/* The shelf. */
+.bx-count {
+  padding: 0.15rem 0.7rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+.bx-shelf-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bx-vcard {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.9rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  background: hsl(var(--surface) / 0.6);
+  transition: border-color 200ms;
+}
+.bx-vcard:hover {
+  border-color: hsl(var(--line));
+}
+.bx-glyph {
+  display: block;
+  width: 100%;
+  height: 2.1rem;
+}
+.bx-glyph rect {
+  fill: hsl(var(--primary));
+}
+.bx-vact {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bx-clips {
+  padding-top: 0.25rem;
+  border-top: 1px solid hsl(var(--border));
+}
+.bx-clips-summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bx-motion {
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .bx-ctrl {
+    grid-template-columns: 1fr auto;
+  }
+  .bx-ctrl .bx-vu {
+    display: none;
+  }
+  .bx-rec {
+    width: 5.25rem;
+    height: 5.25rem;
+  }
+  .bx-rec-core {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+}
+
+/* The visitor's "Pause motion" control: every endless movement holds still. */
+[data-motion="paused"] .bx-aurora i,
+[data-motion="paused"] .bx-rec-pulse {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bx-aurora i,
+  .bx-rec-pulse {
+    animation: none;
+  }
+  .bx-seg-btn,
+  .bx-seal,
+  .bx-drop,
+  .bx-rec-core,
+  .bx-rec-fill,
+  .bx-vcard,
+  .bx-vu-seg,
+  .bx-form input[type="text"],
+  .bx-actions button[type="submit"] {
+    transition: none;
+  }
+  .bx-actions button[type="submit"]:hover {
+    transform: none;
+  }
+  .bx-motion {
+    display: none;
+  }
+}

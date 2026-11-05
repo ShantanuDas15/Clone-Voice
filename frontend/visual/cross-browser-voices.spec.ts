@@ -107,3 +107,38 @@ test("the new-voice stage shows the clip's shape, then the created voice", async
   await expect(page.getByTestId("voice-shape").locator("rect.fill-primary")).toHaveCount(64);
   expect(problems).toEqual([]);
 });
+
+test("the booth shows the voiceprint, record button and line to read; Pause motion holds the animation", async ({
+  page,
+}) => {
+  await mockApi(page, false);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${ORIGIN}/voices`);
+  await expect(page.getByLabel("Voice name")).toBeVisible();
+  // The radios show for a moment before the page has checked the browser can record, so ask the
+  // browser itself rather than counting them.
+  const canRecord = await page.evaluate(
+    () => typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia,
+  );
+  test.skip(!canRecord, "recording not offered in this browser");
+  await page.getByRole("radio", { name: "Record now" }).click();
+  await expect(page.getByRole("button", { name: "Start recording" })).toBeVisible();
+  await expect(page.locator(".bx-print-canvas")).toBeVisible();
+  await expect(page.getByTestId("reading-prompt")).toBeVisible();
+
+  const endless = () =>
+    page.evaluate(() =>
+      document
+        .getAnimations()
+        .filter(
+          (a) => a.playState === "running" && a.effect?.getComputedTiming().iterations === Infinity,
+        )
+        .map((a) => (a as CSSAnimation).animationName),
+    );
+  expect((await endless()).length).toBeGreaterThan(0); // the aurora drifts
+  await page.getByRole("button", { name: "Pause motion" }).click();
+  await expect.poll(endless).toEqual([]);
+  await page.getByRole("button", { name: "Resume motion" }).click();
+  await expect.poll(async () => (await endless()).length).toBeGreaterThan(0);
+});

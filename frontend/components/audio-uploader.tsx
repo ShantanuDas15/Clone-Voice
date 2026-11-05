@@ -68,7 +68,7 @@ export function AudioUploader({ files, onChange, disabled, error }: AudioUploade
           setDragging(false);
           if (!disabled) accept(e.dataTransfer.files);
         }}
-        className={`mt-1 space-y-2 rounded border border-dashed p-4 text-sm ${dragging ? "border-primary bg-muted" : "border-line"}`}
+        className={`bx-drop mt-1 space-y-2 text-sm ${dragging ? "bx-drop-over" : ""}`}
       >
         <input
           id={id}

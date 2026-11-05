@@ -130,8 +130,7 @@ describe("create-voice form polish", () => {
     const group = await screen.findByRole("radiogroup", { name: "How to add a sample" });
     const radios = within(group).getAllByRole("radio");
     expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false"]);
-    expect(radios[0]).toHaveClass("bg-primary");
-    expect(radios[1]).not.toHaveClass("bg-primary");
+    for (const r of radios) expect(r).toHaveClass("bx-seg-btn"); // the selected one is drawn from aria-checked
   });
 
   it("keeps the retention note and the terms status in one line under the consent box", () => {
