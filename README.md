@@ -230,13 +230,11 @@ The backend tests use SQLite and mock the speech models, so they need no weights
 
 ## Screenshots
 
-| Home | Sign in |
+| Home | Generate speech |
 |---|---|
-| ![Home page with the voiceprint hero](docs/screenshots/home.png) | ![Sign-in screen with a live voiceprint](docs/screenshots/login.png) |
-| **Generate speech** | **Create a voice** |
-| ![Generate screen with voice cards, delivery chips and a finished take](docs/screenshots/generate.png) | ![Voices screen with the recording booth and the shelf of voices](docs/screenshots/voices.png) |
-| **Account** | |
-| ![Account screen with the section rail, voiceprint ring, data export and delete card](docs/screenshots/account.png) | |
+| ![Home page with the voiceprint hero and a playable sample](docs/screenshots/home.png) | ![Generate screen with the text box, a result panel and the getting-started steps](docs/screenshots/generate.png) |
+| **Create a voice** | **Account** |
+| ![Voices screen with the upload or record form and the two consent confirmations](docs/screenshots/voices.png) | ![Account screen with profile, sign-in and security, and the data export](docs/screenshots/account.png) |
 
 They are shown in the dark theme; the app follows the system theme and has a toggle.
 
