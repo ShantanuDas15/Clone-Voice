@@ -146,6 +146,16 @@ npm run dev
 
 The app is at http://localhost:3000. It expects the API at `http://localhost:8000/api/v1` and must be same-site with it so the refresh cookie is sent.
 
+### CPU and GPU builds
+
+The Docker image installs the **CPU-only** build of torch by default (about 1.5 GB of Python dependencies instead of about 8 GB with PyPI's CUDA wheel). For a GPU image, override the index and set `DEVICE=cuda`:
+
+```bash
+docker build -f backend/Dockerfile --build-arg TORCH_INDEX_URL=https://pypi.org/simple -t clonevoice-backend .
+```
+
+On CPU, expect synthesis to run slower than real time (see Design Decisions). The compose file does not reserve a GPU; add a `deploy.resources.reservations.devices` block to the `backend` service if you use one.
+
 ### Environment variables
 
 The full, commented list is in [`backend/.env.example`](backend/.env.example). The ones you will most likely touch:
